@@ -7,11 +7,11 @@ import NetworkStats from "@/components/NetworkStats";
 import HashrateChart from "@/components/HashrateChart";
 import HeistEventBanner from "@/components/HeistEventBanner";
 import { Terminal, Gem, Package, TrendingUp } from "lucide-react";
-import { initializeUser, getCurrentUserId } from "@/lib/user";
-import type { User } from "@shared/schema";
+import { initializeUser } from "@/lib/user";
+import type { User, BlockReward } from "@shared/schema";
 
 export default function Dashboard() {
-  const [showEvent] = useState(true);
+  const [showEvent] = useState(false); // Set to false since no real events yet
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -24,6 +24,16 @@ export default function Dashboard() {
 
   const { data: user, isLoading: userLoading, error: userError } = useQuery<User>({
     queryKey: ['/api/user', userId],
+    enabled: !!userId,
+  });
+
+  const { data: rewards = [] } = useQuery<(BlockReward & { block: any })[]>({
+    queryKey: ['/api/user', userId, 'rewards'],
+    enabled: !!userId,
+  });
+
+  const { data: ownedEquipment = [] } = useQuery<any[]>({
+    queryKey: ['/api/user', userId, 'equipment'],
     enabled: !!userId,
   });
 
@@ -41,6 +51,17 @@ export default function Dashboard() {
   }
 
   const csBalance = user?.csBalance ?? 0;
+  const totalRigs = ownedEquipment.reduce((sum: number, eq: any) => sum + (eq.quantity || 0), 0);
+  
+  // Calculate mining stats from rewards
+  const totalMined = rewards.reduce((sum, r) => sum + r.reward, 0);
+  const last24hRewards = rewards.filter(r => {
+    const rewardTime = new Date(r.createdAt).getTime();
+    const now = Date.now();
+    return now - rewardTime < 24 * 60 * 60 * 1000;
+  });
+  const last24hTotal = last24hRewards.reduce((sum, r) => sum + r.reward, 0);
+  const avgPerBlock = rewards.length > 0 ? Math.floor(totalMined / rewards.length) : 0;
 
   return (
     <div className="min-h-screen bg-background terminal-scanline">
@@ -88,7 +109,9 @@ export default function Dashboard() {
               <Package className="w-3 md:w-4 h-3 md:h-4 text-cyber-blue" />
               <p className="text-[10px] md:text-xs text-muted-foreground uppercase">Your Rigs</p>
             </div>
-            <p className="text-lg md:text-2xl font-bold font-mono" data-testid="text-rig-count">-</p>
+            <p className="text-lg md:text-2xl font-bold font-mono" data-testid="text-rig-count">
+              {userLoading ? '...' : totalRigs}
+            </p>
             <p className="text-[10px] md:text-xs text-muted-foreground">Active</p>
           </Card>
 
@@ -108,7 +131,9 @@ export default function Dashboard() {
               <Terminal className="w-3 md:w-4 h-3 md:h-4 text-chart-2" />
               <p className="text-[10px] md:text-xs text-muted-foreground uppercase">Network %</p>
             </div>
-            <p className="text-lg md:text-2xl font-bold font-mono text-cyber-blue">0.048</p>
+            <p className="text-lg md:text-2xl font-bold font-mono text-cyber-blue">
+              {userLoading ? '...' : '0.00'}
+            </p>
             <p className="text-[10px] md:text-xs text-muted-foreground">of total</p>
           </Card>
         </div>
@@ -117,7 +142,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-6">
           {/* Left Column */}
           <div className="lg:col-span-2 space-y-3 md:space-y-6">
-            <BlockTimer onBlockMined={() => console.log('Block mined!')} />
+            <BlockTimer />
             <HashrateChart />
             <NetworkStats />
           </div>
@@ -130,29 +155,37 @@ export default function Dashboard() {
               <div className="space-y-4">
                 <div className="p-4 rounded-md bg-muted/30 border border-border">
                   <p className="text-xs text-muted-foreground mb-1">Total Mined</p>
-                  <p className="text-2xl font-bold font-mono text-matrix-green">48,100</p>
+                  <p className="text-2xl font-bold font-mono text-matrix-green">
+                    {totalMined.toLocaleString()}
+                  </p>
                   <p className="text-xs text-muted-foreground mt-1">CS</p>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-3 rounded-md bg-card border border-card-border text-center">
                     <p className="text-xs text-muted-foreground mb-1">Last 24h</p>
-                    <p className="text-lg font-bold font-mono text-cyber-blue">2,340</p>
+                    <p className="text-lg font-bold font-mono text-cyber-blue">
+                      {last24hTotal.toLocaleString()}
+                    </p>
                   </div>
                   <div className="p-3 rounded-md bg-card border border-card-border text-center">
                     <p className="text-xs text-muted-foreground mb-1">Avg/Block</p>
-                    <p className="text-lg font-bold font-mono text-neon-orange">48</p>
+                    <p className="text-lg font-bold font-mono text-neon-orange">
+                      {avgPerBlock}
+                    </p>
                   </div>
                 </div>
 
                 <div className="pt-4 border-t border-border">
                   <div className="flex items-center justify-between text-xs mb-2">
                     <span className="text-muted-foreground">Blocks Participated</span>
-                    <span className="font-mono font-semibold">1,002</span>
+                    <span className="font-mono font-semibold">{rewards.length}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Blocks Won</span>
-                    <Badge variant="outline" className="text-xs">0</Badge>
+                    <span className="text-muted-foreground">Total Earned</span>
+                    <Badge variant="outline" className="text-xs">
+                      {totalMined.toLocaleString()} CS
+                    </Badge>
                   </div>
                 </div>
               </div>
@@ -161,24 +194,25 @@ export default function Dashboard() {
             {/* Recent Activity */}
             <Card className="p-6">
               <h3 className="text-sm font-semibold uppercase tracking-wider mb-4">Recent Activity</h3>
-              <div className="space-y-3 text-xs">
-                <div className="flex items-center justify-between p-2 rounded-md bg-muted/30">
-                  <span className="text-muted-foreground">Block #52341</span>
-                  <span className="font-mono text-neon-orange">+48 CS</span>
+              {rewards.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  No mining activity yet. Start mining by purchasing equipment!
+                </p>
+              ) : (
+                <div className="space-y-3 text-xs">
+                  {rewards.slice(0, 5).map((reward) => (
+                    <div 
+                      key={reward.id} 
+                      className="flex items-center justify-between p-2 rounded-md bg-muted/30"
+                    >
+                      <span className="text-muted-foreground">
+                        Block #{reward.block?.blockNumber ?? '?'}
+                      </span>
+                      <span className="font-mono text-neon-orange">+{Math.floor(reward.reward)} CS</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex items-center justify-between p-2 rounded-md bg-muted/30">
-                  <span className="text-muted-foreground">Block #52340</span>
-                  <span className="font-mono text-neon-orange">+47 CS</span>
-                </div>
-                <div className="flex items-center justify-between p-2 rounded-md bg-muted/30">
-                  <span className="text-muted-foreground">Block #52339</span>
-                  <span className="font-mono text-neon-orange">+46 CS</span>
-                </div>
-                <div className="flex items-center justify-between p-2 rounded-md bg-muted/30">
-                  <span className="text-muted-foreground">Referral reward</span>
-                  <span className="font-mono text-cyber-blue">+500 CS</span>
-                </div>
-              </div>
+              )}
             </Card>
           </div>
         </div>
