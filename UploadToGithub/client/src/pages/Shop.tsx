@@ -1,58 +1,123 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import EquipmentCard from "@/components/EquipmentCard";
 import PowerUpCard from "@/components/PowerUpCard";
-import { Monitor, Cpu, Server, Boxes, Zap, Rocket, Shield, ShoppingBag, Lock } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Monitor, Cpu, Server, Boxes, Zap, Rocket, Shield, ShoppingBag } from "lucide-react";
+import { initializeUser } from "@/lib/user";
+import type { EquipmentType, OwnedEquipment } from "@shared/schema";
 
 export default function Shop() {
   const [activeTab, setActiveTab] = useState("equipment");
+  const [userId, setUserId] = useState<string | null>(null);
 
-  // todo: remove mock functionality
-  const basicLaptops = [
-    { name: "Lenovo ThinkPad E14", hashrate: 50, price: 5000, owned: 1, maxOwned: 10 },
-    { name: "Dell Inspiron 15", hashrate: 100, price: 10000, owned: 2, maxOwned: 10 },
-    { name: "HP Pavilion 15", hashrate: 150, price: 15000, owned: 0, maxOwned: 10 },
-    { name: "Acer Aspire 5", hashrate: 180, price: 18000, owned: 0, maxOwned: 10 },
-    { name: "ASUS VivoBook 15", hashrate: 200, price: 20000, owned: 0, maxOwned: 10 },
-  ];
+  useEffect(() => {
+    initializeUser()
+      .then(setUserId)
+      .catch(err => {
+        console.error('Failed to initialize user:', err);
+      });
+  }, []);
 
-  const gamingLaptops = [
-    { name: "Acer Predator Helios", hashrate: 300, price: 30000, owned: 0, maxOwned: 10 },
-    { name: "MSI Stealth 15", hashrate: 400, price: 40000, owned: 0, maxOwned: 10 },
-    { name: "ASUS ROG Strix", hashrate: 500, price: 50000, owned: 0, maxOwned: 10 },
-    { name: "Razer Blade 15", hashrate: 550, price: 55000, owned: 0, maxOwned: 10 },
-    { name: "Alienware m15", hashrate: 600, price: 60000, owned: 0, maxOwned: 10 },
-  ];
+  const { data: equipmentTypes = [] } = useQuery<EquipmentType[]>({
+    queryKey: ['/api/equipment-types'],
+  });
 
-  const gamingPCs = [
-    { name: "VIXIA High-End i9", hashrate: 700, price: 70000, owned: 0, maxOwned: 25 },
-    { name: "Custom Build RTX4080", hashrate: 1000, price: 100000, owned: 0, maxOwned: 25 },
-    { name: "Corsair Vengeance", hashrate: 1400, price: 140000, owned: 0, maxOwned: 25 },
-    { name: "NZXT Pro Gaming", hashrate: 1700, price: 170000, owned: 0, maxOwned: 25 },
-    { name: "Origin PC Millennium", hashrate: 2000, price: 200000, owned: 0, maxOwned: 25 },
-  ];
+  const { data: ownedEquipment = [] } = useQuery<OwnedEquipment[]>({
+    queryKey: ['/api/user', userId, 'equipment'],
+    enabled: !!userId,
+  });
 
-  const serverFarms = [
-    { name: "Supermicro SYS-4029GP", hashrate: 5000, price: 2, owned: 0, maxOwned: 25 },
-    { name: "Dell PowerEdge R750", hashrate: 8000, price: 3, owned: 0, maxOwned: 25 },
-    { name: "HP ProLiant DL380", hashrate: 12000, price: 5, owned: 0, maxOwned: 25 },
-    { name: "Lenovo ThinkSystem", hashrate: 16000, price: 7, owned: 0, maxOwned: 25 },
-    { name: "Cisco UCS C240", hashrate: 20000, price: 10, owned: 0, maxOwned: 25 },
-  ];
+  // Group equipment by category and tier
+  const groupedEquipment = equipmentTypes.reduce((acc, eq) => {
+    const key = `${eq.category}-${eq.tier}`;
+    if (!acc[key]) {
+      acc[key] = {
+        category: eq.category,
+        tier: eq.tier,
+        items: []
+      };
+    }
+    acc[key].items.push(eq);
+    return acc;
+  }, {} as Record<string, { category: string, tier: string, items: EquipmentType[] }>);
 
-  const asicRigs = [
-    { name: "Bitmain Antminer S21 Pro", hashrate: 50000, price: 5, owned: 0, maxOwned: 50 },
-    { name: "WhatsMiner M60S", hashrate: 100000, price: 10, owned: 0, maxOwned: 50 },
-    { name: "Bitmain Antminer S21 XP", hashrate: 150000, price: 15, owned: 0, maxOwned: 50 },
-    { name: "MicroBT WhatsMiner M50", hashrate: 200000, price: 20, owned: 0, maxOwned: 50 },
-    { name: "Bitmain Antminer S23", hashrate: 250000, price: 25, owned: 0, maxOwned: 50 },
-    { name: "AxionMiner 800", hashrate: 300000, price: 30, owned: 0, maxOwned: 50 },
-    { name: "Antminer S21 XP+ Hyd", hashrate: 350000, price: 35, owned: 0, maxOwned: 50 },
-    { name: "Canaan Avalon Q", hashrate: 400000, price: 40, owned: 0, maxOwned: 50 },
-    { name: "Antminer S21e XP Hydro", hashrate: 450000, price: 45, owned: 0, maxOwned: 50 },
-    { name: "WhatsMiner M63S Hydro", hashrate: 500000, price: 50, owned: 0, maxOwned: 50 },
-  ];
+  // Sort items within each group by orderIndex
+  Object.values(groupedEquipment).forEach(group => {
+    group.items.sort((a, b) => a.orderIndex - b.orderIndex);
+  });
+
+  const getOwnedQuantity = (equipmentTypeId: string): number => {
+    const owned = ownedEquipment.find(e => e.equipmentTypeId === equipmentTypeId);
+    return owned?.quantity ?? 0;
+  };
+
+  const isEquipmentUnlocked = (items: EquipmentType[], currentItem: EquipmentType): boolean => {
+    if (currentItem.orderIndex === 1) return true;
+    const previousItem = items.find(item => item.orderIndex === currentItem.orderIndex - 1);
+    if (!previousItem) return false;
+    return getOwnedQuantity(previousItem.id) > 0;
+  };
+
+  const getTierLabel = (category: string, tier: string) => {
+    const labels: Record<string, string> = {
+      'laptop-basic': 'Basic Laptops',
+      'laptop-gaming': 'Gaming Laptops',
+      'pc-gaming': 'Gaming PCs',
+      'server-farm': 'Server Farms',
+      'asic-rig': 'ASIC Rigs',
+    };
+    return labels[`${category}-${tier}`] || `${category} ${tier}`;
+  };
+
+  const getTierIcon = (category: string, tier: string) => {
+    if (category === 'laptop' && tier === 'basic') return <Monitor className="w-4 md:w-5 h-4 md:h-5 text-chart-4" />;
+    if (category === 'laptop' && tier === 'gaming') return <Monitor className="w-4 md:w-5 h-4 md:h-5 text-chart-1" />;
+    if (category === 'pc' && tier === 'gaming') return <Cpu className="w-4 md:w-5 h-4 md:h-5 text-cyber-blue" />;
+    if (category === 'server' && tier === 'farm') return <Server className="w-4 md:w-5 h-4 md:h-5 text-matrix-green" />;
+    if (category === 'asic' && tier === 'rig') return <Boxes className="w-4 md:w-5 h-4 md:h-5 text-neon-orange" />;
+    return <Monitor className="w-4 md:w-5 h-4 md:h-5" />;
+  };
+
+  const renderEquipmentSection = (key: string, group: { category: string, tier: string, items: EquipmentType[] }, showTitle = true) => {
+    return (
+      <div key={key}>
+        {showTitle && (
+          <h3 className="text-sm md:text-lg font-semibold mb-3 md:mb-4 flex items-center gap-2">
+            {getTierIcon(group.category, group.tier)}
+            <span>{getTierLabel(group.category, group.tier)}</span>
+          </h3>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+          {group.items.map((item) => {
+            const unlocked = isEquipmentUnlocked(group.items, item);
+            const owned = getOwnedQuantity(item.id);
+            return (
+              <EquipmentCard
+                key={item.id}
+                name={item.name}
+                tier={item.tier as "basic" | "gaming" | "pc" | "server" | "asic"}
+                hashrate={item.baseHashrate}
+                price={item.basePrice}
+                currency={item.currency as "CS" | "TON"}
+                owned={owned}
+                maxOwned={item.maxOwned}
+                locked={!unlocked}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const sortedGroups = Object.entries(groupedEquipment).sort(([, a], [, b]) => {
+    const order = ['laptop-basic', 'laptop-gaming', 'pc-gaming', 'server-farm', 'asic-rig'];
+    const keyA = `${a.category}-${a.tier}`;
+    const keyB = `${b.category}-${b.tier}`;
+    return order.indexOf(keyA) - order.indexOf(keyB);
+  });
 
   const powerUps = [
     {
@@ -63,7 +128,7 @@ export default function Shop() {
       price: 1000,
       currency: "CS" as const,
       dailyFree: 5,
-      usedFree: 2,
+      usedFree: 0,
       icon: <Zap className="w-5 h-5 text-neon-orange" />,
     },
     {
@@ -90,59 +155,6 @@ export default function Shop() {
     },
   ];
 
-  const isEquipmentUnlocked = (items: any[], index: number) => {
-    if (index === 0) return true;
-    return items[index - 1].owned > 0;
-  };
-
-  const getTierFromTitle = (title: string): "basic" | "gaming" | "pc" | "server" | "asic" => {
-    if (title.includes("Basic")) return "basic";
-    if (title.includes("Gaming Laptop")) return "gaming";
-    if (title.includes("Gaming PC")) return "pc";
-    if (title.includes("Server")) return "server";
-    if (title.includes("ASIC")) return "asic";
-    return "basic";
-  };
-
-  const renderEquipmentSection = (items: any[], title: string, icon: React.ReactNode, currency: "CS" | "TON") => {
-    const tier = getTierFromTitle(title);
-    return (
-      <div>
-        <h3 className="text-sm md:text-lg font-semibold mb-3 md:mb-4 flex items-center gap-2">
-          {icon}
-          <span>{title}</span>
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-          {items.map((item, index) => {
-            const unlocked = isEquipmentUnlocked(items, index);
-            return (
-              <div key={index} className="relative">
-                <EquipmentCard
-                  name={item.name}
-                  tier={tier}
-                  hashrate={item.hashrate}
-                  price={item.price}
-                  currency={currency}
-                  owned={item.owned}
-                  maxOwned={item.maxOwned}
-                  locked={!unlocked}
-                />
-                {!unlocked && (
-                  <div className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-md flex flex-col items-center justify-center">
-                    <Lock className="w-6 h-6 md:w-8 md:h-8 text-muted-foreground mb-2" />
-                    <Badge variant="outline" className="text-[10px] md:text-xs">
-                      Purchase {items[index - 1].name} first
-                    </Badge>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-background terminal-scanline">
       <div className="max-w-7xl mx-auto p-2 md:p-4 space-y-3 md:space-y-6">
@@ -161,49 +173,47 @@ export default function Shop() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3 md:space-y-6">
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6 h-auto">
-            <TabsTrigger value="equipment" className="min-h-[44px] text-xs md:text-sm" data-testid="tab-equipment">Equipment</TabsTrigger>
-            <TabsTrigger value="powerups" className="min-h-[44px] text-xs md:text-sm" data-testid="tab-powerups">Power-Ups</TabsTrigger>
-            <TabsTrigger value="basic" className="hidden lg:block" data-testid="tab-basic">Basic</TabsTrigger>
-            <TabsTrigger value="gaming" className="hidden lg:block" data-testid="tab-gaming">Gaming</TabsTrigger>
-            <TabsTrigger value="server" className="hidden lg:block" data-testid="tab-server">Server</TabsTrigger>
-            <TabsTrigger value="asic" className="hidden lg:block" data-testid="tab-asic">ASIC</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 h-auto">
+            <TabsTrigger value="equipment" className="min-h-[44px] text-xs md:text-sm" data-testid="tab-equipment">
+              Equipment
+            </TabsTrigger>
+            <TabsTrigger value="powerups" className="min-h-[44px] text-xs md:text-sm" data-testid="tab-powerups">
+              Power-Ups
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="equipment" className="space-y-4 md:space-y-6">
-            {renderEquipmentSection(basicLaptops, "Basic Laptops", <Monitor className="w-4 md:w-5 h-4 md:h-5 text-chart-4" />, "CS")}
-            {renderEquipmentSection(gamingLaptops, "Gaming Laptops", <Monitor className="w-4 md:w-5 h-4 md:h-5 text-chart-1" />, "CS")}
-            {renderEquipmentSection(gamingPCs, "Gaming PCs", <Cpu className="w-4 md:w-5 h-4 md:h-5 text-cyber-blue" />, "CS")}
-            {renderEquipmentSection(serverFarms, "Server Farms", <Server className="w-4 md:w-5 h-4 md:h-5 text-neon-orange" />, "TON")}
-            {renderEquipmentSection(asicRigs, "ASIC Miners", <Boxes className="w-4 md:w-5 h-4 md:h-5 text-matrix-green" />, "TON")}
-          </TabsContent>
-
-          <TabsContent value="powerups" className="space-y-4 md:space-y-6">
-            <div>
-              <h3 className="text-sm md:text-lg font-semibold mb-3 md:mb-4">Power-Ups & Boosts</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-                {powerUps.map((powerUp, index) => (
-                  <PowerUpCard key={index} {...powerUp} onActivate={() => console.log(`Activate ${powerUp.name}`)} />
+            {/* Mobile: Accordion view */}
+            <div className="md:hidden">
+              <Accordion type="single" collapsible className="space-y-2">
+                {sortedGroups.map(([key, group]) => (
+                  <AccordionItem key={key} value={key} className="border rounded-md">
+                    <AccordionTrigger className="px-4 hover:no-underline">
+                      <div className="flex items-center gap-2">
+                        {getTierIcon(group.category, group.tier)}
+                        <span className="font-semibold">{getTierLabel(group.category, group.tier)}</span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4 pb-4">
+                      {renderEquipmentSection(key, group, false)}
+                    </AccordionContent>
+                  </AccordionItem>
                 ))}
-              </div>
+              </Accordion>
+            </div>
+
+            {/* Desktop: Full view */}
+            <div className="hidden md:block space-y-6">
+              {sortedGroups.map(([key, group]) => renderEquipmentSection(key, group))}
             </div>
           </TabsContent>
 
-          <TabsContent value="basic" className="space-y-4 md:space-y-6">
-            {renderEquipmentSection(basicLaptops, "Basic Laptops", <Monitor className="w-4 md:w-5 h-4 md:h-5 text-chart-4" />, "CS")}
-          </TabsContent>
-
-          <TabsContent value="gaming" className="space-y-4 md:space-y-6">
-            {renderEquipmentSection(gamingLaptops, "Gaming Laptops", <Monitor className="w-4 md:w-5 h-4 md:h-5 text-chart-1" />, "CS")}
-            {renderEquipmentSection(gamingPCs, "Gaming PCs", <Cpu className="w-4 md:w-5 h-4 md:h-5 text-cyber-blue" />, "CS")}
-          </TabsContent>
-
-          <TabsContent value="server" className="space-y-4 md:space-y-6">
-            {renderEquipmentSection(serverFarms, "Server Farms", <Server className="w-4 md:w-5 h-4 md:h-5 text-neon-orange" />, "TON")}
-          </TabsContent>
-
-          <TabsContent value="asic" className="space-y-4 md:space-y-6">
-            {renderEquipmentSection(asicRigs, "ASIC Miners", <Boxes className="w-4 md:w-5 h-4 md:h-5 text-matrix-green" />, "TON")}
+          <TabsContent value="powerups" className="space-y-4 md:space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+              {powerUps.map((powerUp, index) => (
+                <PowerUpCard key={index} {...powerUp} />
+              ))}
+            </div>
           </TabsContent>
         </Tabs>
       </div>
