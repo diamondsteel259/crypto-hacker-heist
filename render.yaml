@@ -1,0 +1,27 @@
+services:
+  # Web Service - Your Node.js App
+  - type: web
+    name: crypto-hacker-heist
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run db:push && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cryptohacker-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+    healthCheckPath: /healthz
+
+databases:
+  # PostgreSQL Database
+  - name: cryptohacker-db
+    plan: free
+    databaseName: cryptohackerheist
+    user: cryptohacker
