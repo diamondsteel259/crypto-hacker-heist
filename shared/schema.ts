@@ -345,6 +345,7 @@ export const autoUpgradeSettings = pgTable("auto_upgrade_settings", {
 }, (table) => ({
   userEquipmentComponentUnique: unique().on(table.ownedEquipmentId, table.componentType),
   userAutoUpgradeIdx: index("auto_upgrade_settings_user_idx").on(table.userId),
+}));
 
 // Starter Packs
 export const packPurchases = pgTable("pack_purchases", {
