@@ -179,7 +179,10 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-6">
           {/* Left Column */}
           <div className="lg:col-span-2 space-y-3 md:space-y-6">
-            <BlockTimer onBlockMined={() => console.log('Block mined!')} />
+            <BlockTimer 
+              onBlockMined={() => console.log('Block mined!')} 
+              userHashrate={user?.totalHashrate || 0}
+            />
             <HashrateChart />
             <NetworkStats />
           </div>
