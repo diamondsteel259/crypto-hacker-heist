@@ -102,6 +102,50 @@ export default function Rigs() {
     },
   });
 
+  const savePresetMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const response = await apiRequest('POST', `/api/user/${userId}/equipment/presets`, { presetName: name });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "equipment", "presets"] });
+      setPresetDialogOpen(false);
+      setPresetName("");
+      toast({
+        title: "Preset Saved!",
+        description: data.message || "Equipment preset saved successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Save Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deletePresetMutation = useMutation({
+    mutationFn: async (presetId: number) => {
+      const response = await apiRequest('DELETE', `/api/user/${userId}/equipment/presets/${presetId}`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "equipment", "presets"] });
+      toast({
+        title: "Preset Deleted",
+        description: data.message || "Preset deleted successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleRigClick = (rig: UserEquipment) => {
     setSelectedRig(rig);
     setDialogOpen(true);
