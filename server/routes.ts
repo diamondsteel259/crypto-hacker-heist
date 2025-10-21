@@ -1102,12 +1102,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Loot box system routes
-  app.post("/api/user/:userId/lootboxes/open", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+  app.post("/api/user/:userId/lootbox/open", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
-    const { boxType } = req.body;
+    const { boxType, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
 
     if (!boxType) {
-      return res.status(400).json({ message: "Box type is required" });
+      return res.status(400).json({ error: "Box type is required" });
+    }
+
+    // Check if this box type requires TON payment
+    const paidBoxTypes = ["basic", "advanced", "elite"];
+    const requiresPayment = paidBoxTypes.includes(boxType);
+
+    if (requiresPayment && (!tonTransactionHash || !userWalletAddress || !tonAmount)) {
+      return res.status(400).json({ error: "Payment verification required for this loot box" });
     }
 
     try {
@@ -1117,73 +1125,131 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .for('update');
         if (!user[0]) throw new Error("User not found");
 
-        // Simple loot box rewards system
-        const rewards = [];
+        // Verify TON transaction if required
+        if (requiresPayment) {
+          // Check if transaction hash already used
+          const existingPurchase = await tx.select().from(lootBoxPurchases)
+            .where(eq(lootBoxPurchases.tonTransactionHash, tonTransactionHash))
+            .limit(1);
+
+          if (existingPurchase.length > 0) {
+            return res.status(400).json({
+              error: "Transaction hash already used. Cannot reuse payment.",
+            });
+          }
+
+          // TODO: Implement actual TON blockchain verification here
+          // For now, we'll store the transaction and mark as verified
+          // Production should verify: amount, recipient address, transaction existence on-chain
+          const verified = true; // Placeholder
+
+          if (!verified) {
+            return res.status(400).json({
+              error: "Payment verification failed: Transaction not found on blockchain",
+            });
+          }
+        }
+
+        // Generate loot box rewards based on type
         let totalCS = 0;
         let totalCHST = 0;
+        const equipmentRewards: any[] = [];
 
         switch (boxType) {
           case "basic":
-            // Basic box: 0.5 TON cost, 100-110% RTP
-            totalCS = Math.floor(Math.random() * 200) + 100; // 100-300 CS
-            rewards.push({ type: "CS", amount: totalCS });
+            // Basic box: 0.5 TON
+            totalCS = Math.floor(Math.random() * 400) + 300; // 300-700 CS
+            totalCHST = Math.floor(Math.random() * 20) + 10; // 10-30 CHST
             break;
           
-          case "premium":
-            // Premium box: 2 TON cost, 100-110% RTP
-            totalCS = Math.floor(Math.random() * 500) + 300; // 300-800 CS
-            totalCHST = Math.floor(Math.random() * 50) + 25; // 25-75 CHST
-            rewards.push({ type: "CS", amount: totalCS });
-            rewards.push({ type: "CHST", amount: totalCHST });
+          case "advanced":
+            // Advanced box: 2 TON
+            totalCS = Math.floor(Math.random() * 2000) + 2000; // 2000-4000 CS
+            totalCHST = Math.floor(Math.random() * 100) + 100; // 100-200 CHST
+            // 10% chance for equipment
+            if (Math.random() < 0.1) {
+              equipmentRewards.push({
+                type_id: "gaming-laptop",
+                name: "Gaming Laptop",
+                quantity: 1,
+              });
+            }
             break;
           
-          case "epic":
-            // Epic box: 5 TON cost, 100-110% RTP
-            totalCS = Math.floor(Math.random() * 1000) + 500; // 500-1500 CS
-            totalCHST = Math.floor(Math.random() * 100) + 50; // 50-150 CHST
-            rewards.push({ type: "CS", amount: totalCS });
-            rewards.push({ type: "CHST", amount: totalCHST });
-            break;
-          
-          case "daily-task":
-            // Free daily task box
-            totalCS = Math.floor(Math.random() * 100) + 50; // 50-150 CS
-            rewards.push({ type: "CS", amount: totalCS });
-            break;
-          
-          case "invite-friend":
-            // Free invite friend box
-            totalCS = Math.floor(Math.random() * 200) + 100; // 100-300 CS
-            rewards.push({ type: "CS", amount: totalCS });
+          case "elite":
+            // Elite box: 5 TON
+            totalCS = Math.floor(Math.random() * 5000) + 5000; // 5000-10000 CS
+            totalCHST = Math.floor(Math.random() * 300) + 200; // 200-500 CHST
+            // 25% chance for equipment
+            if (Math.random() < 0.25) {
+              equipmentRewards.push({
+                type_id: "asic-miner-s19",
+                name: "ASIC Miner S19",
+                quantity: 1,
+              });
+            }
             break;
           
           default:
             throw new Error("Unknown box type");
         }
 
-        // Apply rewards to user
+        // Apply CS/CHST rewards
         if (totalCS > 0) {
           await tx.update(users)
-            .set({ 
-              csBalance: sql`${users.csBalance} + ${totalCS}` 
-            })
+            .set({ csBalance: sql`${users.csBalance} + ${totalCS}` })
             .where(eq(users.id, userId));
         }
 
         if (totalCHST > 0) {
           await tx.update(users)
-            .set({ 
-              chstBalance: sql`${users.chstBalance} + ${totalCHST}` 
-            })
+            .set({ chstBalance: sql`${users.chstBalance} + ${totalCHST}` })
             .where(eq(users.id, userId));
         }
 
-        return { success: true, rewards, message: "Loot box opened successfully!" };
+        // Store purchase if TON payment was made
+        if (requiresPayment) {
+          const rewardsJson = JSON.stringify({
+            cs: totalCS,
+            chst: totalCHST,
+            equipment: equipmentRewards,
+          });
+
+          await tx.insert(lootBoxPurchases).values({
+            userId: user[0].telegramId,
+            boxType,
+            tonAmount: tonAmount.toString(),
+            tonTransactionHash,
+            tonTransactionVerified: true,
+            rewardsJson,
+          });
+        }
+
+        // Get updated balances
+        const updatedUser = await tx.select().from(users).where(eq(users.id, userId));
+
+        return {
+          success: true,
+          boxType,
+          rewards: {
+            cs: totalCS,
+            chst: totalCHST,
+            equipment: equipmentRewards,
+          },
+          new_balance: {
+            cs: updatedUser[0].csBalance,
+            chst: updatedUser[0].chstBalance,
+          },
+          opened_at: new Date().toISOString(),
+        };
       });
 
-      res.json(result);
+      if (typeof result === 'object' && 'success' in result) {
+        res.json(result);
+      }
     } catch (error: any) {
-      res.status(400).json({ message: error.message || "Failed to open loot box" });
+      console.error("Loot box open error:", error);
+      res.status(500).json({ error: error.message || "Failed to open loot box" });
     }
   });
 
