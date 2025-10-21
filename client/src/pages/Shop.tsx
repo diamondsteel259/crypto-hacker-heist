@@ -192,6 +192,47 @@ export default function Shop() {
     enabled: !!userId,
   });
 
+  // Fetch component upgrades for all owned equipment
+  const { data: allComponentUpgrades = {} } = useQuery<Record<string, any[]>>({
+    queryKey: ["/api/user", userId, "components", "all"],
+    queryFn: async () => {
+      if (!ownedEquipment || ownedEquipment.length === 0) {
+        return {};
+      }
+
+      const componentData: Record<string, any[]> = {};
+
+      // Fetch components for each equipment piece
+      await Promise.all(
+        ownedEquipment.map(async (equipment) => {
+          try {
+            const response = await apiRequest(
+              "GET",
+              `/api/user/${userId}/equipment/${equipment.id}/components`
+            );
+            const data = await response.json();
+            componentData[equipment.id] = data;
+          } catch (error) {
+            console.error(`Failed to fetch components for ${equipment.id}:`, error);
+            componentData[equipment.id] = [];
+          }
+        })
+      );
+
+      return componentData;
+    },
+    enabled: !!userId && ownedEquipment.length > 0,
+  });
+
+  // Helper function to get component level
+  const getComponentLevel = (equipmentId: string, componentType: string): number => {
+    const components = allComponentUpgrades[equipmentId] || [];
+    const component = components.find(
+      (c: any) => c.component_upgrades?.componentType === componentType
+    );
+    return component?.component_upgrades?.currentLevel || 0;
+  };
+
   const purchaseMutation = useMutation({
     mutationFn: async (equipmentTypeId: string) => {
       console.log("Attempting to purchase equipment:", equipmentTypeId);
