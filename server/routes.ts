@@ -765,6 +765,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Recalculate all users' hashrates from actual equipment - admin only
+  app.post("/api/admin/recalculate-hashrates", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const result = await db.transaction(async (tx: any) => {
+        // Get all users
+        const allUsers = await tx.select().from(users);
+        let usersUpdated = 0;
+        const updates = [];
+
+        for (const user of allUsers) {
+          // Get user's equipment
+          const equipment = await tx.select()
+            .from(ownedEquipment)
+            .leftJoin(equipmentTypes, eq(ownedEquipment.equipmentTypeId, equipmentTypes.id))
+            .where(eq(ownedEquipment.userId, user.telegramId));
+
+          // Calculate total hashrate from equipment
+          const actualHashrate = equipment.reduce((sum: number, row: any) => {
+            return sum + (row.owned_equipment?.currentHashrate || 0);
+          }, 0);
+
+          // Update if there's a mismatch
+          if (user.totalHashrate !== actualHashrate) {
+            await tx.update(users)
+              .set({ totalHashrate: actualHashrate })
+              .where(eq(users.telegramId, user.telegramId));
+
+            usersUpdated++;
+            updates.push({
+              userId: user.telegramId,
+              username: user.username,
+              oldHashrate: user.totalHashrate,
+              newHashrate: actualHashrate,
+              equipmentCount: equipment.length
+            });
+          }
+        }
+
+        return {
+          success: true,
+          totalUsers: allUsers.length,
+          usersUpdated,
+          updates: updates.slice(0, 20), // Return first 20 for logging
+        };
+      });
+
+      console.log(`Hashrate recalculation complete: ${result.usersUpdated}/${result.totalUsers} users updated`);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Hashrate recalculation error:", error);
+      res.status(500).json({
+        error: "Hashrate recalculation failed",
+        details: error.message,
+      });
+    }
+  });
+
   // Equipment price management endpoints
   app.post("/api/admin/equipment/:equipmentId/update", validateTelegramAuth, requireAdmin, async (req, res) => {
     const { equipmentId } = req.params;
