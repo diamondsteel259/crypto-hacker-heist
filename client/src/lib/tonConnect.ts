@@ -68,7 +68,7 @@ export async function getTonBalance(): Promise<string> {
   }
 }
 
-export async function sendTonTransaction(to: string, amount: number, comment?: string) {
+export async function sendTonTransaction(to: string, amount: string, comment?: string) {
   const ui = getTonConnectUI();
   if (!ui.account) {
     throw new Error('Wallet not connected');
