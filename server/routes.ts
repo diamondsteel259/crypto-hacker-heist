@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, db } from "./storage";
 import { insertUserSchema, insertOwnedEquipmentSchema } from "@shared/schema";
-import { users, ownedEquipment, equipmentTypes, referrals, componentUpgrades, blockRewards, blocks, dailyClaims, userTasks, powerUpPurchases, lootBoxPurchases, activePowerUps, priceAlerts } from "@shared/schema";
+import { users, ownedEquipment, equipmentTypes, referrals, componentUpgrades, blockRewards, blocks, dailyClaims, userTasks, powerUpPurchases, lootBoxPurchases, activePowerUps, priceAlerts, autoUpgradeSettings } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { validateTelegramAuth, requireAdmin, verifyUserAccess, type AuthRequest } from "./middleware/auth";
 import { verifyTONTransaction, getGameWalletAddress, isValidTONAddress } from "./tonVerification";
