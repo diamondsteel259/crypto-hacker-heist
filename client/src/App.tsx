@@ -19,6 +19,8 @@ import Cosmetics from "@/pages/Cosmetics";
 import Statistics from "@/pages/Statistics";
 import SpinWheel from "@/pages/SpinWheel";
 import Admin from "@/pages/Admin";
+import Packs from "@/pages/Packs";
+import Subscription from "@/pages/Subscription";
 import NotFound from "@/pages/not-found";
 
 function Router() {
