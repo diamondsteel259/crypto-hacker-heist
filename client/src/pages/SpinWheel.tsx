@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Disc3, Gift, Clock, Sparkles } from "lucide-react";
 import { initializeUser } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { sendTonTransaction, isWalletConnected, getTonConnectUI } from "@/lib/tonConnect";
+import { useTonConnect, sendTonTransaction } from "@/lib/tonConnect";
 
 const TON_PAYMENT_ADDRESS = "UQBdFhwckY9C8MU0AC4uiPbRH_C3QIjZH6OzV47ROfHjnyfe";
 
@@ -29,6 +29,7 @@ interface SpinResult {
 
 export default function SpinWheel() {
   const { toast } = useToast();
+  const { tonConnectUI, isConnected } = useTonConnect();
   const [userId, setUserId] = useState<string | null>(null);
   const [isSpinning, setIsSpinning] = useState(false);
   const [lastPrize, setLastPrize] = useState<any>(null);
@@ -93,8 +94,7 @@ export default function SpinWheel() {
   };
 
   const handlePaidSpin = async () => {
-    if (!isWalletConnected()) {
-      const tonConnectUI = getTonConnectUI();
+    if (!isConnected) {
       await tonConnectUI.openModal();
       return;
     }
@@ -102,7 +102,7 @@ export default function SpinWheel() {
     setIsSpinning(true);
 
     try {
-      const txHash = await sendTonTransaction(TON_PAYMENT_ADDRESS, "0.1", "Spin Wheel");
+      const txHash = await sendTonTransaction(tonConnectUI, TON_PAYMENT_ADDRESS, "0.1", "Spin Wheel");
       
       if (txHash) {
         spinMutation.mutate({
