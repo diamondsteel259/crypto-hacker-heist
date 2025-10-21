@@ -5,6 +5,7 @@ import { insertUserSchema, insertOwnedEquipmentSchema } from "@shared/schema";
 import { users, ownedEquipment, equipmentTypes, referrals, componentUpgrades, blockRewards, dailyClaims, userTasks, powerUpPurchases, lootBoxPurchases, activePowerUps } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { validateTelegramAuth, requireAdmin, verifyUserAccess, type AuthRequest } from "./middleware/auth";
+import { verifyTONTransaction, getGameWalletAddress, isValidTONAddress } from "./tonVerification";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health endpoint for Render
@@ -988,6 +989,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ error: "Invalid power-up type" });
     }
 
+    // Validate TON addresses
+    if (!isValidTONAddress(userWalletAddress)) {
+      return res.status(400).json({ error: "Invalid user wallet address format" });
+    }
+
+    const gameWallet = getGameWalletAddress();
+    if (!isValidTONAddress(gameWallet)) {
+      return res.status(500).json({ error: "Game wallet not configured correctly" });
+    }
+
     try {
       const result = await db.transaction(async (tx: any) => {
         const user = await tx.select().from(users)
@@ -1006,18 +1017,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        // TODO: Implement actual TON blockchain verification here
-        // For now, we'll store the transaction and mark as verified
-        // Production should verify: amount, recipient address, transaction existence on-chain
-        // Example: await verifyTONTransaction(tonTransactionHash, tonAmount, GAME_WALLET_ADDRESS);
-        
-        const verified = true; // Placeholder - should be actual verification result
+        // Verify transaction on TON blockchain
+        console.log(`Verifying TON transaction: ${tonTransactionHash} for ${tonAmount} TON`);
+        const verification = await verifyTONTransaction(
+          tonTransactionHash,
+          tonAmount,
+          gameWallet,
+          userWalletAddress
+        );
 
-        if (!verified) {
+        if (!verification.verified) {
+          console.error('TON verification failed:', verification.error);
           return res.status(400).json({
-            error: "Transaction verification failed",
+            error: verification.error || "Transaction verification failed",
           });
         }
+
+        console.log('TON transaction verified successfully:', verification.transaction);
 
         // Determine rewards and boost parameters
         let rewardCs = 0;
@@ -1039,7 +1055,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           powerUpType,
           tonAmount: tonAmount.toString(),
           tonTransactionHash,
-          tonTransactionVerified: verified,
+          tonTransactionVerified: true,
           rewardCs,
           rewardChst,
         });
@@ -1077,6 +1093,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           new_balance: {
             cs: updatedUser[0].csBalance,
             chst: updatedUser[0].chstBalance,
+          },
+          verification: {
+            txHash: verification.transaction?.hash,
+            verified: true,
           },
         };
       });
