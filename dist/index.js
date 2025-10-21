@@ -1368,7 +1368,7 @@ async function registerRoutes(app2) {
     const { userId } = req.params;
     const hoursAhead = parseInt(req.query.hours) || 24;
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -2939,7 +2939,7 @@ async function registerRoutes(app2) {
   app2.get("/api/user/:userId/price-alerts", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -2962,7 +2962,7 @@ async function registerRoutes(app2) {
       return res.status(400).json({ error: "Equipment type ID is required" });
     }
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -2996,7 +2996,7 @@ async function registerRoutes(app2) {
   app2.delete("/api/user/:userId/price-alerts/:alertId", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId, alertId } = req.params;
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -3020,7 +3020,7 @@ async function registerRoutes(app2) {
   app2.get("/api/user/:userId/price-alerts/check", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -3053,7 +3053,7 @@ async function registerRoutes(app2) {
   app2.get("/api/user/:userId/auto-upgrade/settings", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -3083,7 +3083,7 @@ async function registerRoutes(app2) {
       return res.status(400).json({ error: "Target level must be between 0 and 10" });
     }
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -3129,7 +3129,7 @@ async function registerRoutes(app2) {
   app2.delete("/api/user/:userId/auto-upgrade/settings/:settingId", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId, settingId } = req.params;
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -3335,7 +3335,7 @@ async function registerRoutes(app2) {
   app2.get("/api/user/:userId/packs", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -3423,7 +3423,7 @@ async function registerRoutes(app2) {
   app2.get("/api/user/:userId/prestige", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -3507,7 +3507,7 @@ async function registerRoutes(app2) {
   app2.get("/api/user/:userId/subscription", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -3582,7 +3582,7 @@ async function registerRoutes(app2) {
   app2.post("/api/user/:userId/subscription/cancel", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
