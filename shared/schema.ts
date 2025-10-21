@@ -536,6 +536,13 @@ export const insertEquipmentPresetSchema = createInsertSchema(equipmentPresets).
 export type EquipmentPreset = typeof equipmentPresets.$inferSelect;
 export type InsertEquipmentPreset = z.infer<typeof insertEquipmentPresetSchema>;
 
+// Price Alert schemas and types
+export const insertPriceAlertSchema = createInsertSchema(priceAlerts).omit({ id: true, createdAt: true, triggeredAt: true });
+
+export type PriceAlert = typeof priceAlerts.$inferSelect;
+export type InsertPriceAlert = z.infer<typeof insertPriceAlertSchema>;
+
+
 // Subscription schemas and types
 export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, startDate: true });
 
