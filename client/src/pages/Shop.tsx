@@ -964,56 +964,56 @@ export default function Shop() {
             <div className="space-y-4">
               <Card className="p-4">
                 <div className="flex items-center gap-3 mb-3">
-                  <Zap className="w-5 h-5 text-yellow-500" />
-                  <h3 className="text-lg font-semibold">Daily Free Power-Ups</h3>
+                  <Zap className="w-4 md:w-5 h-4 md:h-5 text-yellow-500" />
+                  <h3 className="text-sm md:text-lg font-semibold">Daily Free Power-Ups</h3>
                 </div>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Get 5 free CS/CHST power-ups every day!
+                <p className="text-xs md:text-sm text-muted-foreground mb-4">
+                  Get 5 free CS/CHST every day!
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <Button 
-                    className="bg-matrix-green hover:bg-matrix-green/90 text-black"
+                    className="bg-matrix-green hover:bg-matrix-green/90 text-black text-xs md:text-sm"
                     onClick={() => powerUpClaimMutation.mutate("cs")}
                     disabled={powerUpClaimMutation.isPending}
                   >
-                    <Star className="w-4 h-4 mr-2" />
-                    {powerUpClaimMutation.isPending ? "Claiming..." : "Claim CS (5/5)"}
+                    <Star className="w-3 md:w-4 h-3 md:h-4 mr-1 md:mr-2" />
+                    {powerUpClaimMutation.isPending ? "..." : "Claim CS"}
                   </Button>
                   <Button 
-                    className="bg-cyber-blue hover:bg-cyber-blue/90 text-white"
+                    className="bg-cyber-blue hover:bg-cyber-blue/90 text-white text-xs md:text-sm"
                     onClick={() => powerUpClaimMutation.mutate("chst")}
                     disabled={powerUpClaimMutation.isPending}
                   >
-                    <Crown className="w-4 h-4 mr-2" />
-                    {powerUpClaimMutation.isPending ? "Claiming..." : "Claim CHST (5/5)"}
+                    <Crown className="w-3 md:w-4 h-3 md:h-4 mr-1 md:mr-2" />
+                    {powerUpClaimMutation.isPending ? "..." : "Claim CHST"}
                   </Button>
                 </div>
               </Card>
 
               <Card className="p-4">
                 <div className="flex items-center gap-3 mb-3">
-                  <Rocket className="w-5 h-5 text-purple-500" />
-                  <h3 className="text-lg font-semibold">Premium Power-Ups</h3>
+                  <Rocket className="w-4 md:w-5 h-4 md:h-5 text-purple-500" />
+                  <h3 className="text-sm md:text-lg font-semibold">Premium Power-Ups</h3>
                 </div>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Unlimited TON purchases for boosts and upgrades
+                <p className="text-xs md:text-sm text-muted-foreground mb-4">
+                  TON purchases for boosts
                 </p>
                 <div className="grid grid-cols-1 gap-3">
                   <Button 
-                    className="bg-cyber-blue hover:bg-cyber-blue/90 text-white"
+                    className="bg-cyber-blue hover:bg-cyber-blue/90 text-white text-xs md:text-sm"
                     onClick={() => premiumPowerUpMutation.mutate({ powerUpType: "hashrate-boost", tonAmount: 0.1 })}
                     disabled={premiumPowerUpMutation.isPending}
                   >
-                    <Shield className="w-4 h-4 mr-2" />
-                    {premiumPowerUpMutation.isPending ? "Buying..." : "Buy Hashrate Boost (0.1 TON)"}
+                    <Shield className="w-3 md:w-4 h-3 md:h-4 mr-1 md:mr-2" />
+                    {premiumPowerUpMutation.isPending ? "Buying..." : "Hashrate +50% (0.1 TON)"}
                   </Button>
                   <Button 
-                    className="bg-cyber-blue hover:bg-cyber-blue/90 text-white"
+                    className="bg-cyber-blue hover:bg-cyber-blue/90 text-white text-xs md:text-sm"
                     onClick={() => premiumPowerUpMutation.mutate({ powerUpType: "luck-boost", tonAmount: 0.2 })}
                     disabled={premiumPowerUpMutation.isPending}
                   >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    {premiumPowerUpMutation.isPending ? "Buying..." : "Buy Luck Boost (0.2 TON)"}
+                    <Sparkles className="w-3 md:w-4 h-3 md:h-4 mr-1 md:mr-2" />
+                    {premiumPowerUpMutation.isPending ? "Buying..." : "Luck +25% (0.2 TON)"}
                   </Button>
                 </div>
               </Card>
@@ -1024,64 +1024,64 @@ export default function Shop() {
             <div className="space-y-4">
               <Card className="p-4">
                 <div className="flex items-center gap-3 mb-3">
-                  <Gem className="w-5 h-5 text-pink-500" />
-                  <h3 className="text-lg font-semibold">Mystery Boxes</h3>
+                  <Gem className="w-4 md:w-5 h-4 md:h-5 text-pink-500" />
+                  <h3 className="text-sm md:text-lg font-semibold">Mystery Boxes</h3>
                 </div>
-                <p className="text-sm text-muted-foreground mb-4">
-                  TON-cost boxes with 100-110% RTP average
+                <p className="text-xs md:text-sm text-muted-foreground mb-4">
+                  TON boxes with 100-110% RTP
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <Button 
-                    className="bg-cyber-blue hover:bg-cyber-blue/90 text-white"
+                    className="bg-cyber-blue hover:bg-cyber-blue/90 text-white text-xs md:text-sm"
                     onClick={() => lootBoxOpenMutation.mutate({ boxType: "basic", cost: 0.5 })}
                     disabled={lootBoxOpenMutation.isPending}
                   >
-                    <Gift className="w-4 h-4 mr-2" />
-                    {lootBoxOpenMutation.isPending ? "Opening..." : "Basic Box (0.5 TON)"}
+                    <Gift className="w-3 md:w-4 h-3 md:h-4 mr-1 md:mr-2" />
+                    {lootBoxOpenMutation.isPending ? "..." : "Basic (0.5)"}
                   </Button>
                   <Button 
-                    className="bg-cyber-blue hover:bg-cyber-blue/90 text-white"
+                    className="bg-cyber-blue hover:bg-cyber-blue/90 text-white text-xs md:text-sm"
                     onClick={() => lootBoxOpenMutation.mutate({ boxType: "premium", cost: 2 })}
                     disabled={lootBoxOpenMutation.isPending}
                   >
-                    <Gift className="w-4 h-4 mr-2" />
-                    {lootBoxOpenMutation.isPending ? "Opening..." : "Premium Box (2 TON)"}
+                    <Gift className="w-3 md:w-4 h-3 md:h-4 mr-1 md:mr-2" />
+                    {lootBoxOpenMutation.isPending ? "..." : "Premium (2)"}
                   </Button>
                   <Button 
-                    className="bg-cyber-blue hover:bg-cyber-blue/90 text-white"
+                    className="bg-cyber-blue hover:bg-cyber-blue/90 text-white text-xs md:text-sm col-span-2"
                     onClick={() => lootBoxOpenMutation.mutate({ boxType: "epic", cost: 5 })}
                     disabled={lootBoxOpenMutation.isPending}
                   >
-                    <Gift className="w-4 h-4 mr-2" />
-                    {lootBoxOpenMutation.isPending ? "Opening..." : "Epic Box (5 TON)"}
+                    <Gift className="w-3 md:w-4 h-3 md:h-4 mr-1 md:mr-2" />
+                    {lootBoxOpenMutation.isPending ? "..." : "Epic Box (5 TON)"}
                   </Button>
                 </div>
               </Card>
 
               <Card className="p-4">
                 <div className="flex items-center gap-3 mb-3">
-                  <Star className="w-5 h-5 text-yellow-500" />
-                  <h3 className="text-lg font-semibold">Free Loot Boxes</h3>
+                  <Star className="w-4 md:w-5 h-4 md:h-5 text-yellow-500" />
+                  <h3 className="text-sm md:text-lg font-semibold">Free Loot Boxes</h3>
                 </div>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Earn free boxes through tasks and invites
+                <p className="text-xs md:text-sm text-muted-foreground mb-4">
+                  Earn through tasks and invites
                 </p>
                 <div className="grid grid-cols-1 gap-3">
                   <Button 
-                    className="bg-matrix-green hover:bg-matrix-green/90 text-black"
+                    className="bg-matrix-green hover:bg-matrix-green/90 text-black text-xs md:text-sm"
                     onClick={() => lootBoxOpenMutation.mutate({ boxType: "daily-task", cost: 0 })}
                     disabled={lootBoxOpenMutation.isPending}
                   >
-                    <CheckCircle2 className="w-4 h-4 mr-2" />
-                    {lootBoxOpenMutation.isPending ? "Opening..." : "Complete Daily Task (1/1)"}
+                    <CheckCircle2 className="w-3 md:w-4 h-3 md:h-4 mr-1 md:mr-2" />
+                    {lootBoxOpenMutation.isPending ? "..." : "Daily Task (1/1)"}
                   </Button>
                   <Button 
-                    className="bg-matrix-green hover:bg-matrix-green/90 text-black"
+                    className="bg-matrix-green hover:bg-matrix-green/90 text-black text-xs md:text-sm"
                     onClick={() => lootBoxOpenMutation.mutate({ boxType: "invite-friend", cost: 0 })}
                     disabled={lootBoxOpenMutation.isPending}
                   >
-                    <CheckCircle2 className="w-4 h-4 mr-2" />
-                    {lootBoxOpenMutation.isPending ? "Opening..." : "Invite Friend (2/2)"}
+                    <CheckCircle2 className="w-3 md:w-4 h-3 md:h-4 mr-1 md:mr-2" />
+                    {lootBoxOpenMutation.isPending ? "..." : "Invite Friend (2/2)"}
                   </Button>
                 </div>
               </Card>
