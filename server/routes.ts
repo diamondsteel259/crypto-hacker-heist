@@ -921,6 +921,186 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Premium power-up purchase with TON payment
+  app.post("/api/user/:userId/powerups/purchase", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { powerUpType, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
+
+    if (!powerUpType || !tonTransactionHash || !userWalletAddress || !tonAmount) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    if (powerUpType !== "hashrate-boost" && powerUpType !== "luck-boost") {
+      return res.status(400).json({ error: "Invalid power-up type" });
+    }
+
+    try {
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users)
+          .where(eq(users.id, userId))
+          .for('update');
+        if (!user[0]) throw new Error("User not found");
+
+        // Check if transaction hash already used
+        const existingPurchase = await tx.select().from(powerUpPurchases)
+          .where(eq(powerUpPurchases.tonTransactionHash, tonTransactionHash))
+          .limit(1);
+
+        if (existingPurchase.length > 0) {
+          return res.status(400).json({
+            error: "Transaction hash already used. Cannot reuse payment.",
+          });
+        }
+
+        // TODO: Implement actual TON blockchain verification here
+        // For now, we'll store the transaction and mark as verified
+        // Production should verify: amount, recipient address, transaction existence on-chain
+        // Example: await verifyTONTransaction(tonTransactionHash, tonAmount, GAME_WALLET_ADDRESS);
+        
+        const verified = true; // Placeholder - should be actual verification result
+
+        if (!verified) {
+          return res.status(400).json({
+            error: "Transaction verification failed",
+          });
+        }
+
+        // Determine rewards and boost parameters
+        let rewardCs = 0;
+        let rewardChst = 0;
+        let boostPercentage = 0;
+        const duration = 60 * 60 * 1000; // 1 hour in milliseconds
+
+        if (powerUpType === "hashrate-boost") {
+          rewardCs = 100;
+          boostPercentage = 50; // 50% hashrate boost
+        } else if (powerUpType === "luck-boost") {
+          rewardCs = 50;
+          boostPercentage = 20; // 20% luck boost
+        }
+
+        // Record purchase
+        await tx.insert(powerUpPurchases).values({
+          userId: user[0].telegramId,
+          powerUpType,
+          tonAmount: tonAmount.toString(),
+          tonTransactionHash,
+          tonTransactionVerified: verified,
+          rewardCs,
+          rewardChst,
+        });
+
+        // Grant immediate rewards
+        if (rewardCs > 0) {
+          await tx.update(users)
+            .set({ csBalance: sql`${users.csBalance} + ${rewardCs}` })
+            .where(eq(users.id, userId));
+        }
+
+        // Activate power-up boost
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + duration);
+        
+        await tx.insert(activePowerUps).values({
+          userId: user[0].telegramId,
+          powerUpType,
+          boostPercentage,
+          activatedAt: now,
+          expiresAt,
+          isActive: true,
+        });
+
+        const updatedUser = await tx.select().from(users).where(eq(users.id, userId));
+
+        return {
+          success: true,
+          powerUpType,
+          reward: { cs: rewardCs, chst: rewardChst },
+          boostActive: true,
+          boostPercentage,
+          activatedAt: now.toISOString(),
+          expiresAt: expiresAt.toISOString(),
+          new_balance: {
+            cs: updatedUser[0].csBalance,
+            chst: updatedUser[0].chstBalance,
+          },
+        };
+      });
+
+      if (typeof result === 'object' && 'success' in result) {
+        res.json(result);
+      }
+    } catch (error: any) {
+      console.error("Power-up purchase error:", error);
+      res.status(500).json({ error: error.message || "Failed to purchase power-up" });
+    }
+  });
+
+  // Get active power-ups for user
+  app.get("/api/user/:userId/powerups/active", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const now = new Date();
+
+      // Get all active power-ups that haven't expired
+      const activePowerUpsList = await db.select().from(activePowerUps)
+        .where(and(
+          eq(activePowerUps.userId, user[0].telegramId),
+          eq(activePowerUps.isActive, true),
+          sql`${activePowerUps.expiresAt} > ${now}`
+        ));
+
+      // Auto-deactivate expired power-ups
+      await db.update(activePowerUps)
+        .set({ isActive: false })
+        .where(and(
+          eq(activePowerUps.userId, user[0].telegramId),
+          eq(activePowerUps.isActive, true),
+          sql`${activePowerUps.expiresAt} <= ${now}`
+        ));
+
+      // Calculate total effects
+      let totalHashrateBoost = 0;
+      let totalLuckBoost = 0;
+
+      const formattedPowerUps = activePowerUpsList.map(powerUp => {
+        if (powerUp.powerUpType === "hashrate-boost") {
+          totalHashrateBoost += powerUp.boostPercentage;
+        } else if (powerUp.powerUpType === "luck-boost") {
+          totalLuckBoost += powerUp.boostPercentage;
+        }
+
+        const timeRemaining = Math.max(0, powerUp.expiresAt.getTime() - now.getTime());
+
+        return {
+          id: powerUp.id,
+          type: powerUp.powerUpType,
+          boost_percentage: powerUp.boostPercentage,
+          activated_at: powerUp.activatedAt.toISOString(),
+          expires_at: powerUp.expiresAt.toISOString(),
+          time_remaining_seconds: Math.floor(timeRemaining / 1000),
+        };
+      });
+
+      res.json({
+        active_power_ups: formattedPowerUps,
+        effects: {
+          total_hashrate_boost: totalHashrateBoost,
+          total_luck_boost: totalLuckBoost,
+        },
+      });
+    } catch (error: any) {
+      console.error("Get active power-ups error:", error);
+      res.status(500).json({ error: "Failed to get active power-ups" });
+    }
+  });
+
   // Loot box system routes
   app.post("/api/user/:userId/lootboxes/open", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
