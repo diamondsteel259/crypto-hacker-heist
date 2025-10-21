@@ -37,7 +37,9 @@ __export(schema_exports, {
   insertGameSettingSchema: () => insertGameSettingSchema,
   insertLootBoxPurchaseSchema: () => insertLootBoxPurchaseSchema,
   insertOwnedEquipmentSchema: () => insertOwnedEquipmentSchema,
+  insertPackPurchaseSchema: () => insertPackPurchaseSchema,
   insertPowerUpPurchaseSchema: () => insertPowerUpPurchaseSchema,
+  insertPrestigeHistorySchema: () => insertPrestigeHistorySchema,
   insertPriceAlertSchema: () => insertPriceAlertSchema,
   insertReferralSchema: () => insertReferralSchema,
   insertSeasonSchema: () => insertSeasonSchema,
@@ -46,6 +48,7 @@ __export(schema_exports, {
   insertUserCosmeticSchema: () => insertUserCosmeticSchema,
   insertUserDailyChallengeSchema: () => insertUserDailyChallengeSchema,
   insertUserHourlyBonusSchema: () => insertUserHourlyBonusSchema,
+  insertUserPrestigeSchema: () => insertUserPrestigeSchema,
   insertUserSchema: () => insertUserSchema,
   insertUserSpinSchema: () => insertUserSpinSchema,
   insertUserStatisticsSchema: () => insertUserStatisticsSchema,
@@ -54,7 +57,9 @@ __export(schema_exports, {
   insertUserTaskSchema: () => insertUserTaskSchema,
   lootBoxPurchases: () => lootBoxPurchases,
   ownedEquipment: () => ownedEquipment,
+  packPurchases: () => packPurchases,
   powerUpPurchases: () => powerUpPurchases,
+  prestigeHistory: () => prestigeHistory,
   priceAlerts: () => priceAlerts,
   referrals: () => referrals,
   seasons: () => seasons,
@@ -63,6 +68,7 @@ __export(schema_exports, {
   userCosmetics: () => userCosmetics,
   userDailyChallenges: () => userDailyChallenges,
   userHourlyBonuses: () => userHourlyBonuses,
+  userPrestige: () => userPrestige,
   userSpins: () => userSpins,
   userStatistics: () => userStatistics,
   userStreaks: () => userStreaks,
@@ -73,7 +79,7 @@ __export(schema_exports, {
 import { sql } from "drizzle-orm";
 import { pgTable, varchar, text, integer, real, timestamp, boolean, unique, decimal, index, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-var users, gameSettings, equipmentTypes, ownedEquipment, blocks, blockRewards, referrals, componentUpgrades, userTasks, dailyClaims, powerUpPurchases, lootBoxPurchases, activePowerUps, dailyChallenges, userDailyChallenges, achievements, userAchievements, seasons, cosmeticItems, userCosmetics, userStreaks, userHourlyBonuses, userSpins, spinHistory, equipmentPresets, priceAlerts, autoUpgradeSettings, userSubscriptions, userStatistics, insertUserSchema, insertEquipmentTypeSchema, insertOwnedEquipmentSchema, insertComponentUpgradeSchema, insertUserTaskSchema, insertDailyClaimSchema, insertPowerUpPurchaseSchema, insertLootBoxPurchaseSchema, insertActivePowerUpSchema, insertBlockSchema, insertBlockRewardSchema, insertReferralSchema, insertGameSettingSchema, insertDailyChallengeSchema, insertUserDailyChallengeSchema, insertAchievementSchema, insertUserAchievementSchema, insertSeasonSchema, insertCosmeticItemSchema, insertUserCosmeticSchema, insertUserStreakSchema, insertUserHourlyBonusSchema, insertUserSpinSchema, insertSpinHistorySchema, insertEquipmentPresetSchema, insertPriceAlertSchema, insertAutoUpgradeSettingSchema, insertUserSubscriptionSchema, insertUserStatisticsSchema;
+var users, gameSettings, equipmentTypes, ownedEquipment, blocks, blockRewards, referrals, componentUpgrades, userTasks, dailyClaims, powerUpPurchases, lootBoxPurchases, activePowerUps, dailyChallenges, userDailyChallenges, achievements, userAchievements, seasons, cosmeticItems, userCosmetics, userStreaks, userHourlyBonuses, userSpins, spinHistory, equipmentPresets, priceAlerts, autoUpgradeSettings, packPurchases, userPrestige, prestigeHistory, userSubscriptions, userStatistics, insertUserSchema, insertEquipmentTypeSchema, insertOwnedEquipmentSchema, insertComponentUpgradeSchema, insertUserTaskSchema, insertDailyClaimSchema, insertPowerUpPurchaseSchema, insertLootBoxPurchaseSchema, insertActivePowerUpSchema, insertBlockSchema, insertBlockRewardSchema, insertReferralSchema, insertGameSettingSchema, insertDailyChallengeSchema, insertUserDailyChallengeSchema, insertAchievementSchema, insertUserAchievementSchema, insertSeasonSchema, insertCosmeticItemSchema, insertUserCosmeticSchema, insertUserStreakSchema, insertUserHourlyBonusSchema, insertUserSpinSchema, insertSpinHistorySchema, insertEquipmentPresetSchema, insertPriceAlertSchema, insertAutoUpgradeSettingSchema, insertPackPurchaseSchema, insertUserPrestigeSchema, insertPrestigeHistorySchema, insertUserSubscriptionSchema, insertUserStatisticsSchema;
 var init_schema = __esm({
   "shared/schema.ts"() {
     "use strict";
@@ -394,6 +400,45 @@ var init_schema = __esm({
       userEquipmentComponentUnique: unique().on(table.ownedEquipmentId, table.componentType),
       userAutoUpgradeIdx: index("auto_upgrade_settings_user_idx").on(table.userId)
     }));
+    packPurchases = pgTable("pack_purchases", {
+      id: serial("id").primaryKey(),
+      userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: "cascade" }),
+      packType: text("pack_type").notNull(),
+      // starter, pro, whale
+      tonAmount: decimal("ton_amount", { precision: 10, scale: 2 }).notNull(),
+      tonTransactionHash: text("ton_transaction_hash").notNull().unique(),
+      tonTransactionVerified: boolean("ton_transaction_verified").notNull().default(false),
+      rewardsJson: text("rewards_json").notNull(),
+      // JSON string of rewards granted
+      purchasedAt: timestamp("purchased_at").notNull().defaultNow()
+    }, (table) => ({
+      userIdx: index("pack_purchases_user_idx").on(table.userId),
+      packTypeIdx: index("pack_purchases_type_idx").on(table.packType),
+      userPackUnique: unique().on(table.userId, table.packType)
+      // One purchase per pack type per user
+    }));
+    userPrestige = pgTable("user_prestige", {
+      id: serial("id").primaryKey(),
+      userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: "cascade" }).unique(),
+      prestigeLevel: integer("prestige_level").notNull().default(0),
+      totalPrestiges: integer("total_prestiges").notNull().default(0),
+      lastPrestigeAt: timestamp("last_prestige_at"),
+      createdAt: timestamp("created_at").notNull().defaultNow()
+    }, (table) => ({
+      userPrestigeIdx: index("user_prestige_user_idx").on(table.userId)
+    }));
+    prestigeHistory = pgTable("prestige_history", {
+      id: serial("id").primaryKey(),
+      userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: "cascade" }),
+      fromLevel: integer("from_level").notNull(),
+      toLevel: integer("to_level").notNull(),
+      csBalanceReset: real("cs_balance_reset").notNull(),
+      equipmentReset: text("equipment_reset"),
+      // JSON of equipment that was reset
+      prestigedAt: timestamp("prestiged_at").notNull().defaultNow()
+    }, (table) => ({
+      userHistoryIdx: index("prestige_history_user_idx").on(table.userId)
+    }));
     userSubscriptions = pgTable("user_subscriptions", {
       id: serial("id").primaryKey(),
       userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: "cascade" }).unique(),
@@ -495,6 +540,9 @@ var init_schema = __esm({
     insertEquipmentPresetSchema = createInsertSchema(equipmentPresets).omit({ id: true, createdAt: true, updatedAt: true });
     insertPriceAlertSchema = createInsertSchema(priceAlerts).omit({ id: true, createdAt: true, triggeredAt: true });
     insertAutoUpgradeSettingSchema = createInsertSchema(autoUpgradeSettings).omit({ id: true, createdAt: true, updatedAt: true });
+    insertPackPurchaseSchema = createInsertSchema(packPurchases).omit({ id: true, purchasedAt: true });
+    insertUserPrestigeSchema = createInsertSchema(userPrestige).omit({ id: true, createdAt: true });
+    insertPrestigeHistorySchema = createInsertSchema(prestigeHistory).omit({ id: true, prestigedAt: true });
     insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, startDate: true });
     insertUserStatisticsSchema = createInsertSchema(userStatistics).omit({ id: true, createdAt: true, updatedAt: true });
   }
@@ -3282,6 +3330,271 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Delete season error:", error);
       res.status(500).json({ error: error.message || "Failed to delete season" });
+    }
+  });
+  app2.get("/api/user/:userId/packs", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const purchases = await db.select().from(packPurchases).where(eq3(packPurchases.userId, user.telegramId)).orderBy(packPurchases.purchasedAt);
+      res.json(purchases);
+    } catch (error) {
+      console.error("Get pack purchases error:", error);
+      res.status(500).json({ error: error.message || "Failed to get pack purchases" });
+    }
+  });
+  app2.post("/api/user/:userId/packs/purchase", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { packType, tonTransactionHash, tonAmount } = req.body;
+    if (!packType || !tonTransactionHash || !tonAmount) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+    const validPacks = ["starter", "pro", "whale"];
+    if (!validPacks.includes(packType)) {
+      return res.status(400).json({ error: "Invalid pack type" });
+    }
+    try {
+      const result = await db.transaction(async (tx) => {
+        const user = await tx.select().from(users).where(eq3(users.id, userId)).for("update");
+        if (!user[0]) throw new Error("User not found");
+        const existing = await tx.select().from(packPurchases).where(and3(
+          eq3(packPurchases.userId, user[0].telegramId),
+          eq3(packPurchases.packType, packType)
+        )).limit(1);
+        if (existing.length > 0) {
+          throw new Error("You have already purchased this pack");
+        }
+        const packRewards = {
+          starter: { cs: 5e4, equipment: ["laptop-gaming"], chst: 0 },
+          pro: { cs: 25e4, equipment: ["pc-server-farm"], chst: 100 },
+          whale: { cs: 1e6, equipment: ["asic-s19"], chst: 500 }
+        };
+        const rewards = packRewards[packType];
+        await tx.update(users).set({
+          csBalance: user[0].csBalance + rewards.cs,
+          chstBalance: user[0].chstBalance + rewards.chst
+        }).where(eq3(users.id, userId));
+        for (const equipId of rewards.equipment) {
+          const equipType = await tx.select().from(equipmentTypes).where(eq3(equipmentTypes.id, equipId)).limit(1);
+          if (equipType[0]) {
+            const existing2 = await tx.select().from(ownedEquipment).where(and3(
+              eq3(ownedEquipment.userId, userId),
+              eq3(ownedEquipment.equipmentTypeId, equipId)
+            )).limit(1);
+            if (existing2.length > 0) {
+              await tx.update(ownedEquipment).set({ quantity: existing2[0].quantity + 1 }).where(eq3(ownedEquipment.id, existing2[0].id));
+            } else {
+              await tx.insert(ownedEquipment).values({
+                userId,
+                equipmentTypeId: equipId,
+                quantity: 1,
+                upgradeLevel: 0,
+                currentHashrate: equipType[0].baseHashrate
+              });
+            }
+          }
+        }
+        const purchase = await tx.insert(packPurchases).values({
+          userId: user[0].telegramId,
+          packType,
+          tonAmount,
+          tonTransactionHash,
+          tonTransactionVerified: true,
+          rewardsJson: JSON.stringify(rewards)
+        }).returning();
+        return { purchase: purchase[0], rewards };
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "equipment"] });
+      res.json({
+        success: true,
+        message: "Pack purchased successfully!",
+        purchase: result.purchase,
+        rewards: result.rewards
+      });
+    } catch (error) {
+      console.error("Purchase pack error:", error);
+      res.status(500).json({ error: error.message || "Failed to purchase pack" });
+    }
+  });
+  app2.get("/api/user/:userId/prestige", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      let prestige = await db.select().from(userPrestige).where(eq3(userPrestige.userId, user.telegramId)).limit(1);
+      if (prestige.length === 0) {
+        const created = await db.insert(userPrestige).values({
+          userId: user.telegramId,
+          prestigeLevel: 0,
+          totalPrestiges: 0
+        }).returning();
+        prestige = created;
+      }
+      const history = await db.select().from(prestigeHistory).where(eq3(prestigeHistory.userId, user.telegramId)).orderBy(sql4`${prestigeHistory.prestigedAt} DESC`).limit(10);
+      const eligible = user.csBalance >= 1e6 && user.totalHashrate >= 100;
+      res.json({
+        prestige: prestige[0],
+        history,
+        eligible,
+        currentBoost: prestige[0].prestigeLevel * 5
+        // 5% per prestige level
+      });
+    } catch (error) {
+      console.error("Get prestige error:", error);
+      res.status(500).json({ error: error.message || "Failed to get prestige info" });
+    }
+  });
+  app2.post("/api/user/:userId/prestige/execute", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const result = await db.transaction(async (tx) => {
+        const user = await tx.select().from(users).where(eq3(users.id, userId)).for("update");
+        if (!user[0]) throw new Error("User not found");
+        if (user[0].csBalance < 1e6 || user[0].totalHashrate < 100) {
+          throw new Error("Not eligible for prestige. Need 1M CS and 100 total hashrate.");
+        }
+        let prestige = await tx.select().from(userPrestige).where(eq3(userPrestige.userId, user[0].telegramId)).limit(1);
+        if (prestige.length === 0) {
+          const created = await tx.insert(userPrestige).values({
+            userId: user[0].telegramId,
+            prestigeLevel: 0,
+            totalPrestiges: 0
+          }).returning();
+          prestige = created;
+        }
+        const currentPrestige = prestige[0];
+        const equipment = await tx.select().from(ownedEquipment).where(eq3(ownedEquipment.userId, userId));
+        await tx.insert(prestigeHistory).values({
+          userId: user[0].telegramId,
+          fromLevel: currentPrestige.prestigeLevel,
+          toLevel: currentPrestige.prestigeLevel + 1,
+          csBalanceReset: user[0].csBalance,
+          equipmentReset: JSON.stringify(equipment)
+        });
+        await tx.update(userPrestige).set({
+          prestigeLevel: currentPrestige.prestigeLevel + 1,
+          totalPrestiges: currentPrestige.totalPrestiges + 1,
+          lastPrestigeAt: /* @__PURE__ */ new Date()
+        }).where(eq3(userPrestige.id, currentPrestige.id));
+        await tx.update(users).set({
+          csBalance: 0,
+          totalHashrate: 0
+        }).where(eq3(users.id, userId));
+        await tx.delete(ownedEquipment).where(eq3(ownedEquipment.userId, userId));
+        await tx.delete(componentUpgrades).where(sql4`${componentUpgrades.ownedEquipmentId} IN (SELECT id FROM ${ownedEquipment} WHERE user_id = ${userId})`);
+        return { newPrestigeLevel: currentPrestige.prestigeLevel + 1 };
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "equipment"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "prestige"] });
+      res.json({
+        success: true,
+        message: `Prestige ${result.newPrestigeLevel} achieved!`,
+        newPrestigeLevel: result.newPrestigeLevel,
+        permanentBoost: result.newPrestigeLevel * 5
+      });
+    } catch (error) {
+      console.error("Execute prestige error:", error);
+      res.status(500).json({ error: error.message || "Failed to execute prestige" });
+    }
+  });
+  app2.get("/api/user/:userId/subscription", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const subscription = await db.select().from(userSubscriptions).where(eq3(userSubscriptions.userId, user.telegramId)).limit(1);
+      if (subscription.length === 0) {
+        return res.json({ subscribed: false, subscription: null });
+      }
+      const sub = subscription[0];
+      const now = /* @__PURE__ */ new Date();
+      const isActive = sub.isActive && (!sub.endDate || new Date(sub.endDate) > now);
+      res.json({
+        subscribed: isActive,
+        subscription: { ...sub, isActive }
+      });
+    } catch (error) {
+      console.error("Get subscription error:", error);
+      res.status(500).json({ error: error.message || "Failed to get subscription" });
+    }
+  });
+  app2.post("/api/user/:userId/subscription/subscribe", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { subscriptionType, tonTransactionHash, tonAmount } = req.body;
+    if (!subscriptionType || !tonTransactionHash || !tonAmount) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+    const validTypes = ["monthly", "lifetime"];
+    if (!validTypes.includes(subscriptionType)) {
+      return res.status(400).json({ error: "Invalid subscription type" });
+    }
+    try {
+      const result = await db.transaction(async (tx) => {
+        const user = await tx.select().from(users).where(eq3(users.id, userId)).for("update");
+        if (!user[0]) throw new Error("User not found");
+        const existing = await tx.select().from(userSubscriptions).where(eq3(userSubscriptions.userId, user[0].telegramId)).limit(1);
+        const now = /* @__PURE__ */ new Date();
+        let endDate = null;
+        if (subscriptionType === "monthly") {
+          endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1e3);
+        }
+        if (existing.length > 0) {
+          const updated = await tx.update(userSubscriptions).set({
+            subscriptionType,
+            startDate: now,
+            endDate,
+            isActive: true,
+            tonTransactionHash
+          }).where(eq3(userSubscriptions.id, existing[0].id)).returning();
+          return updated[0];
+        } else {
+          const created = await tx.insert(userSubscriptions).values({
+            userId: user[0].telegramId,
+            subscriptionType,
+            startDate: now,
+            endDate,
+            isActive: true,
+            tonTransactionHash
+          }).returning();
+          return created[0];
+        }
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "subscription"] });
+      res.json({
+        success: true,
+        message: "Subscription activated!",
+        subscription: result
+      });
+    } catch (error) {
+      console.error("Subscribe error:", error);
+      res.status(500).json({ error: error.message || "Failed to subscribe" });
+    }
+  });
+  app2.post("/api/user/:userId/subscription/cancel", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      await db.update(userSubscriptions).set({ isActive: false, autoRenew: false }).where(eq3(userSubscriptions.userId, user.telegramId));
+      queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "subscription"] });
+      res.json({
+        success: true,
+        message: "Subscription cancelled"
+      });
+    } catch (error) {
+      console.error("Cancel subscription error:", error);
+      res.status(500).json({ error: error.message || "Failed to cancel subscription" });
     }
   });
   const httpServer = createServer(app2);
