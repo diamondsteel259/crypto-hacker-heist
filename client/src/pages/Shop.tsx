@@ -436,7 +436,10 @@ export default function Shop() {
   });
 
   // Group equipment by category and tier for proper display
-  const groupedEquipment = allEquipment.reduce((acc, eq) => {
+  // Sort by orderIndex first to ensure correct display order
+  const sortedEquipment = [...allEquipment].sort((a, b) => a.orderIndex - b.orderIndex);
+  
+  const groupedEquipment = sortedEquipment.reduce((acc, eq) => {
     if (!acc[eq.category]) {
       acc[eq.category] = {};
     }
