@@ -559,6 +559,13 @@ export type PriceAlert = typeof priceAlerts.$inferSelect;
 export type InsertPriceAlert = z.infer<typeof insertPriceAlertSchema>;
 
 
+// Auto-Upgrade Settings schemas and types
+export const insertAutoUpgradeSettingSchema = createInsertSchema(autoUpgradeSettings).omit({ id: true, createdAt: true, updatedAt: true });
+
+export type AutoUpgradeSetting = typeof autoUpgradeSettings.$inferSelect;
+export type InsertAutoUpgradeSetting = z.infer<typeof insertAutoUpgradeSettingSchema>;
+
+
 // Subscription schemas and types
 export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, startDate: true });
 
