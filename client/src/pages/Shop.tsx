@@ -151,6 +151,9 @@ export default function Shop() {
   const [tonBalance, setTonBalance] = useState<string>("0.0000");
   const { toast } = useToast();
   const userId = getCurrentUserId();
+  
+  // Initialize TON Connect
+  const { isConnected, userFriendlyAddress, tonConnectUI } = useTonConnect();
 
   console.log("Shop component rendering...");
 
