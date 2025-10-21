@@ -1409,57 +1409,502 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Loot box system routes
-  app.post("/api/user/:userId/lootbox/open", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+  // ==========================================
+  // DAILY CHALLENGES ROUTES
+  // ==========================================
+
+  // Get all available daily challenges
+  app.get("/api/challenges", async (req, res) => {
+    try {
+      const { dailyChallenges: dailyChallengesTable } = await import("@shared/schema");
+      const challenges = await db.select().from(dailyChallengesTable)
+        .where(eq(dailyChallengesTable.isActive, true));
+      res.json(challenges);
+    } catch (error: any) {
+      console.error("Get challenges error:", error);
+      res.status(500).json({ error: "Failed to get challenges" });
+    }
+  });
+
+  // Get user's daily challenge progress
+  app.get("/api/user/:userId/challenges/today", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
-    const { boxType, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
-
-    if (!boxType) {
-      return res.status(400).json({ error: "Box type is required" });
-    }
-
-    // Check if this box type requires TON payment
-    const paidBoxTypes = ["basic", "premium", "epic"];
-    const requiresPayment = paidBoxTypes.includes(boxType);
-
-    if (requiresPayment && (!tonTransactionHash || !userWalletAddress || !tonAmount)) {
-      return res.status(400).json({ error: "Payment verification required for this loot box" });
-    }
-
-    // Validate TON addresses if payment required
-    if (requiresPayment) {
-      if (!isValidTONAddress(userWalletAddress)) {
-        return res.status(400).json({ error: "Invalid user wallet address format" });
+    
+    try {
+      const { userDailyChallenges, dailyChallenges: dailyChallengesTable } = await import("@shared/schema");
+      
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
       }
 
-      const gameWallet = getGameWalletAddress();
-      if (!isValidTONAddress(gameWallet)) {
-        return res.status(500).json({ error: "Game wallet not configured correctly" });
-      }
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+      // Get all challenges
+      const allChallenges = await db.select().from(dailyChallengesTable)
+        .where(eq(dailyChallengesTable.isActive, true));
+
+      // Get user's completed challenges for today
+      const completed = await db.select().from(userDailyChallenges)
+        .where(and(
+          eq(userDailyChallenges.userId, user[0].telegramId),
+          eq(userDailyChallenges.completedDate, today)
+        ));
+
+      const completedIds = completed.map(c => c.challengeId);
+
+      res.json({
+        challenges: allChallenges.map(challenge => ({
+          ...challenge,
+          completed: completedIds.includes(challenge.challengeId),
+        })),
+        completedCount: completed.length,
+        totalCount: allChallenges.length,
+      });
+    } catch (error: any) {
+      console.error("Get user challenges error:", error);
+      res.status(500).json({ error: "Failed to get user challenges" });
     }
+  });
+
+  // Complete a daily challenge
+  app.post("/api/user/:userId/challenges/:challengeId/complete", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId, challengeId } = req.params;
 
     try {
+      const { userDailyChallenges, dailyChallenges: dailyChallengesTable, userStatistics } = await import("@shared/schema");
+
       const result = await db.transaction(async (tx: any) => {
-        const user = await tx.select().from(users)
-          .where(eq(users.id, userId))
-          .for('update');
+        const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
         if (!user[0]) throw new Error("User not found");
 
-        // Verify TON transaction if required
-        if (requiresPayment) {
-          // Check if transaction hash already used
-          const existingPurchase = await tx.select().from(lootBoxPurchases)
-            .where(eq(lootBoxPurchases.tonTransactionHash, tonTransactionHash))
-            .limit(1);
+        // Check challenge exists
+        const challenge = await tx.select().from(dailyChallengesTable)
+          .where(and(
+            eq(dailyChallengesTable.challengeId, challengeId),
+            eq(dailyChallengesTable.isActive, true)
+          ))
+          .limit(1);
 
-          if (existingPurchase.length > 0) {
-            return res.status(400).json({
-              error: "Transaction hash already used. Cannot reuse payment.",
+        if (!challenge[0]) {
+          throw new Error("Challenge not found");
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+
+        // Check if already completed today
+        const existing = await tx.select().from(userDailyChallenges)
+          .where(and(
+            eq(userDailyChallenges.userId, user[0].telegramId),
+            eq(userDailyChallenges.challengeId, challengeId),
+            eq(userDailyChallenges.completedDate, today)
+          ))
+          .limit(1);
+
+        if (existing[0]) {
+          throw new Error("Challenge already completed today");
+        }
+
+        // Mark as completed
+        await tx.insert(userDailyChallenges).values({
+          userId: user[0].telegramId,
+          challengeId,
+          completedDate: today,
+          rewardClaimed: true,
+        });
+
+        // Give rewards
+        if (challenge[0].rewardCs > 0) {
+          await tx.update(users)
+            .set({ csBalance: sql`${users.csBalance} + ${challenge[0].rewardCs}` })
+            .where(eq(users.id, userId));
+
+          // Update statistics
+          await tx.insert(userStatistics)
+            .values({
+              userId: user[0].telegramId,
+              totalCsEarned: challenge[0].rewardCs,
+            })
+            .onConflictDoUpdate({
+              target: userStatistics.userId,
+              set: {
+                totalCsEarned: sql`${userStatistics.totalCsEarned} + ${challenge[0].rewardCs}`,
+                updatedAt: sql`NOW()`,
+              },
             });
+        }
+
+        if (challenge[0].rewardChst && challenge[0].rewardChst > 0) {
+          await tx.update(users)
+            .set({ chstBalance: sql`${users.chstBalance} + ${challenge[0].rewardChst}` })
+            .where(eq(users.id, userId));
+
+          await tx.insert(userStatistics)
+            .values({
+              userId: user[0].telegramId,
+              totalChstEarned: challenge[0].rewardChst,
+            })
+            .onConflictDoUpdate({
+              target: userStatistics.userId,
+              set: {
+                totalChstEarned: sql`${userStatistics.totalChstEarned} + ${challenge[0].rewardChst}`,
+                updatedAt: sql`NOW()`,
+              },
+            });
+        }
+
+        return {
+          success: true,
+          challenge: challenge[0],
+          message: `Challenge completed! Earned ${challenge[0].rewardCs} CS`,
+        };
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Complete challenge error:", error);
+      res.status(400).json({ error: error.message || "Failed to complete challenge" });
+    }
+  });
+
+  // ==========================================
+  // ACHIEVEMENTS ROUTES
+  // ==========================================
+
+  // Get all achievements
+  app.get("/api/achievements", async (req, res) => {
+    try {
+      const { achievements: achievementsTable } = await import("@shared/schema");
+      const allAchievements = await db.select().from(achievementsTable)
+        .where(eq(achievementsTable.isActive, true))
+        .orderBy(achievementsTable.orderIndex);
+      res.json(allAchievements);
+    } catch (error: any) {
+      console.error("Get achievements error:", error);
+      res.status(500).json({ error: "Failed to get achievements" });
+    }
+  });
+
+  // Get user's achievement progress
+  app.get("/api/user/:userId/achievements", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const { achievements: achievementsTable, userAchievements } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Get all achievements
+      const allAchievements = await db.select().from(achievementsTable)
+        .where(eq(achievementsTable.isActive, true))
+        .orderBy(achievementsTable.orderIndex);
+
+      // Get user's unlocked achievements
+      const unlocked = await db.select().from(userAchievements)
+        .where(eq(userAchievements.userId, user[0].telegramId));
+
+      const unlockedIds = unlocked.map(u => u.achievementId);
+
+      res.json({
+        achievements: allAchievements.map(achievement => ({
+          ...achievement,
+          unlocked: unlockedIds.includes(achievement.achievementId),
+          unlockedAt: unlocked.find(u => u.achievementId === achievement.achievementId)?.unlockedAt,
+        })),
+        unlockedCount: unlocked.length,
+        totalCount: allAchievements.length,
+      });
+    } catch (error: any) {
+      console.error("Get user achievements error:", error);
+      res.status(500).json({ error: "Failed to get user achievements" });
+    }
+  });
+
+  // Check and auto-unlock achievements for user
+  app.post("/api/user/:userId/achievements/check", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const { achievements: achievementsTable, userAchievements, userStatistics } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Get user stats
+      const stats = await db.select().from(userStatistics)
+        .where(eq(userStatistics.userId, user[0].telegramId))
+        .limit(1);
+
+      // Get user's equipment count
+      const equipment = await db.select().from(ownedEquipment)
+        .where(eq(ownedEquipment.userId, userId));
+
+      const uniqueEquipment = new Set(equipment.map(e => e.equipmentTypeId)).size;
+
+      // Get referrals count
+      const refCount = await db.select({ count: sql`COUNT(*)` }).from(referrals)
+        .where(eq(referrals.referrerId, userId));
+
+      // Check which achievements should be unlocked
+      const newlyUnlocked = [];
+      const allAchievements = await db.select().from(achievementsTable)
+        .where(eq(achievementsTable.isActive, true));
+
+      const existingAchievements = await db.select().from(userAchievements)
+        .where(eq(userAchievements.userId, user[0].telegramId));
+
+      const existingIds = existingAchievements.map(a => a.achievementId);
+
+      for (const achievement of allAchievements) {
+        if (existingIds.includes(achievement.achievementId)) continue;
+
+        let shouldUnlock = false;
+
+        // Check requirements
+        switch (achievement.requirement) {
+          case "own_1_equipment":
+            shouldUnlock = equipment.length >= 1;
+            break;
+          case "hashrate_1000":
+            shouldUnlock = user[0].totalHashrate >= 1000;
+            break;
+          case "hashrate_10000":
+            shouldUnlock = user[0].totalHashrate >= 10000;
+            break;
+          case "hashrate_100000":
+            shouldUnlock = user[0].totalHashrate >= 100000;
+            break;
+          case "own_10_different_equipment":
+            shouldUnlock = uniqueEquipment >= 10;
+            break;
+          case "spend_10_ton":
+            shouldUnlock = stats[0] && parseFloat(stats[0].totalTonSpent.toString()) >= 10;
+            break;
+          case "refer_10_friends":
+            shouldUnlock = (refCount[0]?.count || 0) >= 10;
+            break;
+          case "mine_100_blocks":
+            shouldUnlock = stats[0] && stats[0].totalBlocksMined >= 100;
+            break;
+        }
+
+        if (shouldUnlock) {
+          // Unlock achievement
+          await db.insert(userAchievements).values({
+            userId: user[0].telegramId,
+            achievementId: achievement.achievementId,
+            rewardClaimed: false,
+          });
+
+          newlyUnlocked.push(achievement);
+        }
+      }
+
+      res.json({
+        newlyUnlocked,
+        message: newlyUnlocked.length > 0 ? `Unlocked ${newlyUnlocked.length} achievements!` : "No new achievements",
+      });
+    } catch (error: any) {
+      console.error("Check achievements error:", error);
+      res.status(500).json({ error: "Failed to check achievements" });
+    }
+  });
+
+  // Claim achievement reward
+  app.post("/api/user/:userId/achievements/:achievementId/claim", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId, achievementId } = req.params;
+
+    try {
+      const { achievements: achievementsTable, userAchievements, userStatistics } = await import("@shared/schema");
+
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
+        if (!user[0]) throw new Error("User not found");
+
+        // Check achievement exists and is unlocked
+        const userAchievement = await tx.select().from(userAchievements)
+          .where(and(
+            eq(userAchievements.userId, user[0].telegramId),
+            eq(userAchievements.achievementId, achievementId)
+          ))
+          .limit(1);
+
+        if (!userAchievement[0]) {
+          throw new Error("Achievement not unlocked");
+        }
+
+        if (userAchievement[0].rewardClaimed) {
+          throw new Error("Reward already claimed");
+        }
+
+        // Get achievement details
+        const achievement = await tx.select().from(achievementsTable)
+          .where(eq(achievementsTable.achievementId, achievementId))
+          .limit(1);
+
+        if (!achievement[0]) {
+          throw new Error("Achievement not found");
+        }
+
+        // Give rewards
+        if (achievement[0].rewardCs && achievement[0].rewardCs > 0) {
+          await tx.update(users)
+            .set({ csBalance: sql`${users.csBalance} + ${achievement[0].rewardCs}` })
+            .where(eq(users.id, userId));
+
+          await tx.insert(userStatistics)
+            .values({
+              userId: user[0].telegramId,
+              totalCsEarned: achievement[0].rewardCs,
+            })
+            .onConflictDoUpdate({
+              target: userStatistics.userId,
+              set: {
+                totalCsEarned: sql`${userStatistics.totalCsEarned} + ${achievement[0].rewardCs}`,
+                updatedAt: sql`NOW()`,
+              },
+            });
+        }
+
+        // Mark as claimed
+        await tx.update(userAchievements)
+          .set({ rewardClaimed: true })
+          .where(and(
+            eq(userAchievements.userId, user[0].telegramId),
+            eq(userAchievements.achievementId, achievementId)
+          ));
+
+        return {
+          success: true,
+          achievement: achievement[0],
+          message: `Claimed ${achievement[0].rewardCs} CS reward!`,
+        };
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Claim achievement error:", error);
+      res.status(400).json({ error: error.message || "Failed to claim achievement" });
+    }
+  });
+
+  // ==========================================
+  // COSMETICS ROUTES
+  // ==========================================
+
+  // Get all cosmetic items
+  app.get("/api/cosmetics", async (req, res) => {
+    try {
+      const { cosmeticItems } = await import("@shared/schema");
+      const items = await db.select().from(cosmeticItems)
+        .where(eq(cosmeticItems.isActive, true))
+        .orderBy(cosmeticItems.category, cosmeticItems.orderIndex);
+      res.json(items);
+    } catch (error: any) {
+      console.error("Get cosmetics error:", error);
+      res.status(500).json({ error: "Failed to get cosmetics" });
+    }
+  });
+
+  // Get user's owned cosmetics
+  app.get("/api/user/:userId/cosmetics", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const { userCosmetics } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const owned = await db.select().from(userCosmetics)
+        .where(eq(userCosmetics.userId, user[0].telegramId));
+
+      res.json(owned);
+    } catch (error: any) {
+      console.error("Get user cosmetics error:", error);
+      res.status(500).json({ error: "Failed to get user cosmetics" });
+    }
+  });
+
+  // Purchase cosmetic item
+  app.post("/api/user/:userId/cosmetics/:cosmeticId/purchase", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId, cosmeticId } = req.params;
+    const { currency, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
+
+    try {
+      const { cosmeticItems, userCosmetics, userStatistics } = await import("@shared/schema");
+
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
+        if (!user[0]) throw new Error("User not found");
+
+        // Check if already owned
+        const existing = await tx.select().from(userCosmetics)
+          .where(and(
+            eq(userCosmetics.userId, user[0].telegramId),
+            eq(userCosmetics.cosmeticId, cosmeticId)
+          ))
+          .limit(1);
+
+        if (existing[0]) {
+          throw new Error("Already owned");
+        }
+
+        // Get cosmetic details
+        const cosmetic = await tx.select().from(cosmeticItems)
+          .where(and(
+            eq(cosmeticItems.itemId, cosmeticId),
+            eq(cosmeticItems.isActive, true)
+          ))
+          .limit(1);
+
+        if (!cosmetic[0]) {
+          throw new Error("Cosmetic not found");
+        }
+
+        // Handle payment based on currency
+        if (currency === "CS" && cosmetic[0].priceCs) {
+          if (user[0].csBalance < cosmetic[0].priceCs) {
+            throw new Error(`Insufficient CS. Need ${cosmetic[0].priceCs} CS`);
           }
 
-          // Verify transaction on TON blockchain
-          console.log(`Verifying loot box TON transaction: ${tonTransactionHash} for ${tonAmount} TON`);
+          await tx.update(users)
+            .set({ csBalance: sql`${users.csBalance} - ${cosmetic[0].priceCs}` })
+            .where(eq(users.id, userId));
+
+          await tx.insert(userStatistics)
+            .values({
+              userId: user[0].telegramId,
+              totalCsSpent: cosmetic[0].priceCs,
+            })
+            .onConflictDoUpdate({
+              target: userStatistics.userId,
+              set: {
+                totalCsSpent: sql`${userStatistics.totalCsSpent} + ${cosmetic[0].priceCs}`,
+                updatedAt: sql`NOW()`,
+              },
+            });
+        } else if (currency === "CHST" && cosmetic[0].priceChst) {
+          if (user[0].chstBalance < cosmetic[0].priceChst) {
+            throw new Error(`Insufficient CHST. Need ${cosmetic[0].priceChst} CHST`);
+          }
+
+          await tx.update(users)
+            .set({ chstBalance: sql`${users.chstBalance} - ${cosmetic[0].priceChst}` })
+            .where(eq(users.id, userId));
+        } else if (currency === "TON" && cosmetic[0].priceTon) {
+          // Verify TON transaction
+          if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
+            throw new Error("TON payment verification required");
+          }
+
           const gameWallet = getGameWalletAddress();
           const verification = await verifyTONTransaction(
             tonTransactionHash,
@@ -1469,131 +1914,550 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
 
           if (!verification.verified) {
-            console.error('TON verification failed:', verification.error);
-            return res.status(400).json({
-              error: verification.error || "Payment verification failed: Transaction not found on blockchain",
-            });
+            throw new Error(verification.error || "Payment verification failed");
           }
 
-          console.log('Loot box TON transaction verified successfully:', verification.transaction);
+          await tx.insert(userStatistics)
+            .values({
+              userId: user[0].telegramId,
+              totalTonSpent: cosmetic[0].priceTon,
+            })
+            .onConflictDoUpdate({
+              target: userStatistics.userId,
+              set: {
+                totalTonSpent: sql`${userStatistics.totalTonSpent} + ${cosmetic[0].priceTon}`,
+                updatedAt: sql`NOW()`,
+              },
+            });
+        } else {
+          throw new Error("Invalid currency or price not set");
         }
 
-        // Generate loot box rewards based on type
-        let totalCS = 0;
-        let totalCHST = 0;
-        const equipmentRewards = [];
-
-        switch (boxType) {
-          case "basic":
-            // Basic box: 0.5 TON
-            totalCS = Math.floor(Math.random() * 400) + 300; // 300-700 CS
-            totalCHST = Math.floor(Math.random() * 20) + 10; // 10-30 CHST
-            break;
-          
-          case "premium":
-            // Premium box: 2 TON (was "advanced")
-            totalCS = Math.floor(Math.random() * 2000) + 2000; // 2000-4000 CS
-            totalCHST = Math.floor(Math.random() * 100) + 100; // 100-200 CHST
-            // 10% chance for equipment
-            if (Math.random() < 0.1) {
-              equipmentRewards.push({
-                type_id: "gaming-laptop",
-                name: "Gaming Laptop",
-                quantity: 1,
-              });
-            }
-            break;
-          
-          case "epic":
-            // Epic box: 5 TON (was "elite")
-            totalCS = Math.floor(Math.random() * 5000) + 5000; // 5000-10000 CS
-            totalCHST = Math.floor(Math.random() * 300) + 200; // 200-500 CHST
-            // 25% chance for equipment
-            if (Math.random() < 0.25) {
-              equipmentRewards.push({
-                type_id: "asic-miner-s19",
-                name: "ASIC Miner S19",
-                quantity: 1,
-              });
-            }
-            break;
-          
-          case "daily-task":
-            // Free daily task box
-            totalCS = Math.floor(Math.random() * 100) + 50; // 50-150 CS
-            totalCHST = Math.floor(Math.random() * 10) + 5; // 5-15 CHST
-            break;
-          
-          case "invite-friend":
-            // Free invite friend box
-            totalCS = Math.floor(Math.random() * 200) + 100; // 100-300 CS
-            totalCHST = Math.floor(Math.random() * 20) + 10; // 10-30 CHST
-            break;
-          
-          default:
-            throw new Error("Unknown box type");
-        }
-
-        // Apply CS/CHST rewards
-        if (totalCS > 0) {
-          await tx.update(users)
-            .set({ csBalance: sql`${users.csBalance} + ${totalCS}` })
-            .where(eq(users.id, userId));
-        }
-
-        if (totalCHST > 0) {
-          await tx.update(users)
-            .set({ chstBalance: sql`${users.chstBalance} + ${totalCHST}` })
-            .where(eq(users.id, userId));
-        }
-
-        // Store purchase if TON payment was made
-        if (requiresPayment) {
-          const rewardsJson = JSON.stringify({
-            cs: totalCS,
-            chst: totalCHST,
-            equipment: equipmentRewards,
-          });
-
-          await tx.insert(lootBoxPurchases).values({
-            userId: user[0].telegramId,
-            boxType,
-            tonAmount: tonAmount.toString(),
-            tonTransactionHash,
-            tonTransactionVerified: true,
-            rewardsJson,
-          });
-        }
-
-        // Get updated balances
-        const updatedUser = await tx.select().from(users).where(eq(users.id, userId));
+        // Add to user's cosmetics
+        await tx.insert(userCosmetics).values({
+          userId: user[0].telegramId,
+          cosmeticId,
+          isEquipped: false,
+        });
 
         return {
           success: true,
-          boxType,
-          rewards: {
-            cs: totalCS,
-            chst: totalCHST,
-            equipment: equipmentRewards,
-          },
-          new_balance: {
-            cs: updatedUser[0].csBalance,
-            chst: updatedUser[0].chstBalance,
-          },
-          opened_at: new Date().toISOString(),
-          verification: requiresPayment ? {
-            verified: true,
-            txHash: tonTransactionHash,
-          } : undefined,
+          cosmetic: cosmetic[0],
+          message: `Purchased ${cosmetic[0].name}!`,
         };
       });
 
-      if (typeof result === 'object' && 'success' in result) {
-        res.json(result);
-      }
+      res.json(result);
     } catch (error: any) {
-      console.error("Loot box open error:", error);
-      res.status(500).json({ error: error.message || "Failed to open loot box" });
+      console.error("Purchase cosmetic error:", error);
+      res.status(400).json({ error: error.message || "Failed to purchase cosmetic" });
+    }
+  });
+
+  // ==========================================
+  // STREAKS ROUTES
+  // ==========================================
+
+  // Get user's login streak
+  app.get("/api/user/:userId/streak", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const { userStreaks } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const streak = await db.select().from(userStreaks)
+        .where(eq(userStreaks.userId, user[0].telegramId))
+        .limit(1);
+
+      if (!streak[0]) {
+        return res.json({
+          currentStreak: 0,
+          longestStreak: 0,
+          lastLoginDate: null,
+        });
+      }
+
+      res.json(streak[0]);
+    } catch (error: any) {
+      console.error("Get streak error:", error);
+      res.status(500).json({ error: "Failed to get streak" });
+    }
+  });
+
+  // Update daily login streak
+  app.post("/api/user/:userId/streak/checkin", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const { userStreaks } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+
+      const existing = await db.select().from(userStreaks)
+        .where(eq(userStreaks.userId, user[0].telegramId))
+        .limit(1);
+
+      if (!existing[0]) {
+        // First login
+        await db.insert(userStreaks).values({
+          userId: user[0].telegramId,
+          currentStreak: 1,
+          longestStreak: 1,
+          lastLoginDate: today,
+        });
+
+        return res.json({
+          currentStreak: 1,
+          longestStreak: 1,
+          message: "Welcome! Streak started!",
+          reward: 1000,
+        });
+      }
+
+      // Check if already checked in today
+      if (existing[0].lastLoginDate === today) {
+        return res.json({
+          currentStreak: existing[0].currentStreak,
+          longestStreak: existing[0].longestStreak,
+          message: "Already checked in today",
+          reward: 0,
+        });
+      }
+
+      // Check if streak continues or breaks
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+      let newStreak = 1;
+      if (existing[0].lastLoginDate === yesterdayStr) {
+        // Streak continues
+        newStreak = existing[0].currentStreak + 1;
+      }
+
+      const newLongest = Math.max(newStreak, existing[0].longestStreak);
+
+      // Calculate reward based on streak
+      const reward = Math.min(1000 * newStreak, 30000); // Max 30k at 30 day streak
+
+      // Update user CS balance
+      await db.update(users)
+        .set({ csBalance: sql`${users.csBalance} + ${reward}` })
+        .where(eq(users.id, userId));
+
+      // Update streak
+      await db.update(userStreaks)
+        .set({
+          currentStreak: newStreak,
+          longestStreak: newLongest,
+          lastLoginDate: today,
+          updatedAt: sql`NOW()`,
+        })
+        .where(eq(userStreaks.userId, user[0].telegramId));
+
+      res.json({
+        currentStreak: newStreak,
+        longestStreak: newLongest,
+        message: `Day ${newStreak} streak! Earned ${reward} CS`,
+        reward,
+      });
+    } catch (error: any) {
+      console.error("Check-in streak error:", error);
+      res.status(500).json({ error: "Failed to check-in" });
+    }
+  });
+
+  // ==========================================
+  // HOURLY BONUS ROUTES
+  // ==========================================
+
+  // Check if hourly bonus is available
+  app.get("/api/user/:userId/hourly-bonus/status", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const { userHourlyBonuses } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Get last claim time
+      const lastClaim = await db.select().from(userHourlyBonuses)
+        .where(eq(userHourlyBonuses.userId, user[0].telegramId))
+        .orderBy(sql`${userHourlyBonuses.claimedAt} DESC`)
+        .limit(1);
+
+      if (!lastClaim[0]) {
+        return res.json({
+          available: true,
+          nextAvailableAt: null,
+          minutesRemaining: 0,
+        });
+      }
+
+      const lastClaimTime = new Date(lastClaim[0].claimedAt).getTime();
+      const now = Date.now();
+      const hourInMs = 60 * 60 * 1000;
+      const timeSinceLastClaim = now - lastClaimTime;
+
+      if (timeSinceLastClaim >= hourInMs) {
+        return res.json({
+          available: true,
+          nextAvailableAt: null,
+          minutesRemaining: 0,
+        });
+      }
+
+      const nextAvailable = lastClaimTime + hourInMs;
+      const minutesRemaining = Math.ceil((nextAvailable - now) / 1000 / 60);
+
+      res.json({
+        available: false,
+        nextAvailableAt: new Date(nextAvailable).toISOString(),
+        minutesRemaining,
+      });
+    } catch (error: any) {
+      console.error("Get hourly bonus status error:", error);
+      res.status(500).json({ error: "Failed to get bonus status" });
+    }
+  });
+
+  // Claim hourly bonus
+  app.post("/api/user/:userId/hourly-bonus/claim", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const { userHourlyBonuses, userStatistics } = await import("@shared/schema");
+
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
+        if (!user[0]) throw new Error("User not found");
+
+        // Check last claim
+        const lastClaim = await tx.select().from(userHourlyBonuses)
+          .where(eq(userHourlyBonuses.userId, user[0].telegramId))
+          .orderBy(sql`${userHourlyBonuses.claimedAt} DESC`)
+          .limit(1);
+
+        if (lastClaim[0]) {
+          const lastClaimTime = new Date(lastClaim[0].claimedAt).getTime();
+          const now = Date.now();
+          const hourInMs = 60 * 60 * 1000;
+
+          if (now - lastClaimTime < hourInMs) {
+            throw new Error("Must wait 1 hour between claims");
+          }
+        }
+
+        // Random reward between 500-2000 CS
+        const reward = Math.floor(Math.random() * 1500) + 500;
+
+        // Give reward
+        await tx.update(users)
+          .set({ csBalance: sql`${users.csBalance} + ${reward}` })
+          .where(eq(users.id, userId));
+
+        // Record claim
+        await tx.insert(userHourlyBonuses).values({
+          userId: user[0].telegramId,
+          rewardAmount: reward,
+        });
+
+        // Update statistics
+        await tx.insert(userStatistics)
+          .values({
+            userId: user[0].telegramId,
+            totalCsEarned: reward,
+          })
+          .onConflictDoUpdate({
+            target: userStatistics.userId,
+            set: {
+              totalCsEarned: sql`${userStatistics.totalCsEarned} + ${reward}`,
+              updatedAt: sql`NOW()`,
+            },
+          });
+
+        return {
+          success: true,
+          reward,
+          message: `Claimed ${reward} CS!`,
+        };
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Claim hourly bonus error:", error);
+      res.status(400).json({ error: error.message || "Failed to claim bonus" });
+    }
+  });
+
+  // ==========================================
+  // SPIN THE WHEEL ROUTES
+  // ==========================================
+
+  // Get spin status for today
+  app.get("/api/user/:userId/spin/status", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const { userSpins } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+
+      const todaySpins = await db.select().from(userSpins)
+        .where(and(
+          eq(userSpins.userId, user[0].telegramId),
+          eq(userSpins.spinDate, today)
+        ))
+        .limit(1);
+
+      if (!todaySpins[0]) {
+        return res.json({
+          freeSpinAvailable: true,
+          freeSpinUsed: false,
+          paidSpinsCount: 0,
+        });
+      }
+
+      res.json({
+        freeSpinAvailable: !todaySpins[0].freeSpinUsed,
+        freeSpinUsed: todaySpins[0].freeSpinUsed,
+        paidSpinsCount: todaySpins[0].paidSpinsCount,
+      });
+    } catch (error: any) {
+      console.error("Get spin status error:", error);
+      res.status(500).json({ error: "Failed to get spin status" });
+    }
+  });
+
+  // Spin the wheel
+  app.post("/api/user/:userId/spin", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { isFree, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
+
+    try {
+      const { userSpins, spinHistory, userStatistics } = await import("@shared/schema");
+
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
+        if (!user[0]) throw new Error("User not found");
+
+        const today = new Date().toISOString().split('T')[0];
+
+        // Check/create today's spin record
+        let todaySpins = await tx.select().from(userSpins)
+          .where(and(
+            eq(userSpins.userId, user[0].telegramId),
+            eq(userSpins.spinDate, today)
+          ))
+          .limit(1);
+
+        if (!todaySpins[0]) {
+          await tx.insert(userSpins).values({
+            userId: user[0].telegramId,
+            spinDate: today,
+            freeSpinUsed: false,
+            paidSpinsCount: 0,
+          });
+
+          todaySpins = await tx.select().from(userSpins)
+            .where(and(
+              eq(userSpins.userId, user[0].telegramId),
+              eq(userSpins.spinDate, today)
+            ))
+            .limit(1);
+        }
+
+        // Validate spin type
+        if (isFree) {
+          if (todaySpins[0].freeSpinUsed) {
+            throw new Error("Free spin already used today");
+          }
+        } else {
+          // Paid spin - verify TON payment
+          if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
+            throw new Error("Payment verification required");
+          }
+
+          const gameWallet = getGameWalletAddress();
+          const verification = await verifyTONTransaction(
+            tonTransactionHash,
+            "0.1", // 0.1 TON per paid spin
+            gameWallet,
+            userWalletAddress
+          );
+
+          if (!verification.verified) {
+            throw new Error(verification.error || "Payment verification failed");
+          }
+        }
+
+        // Determine prize (random)
+        const rand = Math.random();
+        let prizeType, prizeValue, reward;
+
+        if (rand < 0.4) {
+          // 40% - CS prize
+          const csAmounts = [1000, 2500, 5000, 10000, 25000];
+          prizeValue = csAmounts[Math.floor(Math.random() * csAmounts.length)];
+          prizeType = "cs";
+          reward = { cs: prizeValue };
+
+          await tx.update(users)
+            .set({ csBalance: sql`${users.csBalance} + ${prizeValue}` })
+            .where(eq(users.id, userId));
+
+          await tx.insert(userStatistics)
+            .values({
+              userId: user[0].telegramId,
+              totalCsEarned: prizeValue,
+            })
+            .onConflictDoUpdate({
+              target: userStatistics.userId,
+              set: {
+                totalCsEarned: sql`${userStatistics.totalCsEarned} + ${prizeValue}`,
+                updatedAt: sql`NOW()`,
+              },
+            });
+        } else if (rand < 0.7) {
+          // 30% - CHST prize
+          const chstAmounts = [50, 100, 250, 500];
+          prizeValue = chstAmounts[Math.floor(Math.random() * chstAmounts.length)];
+          prizeType = "chst";
+          reward = { chst: prizeValue };
+
+          await tx.update(users)
+            .set({ chstBalance: sql`${users.chstBalance} + ${prizeValue}` })
+            .where(eq(users.id, userId));
+
+          await tx.insert(userStatistics)
+            .values({
+              userId: user[0].telegramId,
+              totalChstEarned: prizeValue,
+            })
+            .onConflictDoUpdate({
+              target: userStatistics.userId,
+              set: {
+                totalChstEarned: sql`${userStatistics.totalChstEarned} + ${prizeValue}`,
+                updatedAt: sql`NOW()`,
+              },
+            });
+        } else if (rand < 0.9) {
+          // 20% - Power-up
+          prizeType = "powerup";
+          prizeValue = "luck-boost-24h";
+          reward = { powerup: "Luck Boost (24h)" };
+          // Note: Would need to activate power-up here
+        } else {
+          // 10% - Equipment (small item)
+          prizeType = "equipment";
+          prizeValue = "gaming-laptop";
+          reward = { equipment: "Gaming Laptop" };
+          // Note: Would need to grant equipment here
+        }
+
+        // Update spin record
+        if (isFree) {
+          await tx.update(userSpins)
+            .set({
+              freeSpinUsed: true,
+              lastSpinAt: sql`NOW()`,
+            })
+            .where(and(
+              eq(userSpins.userId, user[0].telegramId),
+              eq(userSpins.spinDate, today)
+            ));
+        } else {
+          await tx.update(userSpins)
+            .set({
+              paidSpinsCount: sql`${userSpins.paidSpinsCount} + 1`,
+              lastSpinAt: sql`NOW()`,
+            })
+            .where(and(
+              eq(userSpins.userId, user[0].telegramId),
+              eq(userSpins.spinDate, today)
+            ));
+        }
+
+        // Record in history
+        await tx.insert(spinHistory).values({
+          userId: user[0].telegramId,
+          prizeType,
+          prizeValue: prizeValue.toString(),
+          wasFree: isFree,
+        });
+
+        return {
+          success: true,
+          prize: { type: prizeType, value: prizeValue },
+          reward,
+          message: `You won ${JSON.stringify(reward)}!`,
+        };
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Spin wheel error:", error);
+      res.status(400).json({ error: error.message || "Failed to spin" });
+    }
+  });
+
+  // ==========================================
+  // STATISTICS ROUTES
+  // ==========================================
+
+  // Get user statistics
+  app.get("/api/user/:userId/statistics", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const { userStatistics } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const stats = await db.select().from(userStatistics)
+        .where(eq(userStatistics.userId, user[0].telegramId))
+        .limit(1);
+
+      if (!stats[0]) {
+        // Return default stats
+        return res.json({
+          totalCsEarned: 0,
+          totalChstEarned: 0,
+          totalBlocksMined: 0,
+          bestBlockReward: 0,
+          highestHashrate: 0,
+          totalTonSpent: "0",
+          totalCsSpent: 0,
+          totalReferrals: 0,
+          achievementsUnlocked: 0,
+        });
+      }
+
+      res.json(stats[0]);
+    } catch (error: any) {
+      console.error("Get statistics error:", error);
+      res.status(500).json({ error: "Failed to get statistics" });
     }
   });
 
