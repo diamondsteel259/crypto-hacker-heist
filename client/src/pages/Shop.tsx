@@ -602,11 +602,11 @@ export default function Shop() {
                           {Object.entries(tierGroups).map(([tier, equipmentList]) => (
                             <div key={tier} className="space-y-3">
                               <div className="flex items-center gap-2">
-                                <h3 className="text-md font-medium">{tier} Tier</h3>
-                                <Badge className={tierColors[tier as keyof typeof tierColors] || "bg-gray-500/20"}>
+                                <h3 className="text-xs sm:text-sm font-medium">{tier} Tier</h3>
+                                <Badge className={`${tierColors[tier as keyof typeof tierColors] || "bg-gray-500/20"} text-xs`}>
                                   {tier}
                                 </Badge>
-                                <Badge variant="outline">{equipmentList.length} models</Badge>
+                                <Badge variant="outline" className="text-xs">{equipmentList.length}</Badge>
                               </div>
                               <div className="grid grid-cols-2 gap-4">
                                 {equipmentList.map((equipment) => {
