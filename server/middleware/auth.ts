@@ -13,10 +13,10 @@ export interface AuthRequest extends Request {
 
 export function validateTelegramAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const initData = req.headers['x-telegram-init-data'] as string;
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const botToken = process.env.BOT_TOKEN;
 
   if (!botToken) {
-    console.error('TELEGRAM_BOT_TOKEN not configured');
+    console.error('BOT_TOKEN not configured');
     return res.status(500).json({ error: 'Server configuration error' });
   }
 
@@ -43,7 +43,7 @@ export function validateTelegramAuth(req: AuthRequest, res: Response, next: Next
 
 export function optionalTelegramAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const initData = req.headers['x-telegram-init-data'] as string;
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const botToken = process.env.BOT_TOKEN;
 
   if (initData && botToken) {
     const telegramUser = validateTelegramWebAppData(initData, botToken);
