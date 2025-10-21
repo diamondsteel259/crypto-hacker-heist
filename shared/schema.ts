@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, varchar, text, integer, real, timestamp, boolean, unique } from "drizzle-orm/pg-core";
+import { pgTable, varchar, text, integer, real, timestamp, boolean, unique, decimal, index, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -76,7 +76,10 @@ export const referrals = pgTable("referrals", {
   refereeId: varchar("referee_id").notNull().references(() => users.id),
   bonusEarned: real("bonus_earned").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  referrerIdx: index("referrals_referrer_idx").on(table.referrerId),
+  refereeIdx: index("referrals_referee_idx").on(table.refereeId),
+}));
 
 export const componentUpgrades = pgTable("component_upgrades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -88,6 +91,73 @@ export const componentUpgrades = pgTable("component_upgrades", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
   equipmentComponentUnique: unique().on(table.ownedEquipmentId, table.componentType),
+  equipmentIdx: index("component_upgrades_equipment_idx").on(table.ownedEquipmentId),
+}));
+
+export const userTasks = pgTable("user_tasks", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  taskId: text("task_id").notNull(),
+  claimedAt: timestamp("claimed_at").notNull().defaultNow(),
+  rewardCs: integer("reward_cs").notNull(),
+  rewardChst: integer("reward_chst").notNull(),
+}, (table) => ({
+  userTaskUnique: unique().on(table.userId, table.taskId),
+  userTaskIdx: index("user_tasks_user_task_idx").on(table.userId, table.taskId),
+}));
+
+export const dailyClaims = pgTable("daily_claims", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  claimType: text("claim_type").notNull(),
+  claimCount: integer("claim_count").notNull().default(0),
+  lastClaimDate: text("last_claim_date").notNull(),
+  userTimezoneOffset: integer("user_timezone_offset").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  userClaimUnique: unique().on(table.userId, table.claimType, table.lastClaimDate),
+  userClaimIdx: index("daily_claims_user_idx").on(table.userId, table.claimType, table.lastClaimDate),
+}));
+
+export const powerUpPurchases = pgTable("power_up_purchases", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  powerUpType: text("power_up_type").notNull(),
+  tonAmount: decimal("ton_amount", { precision: 10, scale: 2 }).notNull(),
+  tonTransactionHash: text("ton_transaction_hash").notNull().unique(),
+  tonTransactionVerified: boolean("ton_transaction_verified").notNull().default(false),
+  rewardCs: integer("reward_cs"),
+  rewardChst: integer("reward_chst"),
+  purchasedAt: timestamp("purchased_at").notNull().defaultNow(),
+}, (table) => ({
+  userIdx: index("power_up_purchases_user_idx").on(table.userId),
+  txHashIdx: index("power_up_purchases_tx_idx").on(table.tonTransactionHash),
+}));
+
+export const lootBoxPurchases = pgTable("loot_box_purchases", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  boxType: text("box_type").notNull(),
+  tonAmount: decimal("ton_amount", { precision: 10, scale: 2 }).notNull(),
+  tonTransactionHash: text("ton_transaction_hash").notNull().unique(),
+  tonTransactionVerified: boolean("ton_transaction_verified").notNull().default(false),
+  rewardsJson: text("rewards_json").notNull(),
+  purchasedAt: timestamp("purchased_at").notNull().defaultNow(),
+}, (table) => ({
+  userIdx: index("loot_box_purchases_user_idx").on(table.userId),
+  txHashIdx: index("loot_box_purchases_tx_idx").on(table.tonTransactionHash),
+}));
+
+export const activePowerUps = pgTable("active_power_ups", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  powerUpType: text("power_up_type").notNull(),
+  boostPercentage: integer("boost_percentage").notNull(),
+  activatedAt: timestamp("activated_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+}, (table) => ({
+  userActiveIdx: index("active_power_ups_user_active_idx").on(table.userId, table.isActive, table.expiresAt),
 }));
 
 // Insert schemas
@@ -114,6 +184,31 @@ export const insertComponentUpgradeSchema = createInsertSchema(componentUpgrades
   id: true,
   createdAt: true,
   updatedAt: true,
+});
+
+export const insertUserTaskSchema = createInsertSchema(userTasks).omit({
+  id: true,
+  claimedAt: true,
+});
+
+export const insertDailyClaimSchema = createInsertSchema(dailyClaims).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export const insertPowerUpPurchaseSchema = createInsertSchema(powerUpPurchases).omit({
+  id: true,
+  purchasedAt: true,
+});
+
+export const insertLootBoxPurchaseSchema = createInsertSchema(lootBoxPurchases).omit({
+  id: true,
+  purchasedAt: true,
+});
+
+export const insertActivePowerUpSchema = createInsertSchema(activePowerUps).omit({
+  id: true,
+  activatedAt: true,
 });
 
 export const insertBlockSchema = createInsertSchema(blocks).omit({
@@ -160,3 +255,18 @@ export type InsertGameSetting = z.infer<typeof insertGameSettingSchema>;
 
 export type ComponentUpgrade = typeof componentUpgrades.$inferSelect;
 export type InsertComponentUpgrade = z.infer<typeof insertComponentUpgradeSchema>;
+
+export type UserTask = typeof userTasks.$inferSelect;
+export type InsertUserTask = z.infer<typeof insertUserTaskSchema>;
+
+export type DailyClaim = typeof dailyClaims.$inferSelect;
+export type InsertDailyClaim = z.infer<typeof insertDailyClaimSchema>;
+
+export type PowerUpPurchase = typeof powerUpPurchases.$inferSelect;
+export type InsertPowerUpPurchase = z.infer<typeof insertPowerUpPurchaseSchema>;
+
+export type LootBoxPurchase = typeof lootBoxPurchases.$inferSelect;
+export type InsertLootBoxPurchase = z.infer<typeof insertLootBoxPurchaseSchema>;
+
+export type ActivePowerUp = typeof activePowerUps.$inferSelect;
+export type InsertActivePowerUp = z.infer<typeof insertActivePowerUpSchema>;
