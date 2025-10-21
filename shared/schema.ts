@@ -332,6 +332,22 @@ export const priceAlerts = pgTable("price_alerts", {
   userEquipmentAlertUnique: unique().on(table.userId, table.equipmentTypeId),
 }));
 
+// Auto-Upgrade Settings
+export const autoUpgradeSettings = pgTable("auto_upgrade_settings", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  ownedEquipmentId: varchar("owned_equipment_id").notNull().references(() => ownedEquipment.id, { onDelete: 'cascade' }),
+  componentType: text("component_type").notNull(), // RAM, CPU, Storage, GPU
+  targetLevel: integer("target_level").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  userEquipmentComponentUnique: unique().on(table.ownedEquipmentId, table.componentType),
+  userAutoUpgradeIdx: index("auto_upgrade_settings_user_idx").on(table.userId),
+}));
+
+
 // Subscriptions
 export const userSubscriptions = pgTable("user_subscriptions", {
   id: serial("id").primaryKey(),
