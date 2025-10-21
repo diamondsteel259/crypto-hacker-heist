@@ -387,7 +387,6 @@ export const prestigeHistory = pgTable("prestige_history", {
   userHistoryIdx: index("prestige_history_user_idx").on(table.userId),
 }));
 
-}));
 
 
 // Subscriptions
