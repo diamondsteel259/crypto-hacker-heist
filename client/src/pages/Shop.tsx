@@ -507,20 +507,20 @@ export default function Shop() {
     <div className="min-h-screen bg-background p-3">
       <div className="max-w-7xl mx-auto space-y-4">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <ShoppingBag className="w-6 h-6 text-matrix-green" />
-            <h1 className="text-xl font-bold terminal-gradient">EQUIPMENT SHOP</h1>
+          <div className="flex items-center gap-2">
+            <ShoppingBag className="w-5 h-5 text-matrix-green" />
+            <h1 className="text-base sm:text-lg font-bold terminal-gradient">SHOP</h1>
           </div>
           <div className="text-right">
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               <div>
-                <p className="text-sm text-muted-foreground">CS Balance</p>
-                <p className="text-lg font-mono text-matrix-green">{csBalance.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">CS</p>
+                <p className="text-sm sm:text-base font-mono text-matrix-green">{csBalance.toLocaleString()}</p>
               </div>
               {isWalletConnected() && (
                 <div>
-                  <p className="text-sm text-muted-foreground">TON Balance</p>
-                  <p className="text-lg font-mono text-cyber-blue">{tonBalance} TON</p>
+                  <p className="text-xs text-muted-foreground">TON</p>
+                  <p className="text-sm sm:text-base font-mono text-cyber-blue">{tonBalance}</p>
                 </div>
               )}
             </div>
