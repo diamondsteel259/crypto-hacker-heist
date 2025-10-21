@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, db } from "./storage";
 import { insertUserSchema, insertOwnedEquipmentSchema } from "@shared/schema";
-import { users, ownedEquipment, equipmentTypes, referrals, componentUpgrades, blockRewards } from "@shared/schema";
+import { users, ownedEquipment, equipmentTypes, referrals, componentUpgrades, blockRewards, dailyClaims, userTasks, powerUpPurchases, lootBoxPurchases, activePowerUps } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { validateTelegramAuth, requireAdmin, verifyUserAccess, type AuthRequest } from "./middleware/auth";
 
@@ -707,77 +707,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Power-up system routes
+  // Power-up system routes - Daily free claims with limits
   app.post("/api/user/:userId/powerups/claim", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
-    const { powerUpType } = req.body;
+    const { type, timezoneOffset } = req.body;
 
-    if (!powerUpType) {
-      return res.status(400).json({ message: "Power-up type is required" });
+    if (!type || (type !== "cs" && type !== "chst")) {
+      return res.status(400).json({ error: "Invalid claim type. Must be 'cs' or 'chst'." });
+    }
+
+    const offset = timezoneOffset || 0;
+    
+    // Validate timezone offset range
+    if (offset < -720 || offset > 840) {
+      return res.status(400).json({ error: "Invalid timezone offset" });
     }
 
     try {
       const result = await db.transaction(async (tx: any) => {
+        // Get user
         const user = await tx.select().from(users)
           .where(eq(users.id, userId))
           .for('update');
         if (!user[0]) throw new Error("User not found");
 
-        let amount = 0;
-        let currency = "CS";
-        let message = "Power-up claimed!";
+        // Calculate current date in user's timezone
+        const now = Date.now();
+        const offsetMs = -offset * 60 * 1000;
+        const localTime = now + offsetMs;
+        const localDate = new Date(localTime);
+        const currentDate = `${localDate.getUTCFullYear()}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${String(localDate.getUTCDate()).padStart(2, '0')}`;
 
-        switch (powerUpType) {
-          case "daily-cs":
-            amount = 100; // 5 free CS per day = 100 CS per claim
-            currency = "CS";
-            message = "Daily CS power-up claimed! You received 100 CS!";
-            break;
+        // Query existing claim record
+        const existingClaim = await tx.select().from(dailyClaims)
+          .where(and(
+            eq(dailyClaims.userId, user[0].telegramId),
+            eq(dailyClaims.claimType, type)
+          ))
+          .limit(1);
+
+        let claimCount = 0;
+        let remainingClaims = 0;
+
+        if (existingClaim.length === 0) {
+          // First claim ever for this type
+          await tx.insert(dailyClaims).values({
+            userId: user[0].telegramId,
+            claimType: type,
+            claimCount: 1,
+            lastClaimDate: currentDate,
+            userTimezoneOffset: offset,
+          });
+          claimCount = 1;
+          remainingClaims = 4;
+        } else {
+          const claim = existingClaim[0];
           
-          case "daily-chst":
-            amount = 50; // 5 free CHST per day = 50 CHST per claim
-            currency = "CHST";
-            message = "Daily CHST power-up claimed! You received 50 CHST!";
-            break;
-          
-          case "hashrate-boost":
-            // This would require TON payment verification
-            amount = 500; // Temporary hashrate boost
-            currency = "CS";
-            message = "Hashrate boost activated! +500 H/s for 1 hour!";
-            break;
-          
-          case "luck-boost":
-            // This would require TON payment verification
-            amount = 200; // Temporary luck boost
-            currency = "CS";
-            message = "Luck boost activated! +20% mining rewards for 1 hour!";
-            break;
-          
-          default:
-            throw new Error("Unknown power-up type");
+          if (claim.lastClaimDate !== currentDate) {
+            // New day - reset counter
+            await tx.update(dailyClaims)
+              .set({
+                claimCount: 1,
+                lastClaimDate: currentDate,
+                userTimezoneOffset: offset,
+                updatedAt: new Date(),
+              })
+              .where(eq(dailyClaims.id, claim.id));
+            claimCount = 1;
+            remainingClaims = 4;
+          } else {
+            // Same day - check limit
+            if (claim.claimCount >= 5) {
+              // Calculate next reset time
+              const nextDay = new Date(localDate);
+              nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+              nextDay.setUTCHours(0, 0, 0, 0);
+              const nextResetUtc = new Date(nextDay.getTime() - offsetMs);
+              
+              return res.status(429).json({
+                error: "Daily limit reached. You've claimed 5/5 times today.",
+                remaining_claims: 0,
+                next_reset: nextResetUtc.toISOString(),
+              });
+            }
+            
+            // Increment count
+            await tx.update(dailyClaims)
+              .set({
+                claimCount: claim.claimCount + 1,
+                updatedAt: new Date(),
+              })
+              .where(eq(dailyClaims.id, claim.id));
+            claimCount = claim.claimCount + 1;
+            remainingClaims = 5 - claimCount;
+          }
         }
 
-        if (currency === "CS") {
+        // Grant reward
+        const reward = type === "cs" ? 5 : 2;
+        const currency = type === "cs" ? "CS" : "CHST";
+        
+        if (type === "cs") {
           await tx.update(users)
-            .set({ 
-              csBalance: sql`${users.csBalance} + ${amount}` 
-            })
+            .set({ csBalance: sql`${users.csBalance} + ${reward}` })
             .where(eq(users.id, userId));
-        } else if (currency === "CHST") {
+        } else {
           await tx.update(users)
-            .set({ 
-              chstBalance: sql`${users.chstBalance} + ${amount}` 
-            })
+            .set({ chstBalance: sql`${users.chstBalance} + ${reward}` })
             .where(eq(users.id, userId));
         }
 
-        return { success: true, amount, currency, message };
+        // Get updated balance
+        const updatedUser = await tx.select().from(users).where(eq(users.id, userId));
+
+        // Calculate next reset
+        const nextDay = new Date(localDate);
+        nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+        nextDay.setUTCHours(0, 0, 0, 0);
+        const nextResetUtc = new Date(nextDay.getTime() - offsetMs);
+
+        return {
+          success: true,
+          reward,
+          currency,
+          remaining_claims: remainingClaims,
+          next_reset: nextResetUtc.toISOString(),
+          new_balance: type === "cs" ? updatedUser[0].csBalance : updatedUser[0].chstBalance,
+        };
       });
 
       res.json(result);
     } catch (error: any) {
-      res.status(400).json({ message: error.message || "Failed to claim power-up" });
+      console.error("Daily claim error:", error);
+      res.status(500).json({ error: error.message || "Failed to claim reward" });
     }
   });
 
