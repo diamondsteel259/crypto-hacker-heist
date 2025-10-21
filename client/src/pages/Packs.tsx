@@ -7,7 +7,7 @@ import { Gift, Check, Zap, Cpu, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { sendTonTransaction, isWalletConnected, getTonConnectUI } from "@/lib/tonConnect";
+import { useTonConnect, sendTonTransaction } from "@/lib/tonConnect";
 
 const TON_PAYMENT_ADDRESS = "UQBdFhwckY9C8MU0AC4uiPbRH_C3QIjZH6OzV47ROfHjnyfe";
 
@@ -72,6 +72,7 @@ const packs = [
 export default function Packs() {
   const { toast } = useToast();
   const userId = getCurrentUserId();
+  const { tonConnectUI, isConnected } = useTonConnect();
   const [purchasing, setPurchasing] = useState<string | null>(null);
 
   const { data: purchases = [] } = useQuery<PackPurchase[]>({
@@ -109,8 +110,7 @@ export default function Packs() {
   });
 
   const handlePurchase = async (pack: typeof packs[0]) => {
-    if (!isWalletConnected()) {
-      const tonConnectUI = getTonConnectUI();
+    if (!isConnected) {
       await tonConnectUI.openModal();
       return;
     }
@@ -129,6 +129,7 @@ export default function Packs() {
 
     try {
       const txHash = await sendTonTransaction(
+        tonConnectUI,
         TON_PAYMENT_ADDRESS,
         pack.priceValue.toString(),
         `Pack: ${pack.name}`
