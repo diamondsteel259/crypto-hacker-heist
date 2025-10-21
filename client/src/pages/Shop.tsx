@@ -543,8 +543,10 @@ export default function Shop() {
         title: "Component Upgraded!",
         description: data.message || `${data.componentType} upgraded to level ${data.newLevel}!`,
       });
+      // Invalidate all related queries to refresh UI
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "equipment"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "components", "all"] });
     },
     onError: (error: Error) => {
       toast({
@@ -808,7 +810,7 @@ export default function Shop() {
                               <div key={componentType} className="p-3 border rounded-lg">
                                 <div className="flex items-center justify-between mb-2">
                                   <h5 className="font-medium text-sm">{componentType}</h5>
-                                  <Badge variant="outline" className="text-xs">Level 0/10</Badge>
+                                  <Badge variant="outline" className="text-xs">Level {getComponentLevel(owned.id, componentType)}</Badge>
                                 </div>
                                 <p className="text-xs text-muted-foreground mb-2">
                                   +{(owned.equipmentType.baseHashrate * 0.05 * owned.quantity).toFixed(2)} GH/s
