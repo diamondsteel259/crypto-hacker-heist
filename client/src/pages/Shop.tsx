@@ -777,7 +777,7 @@ export default function Shop() {
                 <div className="grid grid-cols-2 gap-3">
                   <Button 
                     className="bg-matrix-green hover:bg-matrix-green/90 text-black"
-                    onClick={() => powerUpClaimMutation.mutate("daily-cs")}
+                    onClick={() => powerUpClaimMutation.mutate("cs")}
                     disabled={powerUpClaimMutation.isPending}
                   >
                     <Star className="w-4 h-4 mr-2" />
@@ -785,7 +785,7 @@ export default function Shop() {
                   </Button>
                   <Button 
                     className="bg-cyber-blue hover:bg-cyber-blue/90 text-white"
-                    onClick={() => powerUpClaimMutation.mutate("daily-chst")}
+                    onClick={() => powerUpClaimMutation.mutate("chst")}
                     disabled={powerUpClaimMutation.isPending}
                   >
                     <Crown className="w-4 h-4 mr-2" />
