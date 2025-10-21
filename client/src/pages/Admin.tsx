@@ -7,16 +7,19 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, Pause, Play, Users, Settings as SettingsIcon, DollarSign, RotateCcw, AlertTriangle } from "lucide-react";
+import { Shield, Pause, Play, Users, Settings as SettingsIcon, DollarSign, RotateCcw, AlertTriangle, Edit } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getTelegramInitData } from "@/lib/user";
-import type { User, GameSetting } from "@shared/schema";
+import type { User, GameSetting, EquipmentType } from "@shared/schema";
 
 export default function Admin() {
   const { toast } = useToast();
   const [miningPaused, setMiningPaused] = useState(false);
   const [resetConfirmText, setResetConfirmText] = useState("");
   const [showResetSection, setShowResetSection] = useState(false);
+  const [editingEquipment, setEditingEquipment] = useState<string | null>(null);
+  const [editPrice, setEditPrice] = useState<string>("");
+  const [editCurrency, setEditCurrency] = useState<string>("");
 
   const { data: settings, isLoading: settingsLoading } = useQuery<GameSetting[]>({
     queryKey: ['/api/admin/settings'],
@@ -44,6 +47,10 @@ export default function Admin() {
       if (!response.ok) throw new Error('Failed to fetch users');
       return response.json();
     },
+  });
+
+  const { data: equipment, isLoading: equipmentLoading } = useQuery<EquipmentType[]>({
+    queryKey: ['/api/equipment-types'],
   });
 
   useEffect(() => {
@@ -357,6 +364,52 @@ export default function Admin() {
               </div>
             </div>
           )}
+        </Card>
+
+        {/* Equipment Price Management */}
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Edit className="w-5 h-5 text-destructive mr-2" />
+            Equipment Price Management
+          </h3>
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {equipmentLoading ? (
+              <p className="text-sm text-muted-foreground">Loading equipment...</p>
+            ) : (
+              equipment?.map((e) => (
+                <div
+                  key={e.id}
+                  className="flex items-center justify-between p-4 bg-muted/30 rounded-md"
+                  data-testid={`equipment-row-${e.id}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <p className="font-semibold">{e.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {e.currency} {e.price}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="number"
+                      value={editPrice}
+                      onChange={(e) => setEditPrice(e.target.value)}
+                      placeholder="Price"
+                      className="mt-1 mr-2 w-24 text-right"
+                    />
+                    <Input
+                      type="text"
+                      value={editCurrency}
+                      onChange={(e) => setEditCurrency(e.target.value)}
+                      placeholder="Currency"
+                      className="mt-1 w-24 text-right"
+                    />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </Card>
       </div>
     </div>
