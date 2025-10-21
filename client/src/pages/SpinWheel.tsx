@@ -7,7 +7,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Disc3, Gift, Clock, Sparkles } from "lucide-react";
 import { initializeUser } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { sendTonTransaction } from "@/lib/tonConnect";
+import { sendTonTransaction, isWalletConnected, getTonConnectUI } from "@/lib/tonConnect";
+
+const TON_PAYMENT_ADDRESS = "UQBdFhwckY9C8MU0AC4uiPbRH_C3QIjZH6OzV47ROfHjnyfe";
 
 interface SpinStatus {
   freeSpinAvailable: boolean;
