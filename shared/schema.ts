@@ -448,3 +448,69 @@ export type InsertLootBoxPurchase = z.infer<typeof insertLootBoxPurchaseSchema>;
 
 export type ActivePowerUp = typeof activePowerUps.$inferSelect;
 export type InsertActivePowerUp = z.infer<typeof insertActivePowerUpSchema>;
+
+// Daily Challenges schemas and types
+export const insertDailyChallengeSchema = createInsertSchema(dailyChallenges).omit({ id: true });
+export const insertUserDailyChallengeSchema = createInsertSchema(userDailyChallenges).omit({ id: true, completedAt: true });
+
+export type DailyChallenge = typeof dailyChallenges.$inferSelect;
+export type InsertDailyChallenge = z.infer<typeof insertDailyChallengeSchema>;
+export type UserDailyChallenge = typeof userDailyChallenges.$inferSelect;
+export type InsertUserDailyChallenge = z.infer<typeof insertUserDailyChallengeSchema>;
+
+// Achievement schemas and types
+export const insertAchievementSchema = createInsertSchema(achievements).omit({ id: true });
+export const insertUserAchievementSchema = createInsertSchema(userAchievements).omit({ id: true, unlockedAt: true });
+
+export type Achievement = typeof achievements.$inferSelect;
+export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
+export type UserAchievement = typeof userAchievements.$inferSelect;
+export type InsertUserAchievement = z.infer<typeof insertUserAchievementSchema>;
+
+// Season schemas and types
+export const insertSeasonSchema = createInsertSchema(seasons).omit({ id: true });
+
+export type Season = typeof seasons.$inferSelect;
+export type InsertSeason = z.infer<typeof insertSeasonSchema>;
+
+// Cosmetic schemas and types
+export const insertCosmeticItemSchema = createInsertSchema(cosmeticItems).omit({ id: true });
+export const insertUserCosmeticSchema = createInsertSchema(userCosmetics).omit({ id: true, purchasedAt: true });
+
+export type CosmeticItem = typeof cosmeticItems.$inferSelect;
+export type InsertCosmeticItem = z.infer<typeof insertCosmeticItemSchema>;
+export type UserCosmetic = typeof userCosmetics.$inferSelect;
+export type InsertUserCosmetic = z.infer<typeof insertUserCosmeticSchema>;
+
+// Streak schemas and types
+export const insertUserStreakSchema = createInsertSchema(userStreaks).omit({ id: true, updatedAt: true });
+
+export type UserStreak = typeof userStreaks.$inferSelect;
+export type InsertUserStreak = z.infer<typeof insertUserStreakSchema>;
+
+// Hourly bonus schemas and types
+export const insertUserHourlyBonusSchema = createInsertSchema(userHourlyBonuses).omit({ id: true, claimedAt: true });
+
+export type UserHourlyBonus = typeof userHourlyBonuses.$inferSelect;
+export type InsertUserHourlyBonus = z.infer<typeof insertUserHourlyBonusSchema>;
+
+// Spin schemas and types
+export const insertUserSpinSchema = createInsertSchema(userSpins).omit({ id: true, lastSpinAt: true });
+export const insertSpinHistorySchema = createInsertSchema(spinHistory).omit({ id: true, spunAt: true });
+
+export type UserSpin = typeof userSpins.$inferSelect;
+export type InsertUserSpin = z.infer<typeof insertUserSpinSchema>;
+export type SpinHistory = typeof spinHistory.$inferSelect;
+export type InsertSpinHistory = z.infer<typeof insertSpinHistorySchema>;
+
+// Subscription schemas and types
+export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, startDate: true });
+
+export type UserSubscription = typeof userSubscriptions.$inferSelect;
+export type InsertUserSubscription = z.infer<typeof insertUserSubscriptionSchema>;
+
+// Statistics schemas and types
+export const insertUserStatisticsSchema = createInsertSchema(userStatistics).omit({ id: true, createdAt: true, updatedAt: true });
+
+export type UserStatistics = typeof userStatistics.$inferSelect;
+export type InsertUserStatistics = z.infer<typeof insertUserStatisticsSchema>;
