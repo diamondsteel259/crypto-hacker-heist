@@ -93,22 +93,27 @@ export default function SpinWheel() {
   };
 
   const handlePaidSpin = async () => {
+    if (!isWalletConnected()) {
+      const tonConnectUI = getTonConnectUI();
+      await tonConnectUI.openModal();
+      return;
+    }
+
+    setIsSpinning(true);
+
     try {
-      const result = await sendTonTransaction("0.1"); // 0.1 TON per spin
-      if (result.success) {
-        setIsSpinning(true);
+      const txHash = await sendTonTransaction(TON_PAYMENT_ADDRESS, "0.1", "Spin Wheel");
+      
+      if (txHash) {
         spinMutation.mutate({
           isFree: false,
-          tonData: result,
+          tonData: { txHash },
         });
       } else {
-        toast({
-          title: "Transaction Cancelled",
-          description: "TON transaction was cancelled",
-          variant: "destructive",
-        });
+        throw new Error("Transaction cancelled");
       }
     } catch (error: any) {
+      setIsSpinning(false);
       toast({
         title: "Transaction Failed",
         description: error.message || "Failed to send TON transaction",
