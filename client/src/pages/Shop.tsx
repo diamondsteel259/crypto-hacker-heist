@@ -377,7 +377,18 @@ export default function Shop() {
             {
               address: TON_PAYMENT_ADDRESS,
               amount: toNano(cost).toString(),
-              payload: `Loot box purchase: ${boxType}`,
+            },
+          ],
+          validUntil: Math.floor(Date.now() / 1000) + 600,
+        });
+        console.log("TON transaction result:", result);
+
+        const tonConnectUI = getTonConnectUI();
+        const result = await tonConnectUI.sendTransaction({
+          messages: [
+            {
+              address: TON_PAYMENT_ADDRESS,
+              amount: toNano(cost).toString(),
             },
           ],
           validUntil: Math.floor(Date.now() / 1000) + 600,
