@@ -2858,6 +2858,247 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
 
+
+  // ==========================================
+  // AUTO-UPGRADE ROUTES
+  // ==========================================
+
+  // Get user's auto-upgrade settings
+  app.get("/api/user/:userId/auto-upgrade/settings", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const settings = await db.select().from(autoUpgradeSettings)
+        .leftJoin(ownedEquipment, eq(autoUpgradeSettings.ownedEquipmentId, ownedEquipment.id))
+        .leftJoin(equipmentTypes, eq(ownedEquipment.equipmentTypeId, equipmentTypes.id))
+        .leftJoin(componentUpgrades, and(
+          eq(componentUpgrades.ownedEquipmentId, autoUpgradeSettings.ownedEquipmentId),
+          eq(componentUpgrades.componentType, autoUpgradeSettings.componentType)
+        ))
+        .where(eq(autoUpgradeSettings.userId, user.telegramId))
+        .orderBy(autoUpgradeSettings.createdAt);
+
+      const settingsWithDetails = settings.map(row => ({
+        ...row.auto_upgrade_settings,
+        equipment: row.owned_equipment,
+        equipmentType: row.equipment_types,
+        currentComponent: row.component_upgrades,
+      }));
+
+      res.json(settingsWithDetails);
+    } catch (error: any) {
+      console.error("Get auto-upgrade settings error:", error);
+      res.status(500).json({ error: error.message || "Failed to get auto-upgrade settings" });
+    }
+  });
+
+  // Create or update auto-upgrade setting
+  app.post("/api/user/:userId/auto-upgrade/settings", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { ownedEquipmentId, componentType, targetLevel, enabled } = req.body;
+
+    if (!ownedEquipmentId || !componentType || targetLevel === undefined) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    if (targetLevel < 0 || targetLevel > 10) {
+      return res.status(400).json({ error: "Target level must be between 0 and 10" });
+    }
+
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Verify equipment ownership
+      const equipment = await db.select().from(ownedEquipment)
+        .where(and(
+          eq(ownedEquipment.id, ownedEquipmentId),
+          eq(ownedEquipment.userId, userId)
+        ))
+        .limit(1);
+
+      if (!equipment[0]) {
+        return res.status(404).json({ error: "Equipment not found or not owned" });
+      }
+
+      // Check if setting already exists
+      const existingSetting = await db.select().from(autoUpgradeSettings)
+        .where(and(
+          eq(autoUpgradeSettings.ownedEquipmentId, ownedEquipmentId),
+          eq(autoUpgradeSettings.componentType, componentType)
+        ))
+        .limit(1);
+
+      let setting;
+      if (existingSetting.length > 0) {
+        // Update existing
+        const updated = await db.update(autoUpgradeSettings)
+          .set({
+            targetLevel,
+            enabled: enabled !== undefined ? enabled : true,
+            updatedAt: new Date(),
+          })
+          .where(eq(autoUpgradeSettings.id, existingSetting[0].id))
+          .returning();
+        setting = updated[0];
+      } else {
+        // Create new
+        const created = await db.insert(autoUpgradeSettings).values({
+          userId: user.telegramId,
+          ownedEquipmentId,
+          componentType,
+          targetLevel,
+          enabled: enabled !== undefined ? enabled : true,
+        }).returning();
+        setting = created[0];
+      }
+
+      res.json({
+        success: true,
+        message: "Auto-upgrade setting saved",
+        setting,
+      });
+    } catch (error: any) {
+      console.error("Save auto-upgrade setting error:", error);
+      res.status(500).json({ error: error.message || "Failed to save auto-upgrade setting" });
+    }
+  });
+
+  // Delete auto-upgrade setting
+  app.delete("/api/user/:userId/auto-upgrade/settings/:settingId", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId, settingId } = req.params;
+
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Verify ownership
+      const setting = await db.select().from(autoUpgradeSettings)
+        .where(and(
+          eq(autoUpgradeSettings.id, parseInt(settingId)),
+          eq(autoUpgradeSettings.userId, user.telegramId)
+        ))
+        .limit(1);
+
+      if (!setting[0]) {
+        return res.status(404).json({ error: "Setting not found" });
+      }
+
+      await db.delete(autoUpgradeSettings)
+        .where(eq(autoUpgradeSettings.id, parseInt(settingId)));
+
+      res.json({
+        success: true,
+        message: "Auto-upgrade setting deleted",
+      });
+    } catch (error: any) {
+      console.error("Delete auto-upgrade setting error:", error);
+      res.status(500).json({ error: error.message || "Failed to delete auto-upgrade setting" });
+    }
+  });
+
+  // Execute auto-upgrade check (manual trigger or background task)
+  app.post("/api/user/:userId/auto-upgrade/execute", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users)
+          .where(eq(users.id, userId))
+          .for('update');
+        
+        if (!user[0]) throw new Error("User not found");
+
+        // Get all enabled auto-upgrade settings
+        const settings = await tx.select().from(autoUpgradeSettings)
+          .leftJoin(componentUpgrades, and(
+            eq(componentUpgrades.ownedEquipmentId, autoUpgradeSettings.ownedEquipmentId),
+            eq(componentUpgrades.componentType, autoUpgradeSettings.componentType)
+          ))
+          .leftJoin(ownedEquipment, eq(ownedEquipment.id, autoUpgradeSettings.ownedEquipmentId))
+          .where(and(
+            eq(autoUpgradeSettings.userId, user[0].telegramId),
+            eq(autoUpgradeSettings.enabled, true)
+          ));
+
+        const upgrades = [];
+        let totalCost = 0;
+
+        for (const row of settings) {
+          const setting = row.auto_upgrade_settings;
+          const component = row.component_upgrades;
+          const equipment = row.owned_equipment;
+
+          if (!component || !equipment) continue;
+
+          const currentLevel = component.currentLevel;
+          const targetLevel = setting.targetLevel;
+
+          if (currentLevel >= targetLevel) continue; // Already at or above target
+
+          // Calculate upgrade cost (100 CS per level)
+          const upgradeCost = 100;
+
+          if (user[0].csBalance >= upgradeCost + totalCost) {
+            // Can afford this upgrade
+            await tx.update(componentUpgrades)
+              .set({
+                currentLevel: currentLevel + 1,
+                updatedAt: new Date(),
+              })
+              .where(eq(componentUpgrades.id, component.id));
+
+            totalCost += upgradeCost;
+
+            upgrades.push({
+              equipmentId: equipment.id,
+              componentType: setting.componentType,
+              fromLevel: currentLevel,
+              toLevel: currentLevel + 1,
+              cost: upgradeCost,
+            });
+          }
+        }
+
+        if (totalCost > 0) {
+          // Deduct total cost
+          await tx.update(users)
+            .set({
+              csBalance: user[0].csBalance - totalCost,
+            })
+            .where(eq(users.id, userId));
+        }
+
+        return { upgrades, totalCost };
+      });
+
+      res.json({
+        success: true,
+        upgrades: result.upgrades,
+        totalCost: result.totalCost,
+        upgradesPerformed: result.upgrades.length,
+      });
+
+      // Invalidate cache
+      if (result.upgrades.length > 0) {
+        queryClient.invalidateQueries({ queryKey: ['/api/user', userId] });
+        queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'equipment'] });
+      }
+    } catch (error: any) {
+      console.error("Execute auto-upgrade error:", error);
+      res.status(500).json({ error: error.message || "Failed to execute auto-upgrade" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
