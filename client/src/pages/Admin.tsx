@@ -418,6 +418,40 @@ export default function Admin() {
           </div>
         </Card>
 
+        {/* Game Content Management */}
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <SettingsIcon className="w-5 h-5" />
+            Game Content Overview
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 bg-muted/30 rounded-md">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant="outline" className="text-xs">Daily Challenges</Badge>
+              </div>
+              <p className="text-2xl font-bold">5</p>
+              <p className="text-xs text-muted-foreground">Active challenges</p>
+            </div>
+            <div className="p-4 bg-muted/30 rounded-md">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant="outline" className="text-xs">Achievements</Badge>
+              </div>
+              <p className="text-2xl font-bold">8</p>
+              <p className="text-xs text-muted-foreground">Total achievements</p>
+            </div>
+            <div className="p-4 bg-muted/30 rounded-md">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant="outline" className="text-xs">Cosmetics</Badge>
+              </div>
+              <p className="text-2xl font-bold">13</p>
+              <p className="text-xs text-muted-foreground">Available items</p>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground mt-4">
+            💡 Game content is automatically seeded from server/seedGameContent.ts. To modify challenges, achievements, or cosmetic items, update that file and redeploy.
+          </p>
+        </Card>
+
         {/* Game Reset Section */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
