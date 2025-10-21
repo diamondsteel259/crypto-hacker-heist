@@ -317,6 +317,21 @@ export const equipmentPresets = pgTable("equipment_presets", {
   userPresetIdx: index("equipment_presets_user_idx").on(table.userId),
 }));
 
+
+// Price Alerts
+export const priceAlerts = pgTable("price_alerts", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  equipmentTypeId: varchar("equipment_type_id").notNull().references(() => equipmentTypes.id),
+  targetPrice: real("target_price").notNull(),
+  triggered: boolean("triggered").notNull().default(false),
+  triggeredAt: timestamp("triggered_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  userAlertIdx: index("price_alerts_user_idx").on(table.userId),
+  userEquipmentAlertUnique: unique().on(table.userId, table.equipmentTypeId),
+}));
+
 // Subscriptions
 export const userSubscriptions = pgTable("user_subscriptions", {
   id: serial("id").primaryKey(),
