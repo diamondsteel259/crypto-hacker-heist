@@ -692,7 +692,156 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Claim task reward with completion tracking
+  // Backward-compatible task claim endpoint (taskId in body)
+  app.post("/api/user/:userId/tasks/claim", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { taskId } = req.body;
+
+    if (!taskId) {
+      return res.status(400).json({ error: "Task ID is required" });
+    }
+
+    try {
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users)
+          .where(eq(users.id, userId))
+          .for('update');
+        if (!user[0]) throw new Error("User not found");
+
+        // Check if task already claimed
+        const existing = await tx.select().from(userTasks)
+          .where(and(
+            eq(userTasks.userId, user[0].telegramId),
+            eq(userTasks.taskId, taskId)
+          ))
+          .limit(1);
+
+        if (existing.length > 0) {
+          return res.status(400).json({
+            error: "You've already completed this task.",
+            claimed_at: existing[0].claimedAt,
+          });
+        }
+
+        let rewardCs = 0;
+        let rewardChst = 0;
+        let conditionsMet = true;
+        let errorMsg = "";
+
+        switch (taskId) {
+          case "mine-first-block":
+            const userEquipment = await tx.select().from(ownedEquipment)
+              .where(eq(ownedEquipment.userId, userId));
+            if (userEquipment.length === 0) {
+              conditionsMet = false;
+              errorMsg = "You need to purchase equipment first to mine blocks";
+            }
+            rewardCs = 1000;
+            rewardChst = 10;
+            break;
+          
+          case "reach-1000-hashrate":
+            if (user[0].totalHashrate < 1000) {
+              conditionsMet = false;
+              errorMsg = "You need at least 1,000 H/s total hashrate";
+            }
+            rewardCs = 2000;
+            rewardChst = 20;
+            break;
+          
+          case "buy-first-asic":
+            const asicEquipment = await tx.select()
+              .from(ownedEquipment)
+              .leftJoin(equipmentTypes, eq(ownedEquipment.equipmentTypeId, equipmentTypes.id))
+              .where(and(
+                eq(ownedEquipment.userId, userId),
+                eq(equipmentTypes.category, "ASIC Rig")
+              ));
+            if (asicEquipment.length === 0) {
+              conditionsMet = false;
+              errorMsg = "You need to purchase an ASIC rig first";
+            }
+            rewardCs = 3000;
+            rewardChst = 30;
+            break;
+          
+          case "invite-1-friend":
+            const referrals1 = await tx.select().from(referrals)
+              .where(eq(referrals.referrerId, userId));
+            if (referrals1.length === 0) {
+              conditionsMet = false;
+              errorMsg = "You need to invite at least 1 friend first";
+            }
+            rewardCs = 5000;
+            rewardChst = 50;
+            break;
+          
+          case "invite-5-friends":
+            const referrals5 = await tx.select().from(referrals)
+              .where(eq(referrals.referrerId, userId));
+            if (referrals5.length < 5) {
+              conditionsMet = false;
+              errorMsg = "You need to invite at least 5 friends first";
+            }
+            rewardCs = 15000;
+            rewardChst = 150;
+            break;
+          
+          default:
+            return res.status(400).json({ error: "Unknown task ID" });
+        }
+
+        if (!conditionsMet) {
+          return res.status(400).json({
+            error: "Task conditions not met.",
+            message: errorMsg,
+          });
+        }
+
+        // Grant rewards
+        await tx.update(users)
+          .set({ 
+            csBalance: sql`${users.csBalance} + ${rewardCs}`,
+            chstBalance: sql`${users.chstBalance} + ${rewardChst}`
+          })
+          .where(eq(users.id, userId));
+
+        // Record task completion
+        await tx.insert(userTasks).values({
+          userId: user[0].telegramId,
+          taskId,
+          rewardCs,
+          rewardChst,
+        });
+
+        // Get updated balances
+        const updatedUser = await tx.select().from(users).where(eq(users.id, userId));
+
+        return {
+          success: true,
+          taskId,
+          reward: {
+            cs: rewardCs,
+            chst: rewardChst,
+          },
+          new_balance: {
+            cs: updatedUser[0].csBalance,
+            chst: updatedUser[0].chstBalance,
+          },
+          completed_at: new Date().toISOString(),
+        };
+      });
+
+      if (typeof result === 'object' && 'success' in result) {
+        res.json(result);
+      }
+    } catch (error: any) {
+      console.error("Task claim error:", error);
+      res.status(500).json({ error: error.message || "Failed to claim task" });
+    }
+  });
+
+  // Claim task reward with completion tracking (taskId in URL - alternative endpoint)
   app.post("/api/user/:userId/tasks/:taskId/claim", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId, taskId } = req.params;
 
@@ -1086,16 +1235,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           success: true,
           powerUpType,
           reward: { cs: rewardCs, chst: rewardChst },
-          boostActive: true,
-          boostPercentage,
-          activatedAt: now.toISOString(),
-          expiresAt: expiresAt.toISOString(),
+          boost_active: true,
+          boost_percentage,
+          activated_at: now.toISOString(),
+          expires_at: expiresAt.toISOString(),
           new_balance: {
             cs: updatedUser[0].csBalance,
             chst: updatedUser[0].chstBalance,
           },
           verification: {
-            txHash: verification.transaction?.hash,
+            tx_hash: verification.transaction?.hash,
             verified: true,
           },
         };
