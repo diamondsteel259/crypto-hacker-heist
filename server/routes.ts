@@ -684,6 +684,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Equipment price management endpoints
+  app.post("/api/admin/equipment/:equipmentId/update", validateTelegramAuth, requireAdmin, async (req, res) => {
+    const { equipmentId } = req.params;
+    const { basePrice, currency } = req.body;
+
+    try {
+      // Validate inputs
+      if (basePrice !== undefined && (typeof basePrice !== 'number' || basePrice < 0)) {
+        return res.status(400).json({ error: "Invalid price. Must be a positive number." });
+      }
+
+      if (currency !== undefined && !["CS", "CHST", "TON"].includes(currency)) {
+        return res.status(400).json({ error: "Invalid currency. Must be CS, CHST, or TON." });
+      }
+
+      // Check if equipment exists
+      const equipment = await db.select().from(equipmentTypes).where(eq(equipmentTypes.id, equipmentId)).limit(1);
+      if (!equipment[0]) {
+        return res.status(404).json({ error: "Equipment not found" });
+      }
+
+      // Build update object with only provided fields
+      const updateData: any = {};
+      if (basePrice !== undefined) updateData.basePrice = basePrice;
+      if (currency !== undefined) updateData.currency = currency;
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ error: "No valid update fields provided" });
+      }
+
+      // Update equipment
+      await db.update(equipmentTypes)
+        .set(updateData)
+        .where(eq(equipmentTypes.id, equipmentId));
+
+      // Get updated equipment
+      const updatedEquipment = await db.select().from(equipmentTypes).where(eq(equipmentTypes.id, equipmentId)).limit(1);
+
+      res.json({
+        success: true,
+        equipment: updatedEquipment[0],
+        message: "Equipment updated successfully"
+      });
+    } catch (error: any) {
+      console.error("Equipment update error:", error);
+      res.status(500).json({ error: "Failed to update equipment" });
+    }
+  });
+
   // Task system routes
   
   // Get user's completed tasks
