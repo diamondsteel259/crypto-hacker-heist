@@ -328,6 +328,7 @@ export default function Dashboard() {
           {/* Right Column */}
           <div className="space-y-3 md:space-y-6">
             <RecentBlocks />
+            <MiningCalendar />
           </div>
         </div>
       </div>
