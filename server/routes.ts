@@ -3099,6 +3099,188 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+
+  // ==========================================
+  // SEASONS ADMIN ROUTES
+  // ==========================================
+
+  // Get all seasons
+  app.get("/api/seasons", async (req, res) => {
+    try {
+      const allSeasons = await db.select().from(seasons)
+        .orderBy(sql`${seasons.startDate} DESC`);
+
+      res.json(allSeasons);
+    } catch (error: any) {
+      console.error("Get seasons error:", error);
+      res.status(500).json({ error: error.message || "Failed to get seasons" });
+    }
+  });
+
+  // Get active season
+  app.get("/api/seasons/active", async (req, res) => {
+    try {
+      const now = new Date();
+      const activeSeason = await db.select().from(seasons)
+        .where(and(
+          eq(seasons.isActive, true),
+          sql`${seasons.startDate} <= ${now}`,
+          sql`${seasons.endDate} >= ${now}`
+        ))
+        .limit(1);
+
+      res.json(activeSeason[0] || null);
+    } catch (error: any) {
+      console.error("Get active season error:", error);
+      res.status(500).json({ error: error.message || "Failed to get active season" });
+    }
+  });
+
+  // Create season (admin only)
+  app.post("/api/admin/seasons", validateTelegramAuth, requireAdmin, async (req, res) => {
+    const { seasonId, name, description, startDate, endDate, bonusMultiplier, specialRewards } = req.body;
+
+    if (!seasonId || !name || !description || !startDate || !endDate) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    try {
+      // Check for duplicate seasonId
+      const existing = await db.select().from(seasons)
+        .where(eq(seasons.seasonId, seasonId))
+        .limit(1);
+
+      if (existing.length > 0) {
+        return res.status(400).json({ error: "Season ID already exists" });
+      }
+
+      const newSeason = await db.insert(seasons).values({
+        seasonId,
+        name,
+        description,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        bonusMultiplier: bonusMultiplier || 1.0,
+        specialRewards: specialRewards || null,
+        isActive: false,
+      }).returning();
+
+      res.json({
+        success: true,
+        message: "Season created successfully",
+        season: newSeason[0],
+      });
+    } catch (error: any) {
+      console.error("Create season error:", error);
+      res.status(500).json({ error: error.message || "Failed to create season" });
+    }
+  });
+
+  // Update season (admin only)
+  app.put("/api/admin/seasons/:seasonId", validateTelegramAuth, requireAdmin, async (req, res) => {
+    const { seasonId } = req.params;
+    const { name, description, startDate, endDate, bonusMultiplier, specialRewards } = req.body;
+
+    try {
+      const existing = await db.select().from(seasons)
+        .where(eq(seasons.seasonId, seasonId))
+        .limit(1);
+
+      if (existing.length === 0) {
+        return res.status(404).json({ error: "Season not found" });
+      }
+
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (description !== undefined) updateData.description = description;
+      if (startDate !== undefined) updateData.startDate = new Date(startDate);
+      if (endDate !== undefined) updateData.endDate = new Date(endDate);
+      if (bonusMultiplier !== undefined) updateData.bonusMultiplier = bonusMultiplier;
+      if (specialRewards !== undefined) updateData.specialRewards = specialRewards;
+
+      const updated = await db.update(seasons)
+        .set(updateData)
+        .where(eq(seasons.id, existing[0].id))
+        .returning();
+
+      res.json({
+        success: true,
+        message: "Season updated successfully",
+        season: updated[0],
+      });
+    } catch (error: any) {
+      console.error("Update season error:", error);
+      res.status(500).json({ error: error.message || "Failed to update season" });
+    }
+  });
+
+  // Activate/Deactivate season (admin only)
+  app.post("/api/admin/seasons/:seasonId/toggle", validateTelegramAuth, requireAdmin, async (req, res) => {
+    const { seasonId } = req.params;
+    const { isActive } = req.body;
+
+    if (isActive === undefined) {
+      return res.status(400).json({ error: "isActive field is required" });
+    }
+
+    try {
+      const existing = await db.select().from(seasons)
+        .where(eq(seasons.seasonId, seasonId))
+        .limit(1);
+
+      if (existing.length === 0) {
+        return res.status(404).json({ error: "Season not found" });
+      }
+
+      // If activating, deactivate all other seasons first
+      if (isActive) {
+        await db.update(seasons)
+          .set({ isActive: false })
+          .where(eq(seasons.isActive, true));
+      }
+
+      const updated = await db.update(seasons)
+        .set({ isActive })
+        .where(eq(seasons.id, existing[0].id))
+        .returning();
+
+      res.json({
+        success: true,
+        message: isActive ? "Season activated" : "Season deactivated",
+        season: updated[0],
+      });
+    } catch (error: any) {
+      console.error("Toggle season error:", error);
+      res.status(500).json({ error: error.message || "Failed to toggle season" });
+    }
+  });
+
+  // Delete season (admin only)
+  app.delete("/api/admin/seasons/:seasonId", validateTelegramAuth, requireAdmin, async (req, res) => {
+    const { seasonId } = req.params;
+
+    try {
+      const existing = await db.select().from(seasons)
+        .where(eq(seasons.seasonId, seasonId))
+        .limit(1);
+
+      if (existing.length === 0) {
+        return res.status(404).json({ error: "Season not found" });
+      }
+
+      await db.delete(seasons)
+        .where(eq(seasons.id, existing[0].id));
+
+      res.json({
+        success: true,
+        message: "Season deleted successfully",
+      });
+    } catch (error: any) {
+      console.error("Delete season error:", error);
+      res.status(500).json({ error: error.message || "Failed to delete season" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
