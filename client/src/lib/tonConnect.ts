@@ -41,20 +41,30 @@ export async function getTonBalance(): Promise<string> {
   }
   
   try {
-    // Get balance from TON network
-    const response = await fetch(`https://toncenter.com/api/v2/getAddressBalance?address=${ui.account.address}`);
+    // Use the raw address from the account
+    const address = ui.account.address;
+    console.log('Fetching TON balance for address:', address);
+    
+    // Get balance from TON network using v2 API (more stable)
+    const response = await fetch(`https://toncenter.com/api/v2/getAddressBalance?address=${address}`);
     const data = await response.json();
     
-    if (data.ok) {
+    console.log('TON balance API response:', data);
+    
+    if (data.ok && data.result) {
       // Convert from nanoTON to TON
       const balanceInTON = (parseInt(data.result) / 1000000000).toFixed(4);
+      console.log('TON balance:', balanceInTON);
       return balanceInTON;
     } else {
-      throw new Error('Failed to fetch balance');
+      console.warn('TON balance API returned non-ok result:', data);
+      // Return 0 instead of throwing error to prevent UI breaks
+      return '0.0000';
     }
   } catch (error) {
     console.error('Error fetching TON balance:', error);
-    throw new Error('Failed to fetch TON balance');
+    // Return 0 instead of throwing to prevent UI crashes
+    return '0.0000';
   }
 }
 
