@@ -155,9 +155,21 @@ export default function Rigs() {
     upgradeMutation.mutate({ equipmentTypeId });
   };
 
+  const handleSavePreset = () => {
+    if (!presetName.trim()) {
+      toast({
+        title: "Name Required",
+        description: "Please enter a name for your preset",
+        variant: "destructive",
+      });
+      return;
+    }
+    savePresetMutation.mutate(presetName.trim());
+  };
+
   const totalHashrate = equipment.reduce((sum, eq) => sum + eq.currentHashrate, 0);
-  const avgUpgradeLevel = equipment.length > 0 
-    ? equipment.reduce((sum, eq) => sum + eq.upgradeLevel, 0) / equipment.length 
+  const avgUpgradeLevel = equipment.length > 0
+    ? equipment.reduce((sum, eq) => sum + eq.upgradeLevel, 0) / equipment.length
     : 0;
 
   if (isLoadingEquipment) {
@@ -236,13 +248,76 @@ export default function Rigs() {
           </Card>
         </div>
 
+        {/* Equipment Presets Section */}
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <FolderOpen className="w-5 h-5 text-cyan-500" />
+              <h3 className="font-semibold text-base">Equipment Presets</h3>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setPresetDialogOpen(true)}
+              disabled={equipment.length === 0}
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Save Current Setup
+            </Button>
+          </div>
+
+          {presets.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {presets.map((preset) => (
+                <Card
+                  key={preset.id}
+                  className="p-3 hover-elevate transition-all cursor-pointer border-dashed"
+                  onClick={() => {
+                    setSelectedPreset(preset);
+                    setViewPresetDialog(true);
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <h4 className="font-semibold text-sm truncate">{preset.presetName}</h4>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete preset "${preset.presetName}"?`)) {
+                          deletePresetMutation.mutate(preset.id);
+                        }
+                      }}
+                    >
+                      <Trash2 className="w-3 h-3 text-destructive" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Saved {new Date(preset.createdAt).toLocaleDateString()}
+                  </p>
+                  <p className="text-xs text-matrix-green mt-1">
+                    {JSON.parse(preset.equipmentSnapshot).length} equipment items
+                  </p>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <FolderOpen className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-30" />
+              <p className="text-sm text-muted-foreground">
+                No saved presets yet. Save your current equipment setup to quickly reference it later.
+              </p>
+            </div>
+          )}
+        </Card>
+
         {/* Rigs Grid */}
         {equipment.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {equipment.map((eq) => {
               const baseHashrate = eq.equipmentType.baseHashrate * eq.quantity;
               const boostPercent = ((eq.currentHashrate / baseHashrate - 1) * 100);
-              const upgradeCost = eq.upgradeLevel < MAX_UPGRADE_LEVEL 
+              const upgradeCost = eq.upgradeLevel < MAX_UPGRADE_LEVEL
                 ? calculateUpgradeCost(eq.equipmentType.basePrice, eq.upgradeLevel, eq.equipmentType.tier)
                 : 0;
 
@@ -386,7 +461,7 @@ export default function Rigs() {
                   <h4 className="text-sm font-semibold uppercase tracking-wider mb-3">
                     Next Upgrade Available
                   </h4>
-                  
+
                   <div className="space-y-3 mb-4">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Upgrade to Level</span>
@@ -456,6 +531,178 @@ export default function Rigs() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Save Preset Dialog */}
+      <Dialog open={presetDialogOpen} onOpenChange={setPresetDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Save className="w-5 h-5 text-cyan-500" />
+              Save Equipment Preset
+            </DialogTitle>
+            <DialogDescription>
+              Save your current equipment configuration for easy reference
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="preset-name">Preset Name</Label>
+              <Input
+                id="preset-name"
+                placeholder="e.g., Mining Setup 2024"
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                maxLength={50}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSavePreset();
+                  }
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                {presetName.length}/50 characters
+              </p>
+            </div>
+
+            <div className="p-3 rounded-md bg-muted/30 border">
+              <p className="text-sm font-semibold mb-2">Current Equipment Summary</p>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  Total Equipment: {equipment.length} items
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Total Hashrate: {totalHashrate.toFixed(2)} GH/s
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Average Level: {avgUpgradeLevel.toFixed(1)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setPresetDialogOpen(false);
+                  setPresetName("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleSavePreset}
+                disabled={savePresetMutation.isPending || !presetName.trim()}
+              >
+                {savePresetMutation.isPending ? "Saving..." : "Save Preset"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Preset Dialog */}
+      <Dialog open={viewPresetDialog} onOpenChange={setViewPresetDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderOpen className="w-5 h-5 text-cyan-500" />
+              {selectedPreset?.presetName}
+            </DialogTitle>
+            <DialogDescription>
+              Saved on {selectedPreset && new Date(selectedPreset.createdAt).toLocaleString()}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedPreset && (() => {
+            const snapshotData = JSON.parse(selectedPreset.equipmentSnapshot) as UserEquipment[];
+            const presetTotalHashrate = snapshotData.reduce((sum, eq) => sum + eq.currentHashrate, 0);
+            const presetAvgLevel = snapshotData.length > 0
+              ? snapshotData.reduce((sum, eq) => sum + eq.upgradeLevel, 0) / snapshotData.length
+              : 0;
+
+            return (
+              <div className="space-y-4">
+                <div className="p-4 rounded-md bg-muted/30 border">
+                  <h4 className="text-sm font-semibold mb-3">Preset Summary</h4>
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Total Equipment</p>
+                      <p className="text-lg font-bold font-mono">{snapshotData.length}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Total Hashrate</p>
+                      <p className="text-lg font-bold font-mono text-matrix-green">
+                        {presetTotalHashrate.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">GH/s</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Avg Level</p>
+                      <p className="text-lg font-bold font-mono">
+                        {presetAvgLevel.toFixed(1)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold">Equipment List</h4>
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {snapshotData.map((eq, index) => (
+                      <Card key={index} className="p-3">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Monitor className="w-4 h-4 text-matrix-green" />
+                              <h5 className="font-semibold text-sm">{eq.equipmentType.name}</h5>
+                              <Badge variant="outline" className="text-xs">
+                                Level {eq.upgradeLevel}
+                              </Badge>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div>
+                                <span className="text-muted-foreground">Tier: </span>
+                                <span className="font-mono">{eq.equipmentType.tier}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Quantity: </span>
+                                <span className="font-mono">{eq.quantity}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Hashrate: </span>
+                                <span className="font-mono text-matrix-green">
+                                  {eq.currentHashrate.toFixed(2)} GH/s
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Base Price: </span>
+                                <span className="font-mono">
+                                  {eq.equipmentType.basePrice.toLocaleString()} CS
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setViewPresetDialog(false)}
+                >
+                  Close
+                </Button>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
