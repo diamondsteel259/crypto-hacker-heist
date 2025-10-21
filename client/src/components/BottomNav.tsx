@@ -37,7 +37,6 @@ const secondaryNavItems = [
   { title: "Challenges", url: "/challenges", icon: Target },
   { title: "Achievements", url: "/achievements", icon: Trophy },
   { title: "Spin Wheel", url: "/spin", icon: Disc3 },
-  { title: "Loot Boxes", url: "/lootboxes", icon: Box },
   { title: "Cosmetics", url: "/cosmetics", icon: Palette },
   { title: "Block Explorer", url: "/blocks", icon: Blocks },
   { title: "Referrals", url: "/referrals", icon: Users },
