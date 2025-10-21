@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { equipmentTypes, gameSettings, ownedEquipment } from "@shared/schema";
+import { equipmentTypes, gameSettings, ownedEquipment, componentUpgrades } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 export async function seedDatabase() {
