@@ -950,6 +950,7 @@ var MiningService = class {
   isMining = false;
   async start() {
     await this.initializeBlockNumber();
+    await this.recalculateAllHashrates();
     this.intervalId = setInterval(async () => {
       try {
         await this.mineBlock();
@@ -969,6 +970,29 @@ var MiningService = class {
   async initializeBlockNumber() {
     const latestBlock = await storage.getLatestBlock();
     this.lastBlockNumber = latestBlock?.blockNumber ?? 0;
+  }
+  async recalculateAllHashrates() {
+    console.log("Recalculating all user hashrates from equipment...");
+    try {
+      const result = await db.transaction(async (tx) => {
+        const allUsers = await tx.select().from(users);
+        let usersUpdated = 0;
+        for (const user of allUsers) {
+          const equipment = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq2(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(eq2(ownedEquipment.userId, user.telegramId));
+          const actualHashrate = equipment.reduce((sum, row) => {
+            return sum + (row.owned_equipment?.currentHashrate || 0);
+          }, 0);
+          if (user.totalHashrate !== actualHashrate) {
+            await tx.update(users).set({ totalHashrate: actualHashrate }).where(eq2(users.telegramId, user.telegramId));
+            usersUpdated++;
+          }
+        }
+        return { totalUsers: allUsers.length, usersUpdated };
+      });
+      console.log(`Hashrate recalculation complete: ${result.usersUpdated}/${result.totalUsers} users updated`);
+    } catch (error) {
+      console.error("Hashrate recalculation error:", error);
+    }
   }
   async mineBlock() {
     if (this.isMining) {
@@ -1591,6 +1615,47 @@ async function registerRoutes(app2) {
       res.status(500).json({
         error: "Reset failed: Database transaction error",
         details: "All changes have been rolled back. Database is in original state."
+      });
+    }
+  });
+  app2.post("/api/admin/recalculate-hashrates", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const result = await db.transaction(async (tx) => {
+        const allUsers = await tx.select().from(users);
+        let usersUpdated = 0;
+        const updates = [];
+        for (const user of allUsers) {
+          const equipment = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq3(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(eq3(ownedEquipment.userId, user.telegramId));
+          const actualHashrate = equipment.reduce((sum, row) => {
+            return sum + (row.owned_equipment?.currentHashrate || 0);
+          }, 0);
+          if (user.totalHashrate !== actualHashrate) {
+            await tx.update(users).set({ totalHashrate: actualHashrate }).where(eq3(users.telegramId, user.telegramId));
+            usersUpdated++;
+            updates.push({
+              userId: user.telegramId,
+              username: user.username,
+              oldHashrate: user.totalHashrate,
+              newHashrate: actualHashrate,
+              equipmentCount: equipment.length
+            });
+          }
+        }
+        return {
+          success: true,
+          totalUsers: allUsers.length,
+          usersUpdated,
+          updates: updates.slice(0, 20)
+          // Return first 20 for logging
+        };
+      });
+      console.log(`Hashrate recalculation complete: ${result.usersUpdated}/${result.totalUsers} users updated`);
+      res.json(result);
+    } catch (error) {
+      console.error("Hashrate recalculation error:", error);
+      res.status(500).json({
+        error: "Hashrate recalculation failed",
+        details: error.message
       });
     }
   });
