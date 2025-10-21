@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Palette, Check, ShoppingCart, Sparkles } from "lucide-react";
 import { initializeUser } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { sendTonTransaction, isWalletConnected, getTonConnectUI } from "@/lib/tonConnect";
+import { useTonConnect, sendTonTransaction } from "@/lib/tonConnect";
 
 const TON_PAYMENT_ADDRESS = "UQBdFhwckY9C8MU0AC4uiPbRH_C3QIjZH6OzV47ROfHjnyfe";
 
@@ -36,6 +36,7 @@ interface UserCosmetic {
 
 export default function Cosmetics() {
   const { toast } = useToast();
+  const { tonConnectUI, isConnected } = useTonConnect();
   const [userId, setUserId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("background");
 
@@ -94,14 +95,13 @@ export default function Cosmetics() {
 
     if (currency === 'TON' && item.priceTon) {
       // Handle TON payment
-      if (!isWalletConnected()) {
-        const tonConnectUI = getTonConnectUI();
+      if (!isConnected) {
         await tonConnectUI.openModal();
         return;
       }
 
       try {
-        const txHash = await sendTonTransaction(TON_PAYMENT_ADDRESS, item.priceTon, `Cosmetic: ${item.name}`);
+        const txHash = await sendTonTransaction(tonConnectUI, TON_PAYMENT_ADDRESS, item.priceTon, `Cosmetic: ${item.name}`);
         
         if (txHash) {
           purchaseMutation.mutate({
