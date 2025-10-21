@@ -36,6 +36,7 @@ __export(schema_exports, {
   insertLootBoxPurchaseSchema: () => insertLootBoxPurchaseSchema,
   insertOwnedEquipmentSchema: () => insertOwnedEquipmentSchema,
   insertPowerUpPurchaseSchema: () => insertPowerUpPurchaseSchema,
+  insertPriceAlertSchema: () => insertPriceAlertSchema,
   insertReferralSchema: () => insertReferralSchema,
   insertSeasonSchema: () => insertSeasonSchema,
   insertSpinHistorySchema: () => insertSpinHistorySchema,
@@ -52,6 +53,7 @@ __export(schema_exports, {
   lootBoxPurchases: () => lootBoxPurchases,
   ownedEquipment: () => ownedEquipment,
   powerUpPurchases: () => powerUpPurchases,
+  priceAlerts: () => priceAlerts,
   referrals: () => referrals,
   seasons: () => seasons,
   spinHistory: () => spinHistory,
@@ -69,7 +71,7 @@ __export(schema_exports, {
 import { sql } from "drizzle-orm";
 import { pgTable, varchar, text, integer, real, timestamp, boolean, unique, decimal, index, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-var users, gameSettings, equipmentTypes, ownedEquipment, blocks, blockRewards, referrals, componentUpgrades, userTasks, dailyClaims, powerUpPurchases, lootBoxPurchases, activePowerUps, dailyChallenges, userDailyChallenges, achievements, userAchievements, seasons, cosmeticItems, userCosmetics, userStreaks, userHourlyBonuses, userSpins, spinHistory, equipmentPresets, userSubscriptions, userStatistics, insertUserSchema, insertEquipmentTypeSchema, insertOwnedEquipmentSchema, insertComponentUpgradeSchema, insertUserTaskSchema, insertDailyClaimSchema, insertPowerUpPurchaseSchema, insertLootBoxPurchaseSchema, insertActivePowerUpSchema, insertBlockSchema, insertBlockRewardSchema, insertReferralSchema, insertGameSettingSchema, insertDailyChallengeSchema, insertUserDailyChallengeSchema, insertAchievementSchema, insertUserAchievementSchema, insertSeasonSchema, insertCosmeticItemSchema, insertUserCosmeticSchema, insertUserStreakSchema, insertUserHourlyBonusSchema, insertUserSpinSchema, insertSpinHistorySchema, insertEquipmentPresetSchema, insertUserSubscriptionSchema, insertUserStatisticsSchema;
+var users, gameSettings, equipmentTypes, ownedEquipment, blocks, blockRewards, referrals, componentUpgrades, userTasks, dailyClaims, powerUpPurchases, lootBoxPurchases, activePowerUps, dailyChallenges, userDailyChallenges, achievements, userAchievements, seasons, cosmeticItems, userCosmetics, userStreaks, userHourlyBonuses, userSpins, spinHistory, equipmentPresets, priceAlerts, userSubscriptions, userStatistics, insertUserSchema, insertEquipmentTypeSchema, insertOwnedEquipmentSchema, insertComponentUpgradeSchema, insertUserTaskSchema, insertDailyClaimSchema, insertPowerUpPurchaseSchema, insertLootBoxPurchaseSchema, insertActivePowerUpSchema, insertBlockSchema, insertBlockRewardSchema, insertReferralSchema, insertGameSettingSchema, insertDailyChallengeSchema, insertUserDailyChallengeSchema, insertAchievementSchema, insertUserAchievementSchema, insertSeasonSchema, insertCosmeticItemSchema, insertUserCosmeticSchema, insertUserStreakSchema, insertUserHourlyBonusSchema, insertUserSpinSchema, insertSpinHistorySchema, insertEquipmentPresetSchema, insertPriceAlertSchema, insertUserSubscriptionSchema, insertUserStatisticsSchema;
 var init_schema = __esm({
   "shared/schema.ts"() {
     "use strict";
@@ -364,6 +366,18 @@ var init_schema = __esm({
     }, (table) => ({
       userPresetIdx: index("equipment_presets_user_idx").on(table.userId)
     }));
+    priceAlerts = pgTable("price_alerts", {
+      id: serial("id").primaryKey(),
+      userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: "cascade" }),
+      equipmentTypeId: varchar("equipment_type_id").notNull().references(() => equipmentTypes.id),
+      targetPrice: real("target_price").notNull(),
+      triggered: boolean("triggered").notNull().default(false),
+      triggeredAt: timestamp("triggered_at"),
+      createdAt: timestamp("created_at").notNull().defaultNow()
+    }, (table) => ({
+      userAlertIdx: index("price_alerts_user_idx").on(table.userId),
+      userEquipmentAlertUnique: unique().on(table.userId, table.equipmentTypeId)
+    }));
     userSubscriptions = pgTable("user_subscriptions", {
       id: serial("id").primaryKey(),
       userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: "cascade" }).unique(),
@@ -463,6 +477,7 @@ var init_schema = __esm({
     insertUserSpinSchema = createInsertSchema(userSpins).omit({ id: true, lastSpinAt: true });
     insertSpinHistorySchema = createInsertSchema(spinHistory).omit({ id: true, spunAt: true });
     insertEquipmentPresetSchema = createInsertSchema(equipmentPresets).omit({ id: true, createdAt: true, updatedAt: true });
+    insertPriceAlertSchema = createInsertSchema(priceAlerts).omit({ id: true, createdAt: true, triggeredAt: true });
     insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, startDate: true });
     insertUserStatisticsSchema = createInsertSchema(userStatistics).omit({ id: true, createdAt: true, updatedAt: true });
   }
@@ -2854,6 +2869,120 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Delete equipment preset error:", error);
       res.status(500).json({ error: "Failed to delete preset" });
+    }
+  });
+  app2.get("/api/user/:userId/price-alerts", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const alerts = await db.select().from(priceAlerts).leftJoin(equipmentTypes, eq3(priceAlerts.equipmentTypeId, equipmentTypes.id)).where(eq3(priceAlerts.userId, user.telegramId)).orderBy(priceAlerts.createdAt);
+      const alertsWithStatus = alerts.map((row) => ({
+        ...row.price_alerts,
+        equipment: row.equipment_types,
+        canAfford: user.csBalance >= (row.equipment_types?.basePrice || 0)
+      }));
+      res.json(alertsWithStatus);
+    } catch (error) {
+      console.error("Get price alerts error:", error);
+      res.status(500).json({ error: error.message || "Failed to get price alerts" });
+    }
+  });
+  app2.post("/api/user/:userId/price-alerts", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { equipmentTypeId } = req.body;
+    if (!equipmentTypeId) {
+      return res.status(400).json({ error: "Equipment type ID is required" });
+    }
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const equipment = await db.select().from(equipmentTypes).where(eq3(equipmentTypes.id, equipmentTypeId)).limit(1);
+      if (!equipment[0]) {
+        return res.status(404).json({ error: "Equipment not found" });
+      }
+      const existingAlert = await db.select().from(priceAlerts).where(and3(
+        eq3(priceAlerts.userId, user.telegramId),
+        eq3(priceAlerts.equipmentTypeId, equipmentTypeId)
+      )).limit(1);
+      if (existingAlert.length > 0) {
+        return res.status(400).json({ error: "Alert already exists for this equipment" });
+      }
+      const newAlert = await db.insert(priceAlerts).values({
+        userId: user.telegramId,
+        equipmentTypeId,
+        targetPrice: equipment[0].basePrice,
+        triggered: false
+      }).returning();
+      res.json({
+        success: true,
+        message: `Alert set for ${equipment[0].name}`,
+        alert: newAlert[0]
+      });
+    } catch (error) {
+      console.error("Create price alert error:", error);
+      res.status(500).json({ error: error.message || "Failed to create price alert" });
+    }
+  });
+  app2.delete("/api/user/:userId/price-alerts/:alertId", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId, alertId } = req.params;
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const alert = await db.select().from(priceAlerts).where(and3(
+        eq3(priceAlerts.id, parseInt(alertId)),
+        eq3(priceAlerts.userId, user.telegramId)
+      )).limit(1);
+      if (!alert[0]) {
+        return res.status(404).json({ error: "Alert not found" });
+      }
+      await db.delete(priceAlerts).where(eq3(priceAlerts.id, parseInt(alertId)));
+      res.json({
+        success: true,
+        message: "Alert deleted successfully"
+      });
+    } catch (error) {
+      console.error("Delete price alert error:", error);
+      res.status(500).json({ error: error.message || "Failed to delete price alert" });
+    }
+  });
+  app2.get("/api/user/:userId/price-alerts/check", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const alerts = await db.select().from(priceAlerts).leftJoin(equipmentTypes, eq3(priceAlerts.equipmentTypeId, equipmentTypes.id)).where(and3(
+        eq3(priceAlerts.userId, user.telegramId),
+        eq3(priceAlerts.triggered, false)
+      ));
+      const triggeredAlerts = [];
+      for (const row of alerts) {
+        if (row.equipment_types && user.csBalance >= row.equipment_types.basePrice) {
+          await db.update(priceAlerts).set({
+            triggered: true,
+            triggeredAt: /* @__PURE__ */ new Date()
+          }).where(eq3(priceAlerts.id, row.price_alerts.id));
+          triggeredAlerts.push({
+            ...row.price_alerts,
+            equipment: row.equipment_types
+          });
+        }
+      }
+      res.json({
+        triggered: triggeredAlerts.length > 0,
+        alerts: triggeredAlerts
+      });
+    } catch (error) {
+      console.error("Check price alerts error:", error);
+      res.status(500).json({ error: error.message || "Failed to check price alerts" });
     }
   });
   const httpServer = createServer(app2);
