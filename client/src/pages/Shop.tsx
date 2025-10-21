@@ -324,27 +324,38 @@ export default function Shop() {
   });
 
   const powerUpClaimMutation = useMutation({
-    mutationFn: async (powerUpType: string) => {
-      console.log("Claiming power-up:", powerUpType);
+    mutationFn: async (claimType: string) => {
+      console.log("Claiming daily power-up:", claimType);
+      
+      // Get user's timezone offset in minutes
+      const timezoneOffset = new Date().getTimezoneOffset();
+      
       const response = await apiRequest("POST", `/api/user/${userId}/powerups/claim`, {
-        powerUpType
+        type: claimType,
+        timezoneOffset,
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to claim");
+      }
+      
       const data = await response.json();
       return data;
     },
     onSuccess: (data) => {
-      console.log("Power-up claimed successfully:", data);
+      console.log("Daily claim successful:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
       toast({ 
-        title: "Power-up claimed!",
-        description: `You received ${data.amount} ${data.currency}!`
+        title: "Daily claim successful!",
+        description: `You received ${data.reward} ${data.currency}! ${data.remaining_claims} claims left today.`
       });
     },
     onError: (error: any) => {
-      console.error("Power-up claim failed:", error);
+      console.error("Daily claim failed:", error);
       toast({ 
-        title: "Power-up claim failed", 
-        description: error.message || "Failed to claim power-up. Please try again.",
+        title: "Daily claim failed", 
+        description: error.message || "Failed to claim daily reward. Please try again.",
         variant: "destructive" 
       });
     },
