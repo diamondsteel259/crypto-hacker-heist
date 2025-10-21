@@ -139,6 +139,41 @@ export default function Admin() {
     },
   });
 
+  const updateEquipmentMutation = useMutation({
+    mutationFn: async ({ equipmentId, basePrice, currency }: { equipmentId: string; basePrice?: number; currency?: string }) => {
+      const initData = getTelegramInitData();
+      if (!initData) throw new Error('Not authenticated');
+      
+      const response = await fetch(`/api/admin/equipment/${equipmentId}/update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': initData,
+        },
+        body: JSON.stringify({ basePrice, currency }),
+      });
+      if (!response.ok) throw new Error('Failed to update equipment');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/equipment-types'] });
+      setEditingEquipment(null);
+      setEditPrice("");
+      setEditCurrency("");
+      toast({
+        title: "Equipment Updated",
+        description: "Price and currency have been updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update equipment",
+        variant: "destructive",
+      });
+    },
+  });
+
   const totalUsers = users?.length || 0;
   const totalBalance = users?.reduce((sum, u) => sum + u.csBalance, 0) || 0;
   const totalHashrate = users?.reduce((sum, u) => sum + u.totalHashrate, 0) || 0;
