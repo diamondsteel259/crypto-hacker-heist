@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Disc3, Gift, Clock, Sparkles } from "lucide-react";
 import { initializeUser } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { sendTONTransaction } from "@/lib/tonConnect";
+import { sendTonTransaction } from "@/lib/tonConnect";
 
 interface SpinStatus {
   freeSpinAvailable: boolean;
@@ -92,7 +92,7 @@ export default function SpinWheel() {
 
   const handlePaidSpin = async () => {
     try {
-      const result = await sendTONTransaction("0.1"); // 0.1 TON per spin
+      const result = await sendTonTransaction("0.1"); // 0.1 TON per spin
       if (result.success) {
         setIsSpinning(true);
         spinMutation.mutate({
