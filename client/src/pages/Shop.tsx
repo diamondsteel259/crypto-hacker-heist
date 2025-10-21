@@ -804,13 +804,14 @@ export default function Shop() {
                             }[componentType] || 1;
                             
                             const baseCost = owned.equipmentType.basePrice * 0.1;
-                            const upgradeCost = Math.floor(baseCost * componentMultiplier);
+                            const currentLevel = getComponentLevel(owned.id, componentType);
+                            const upgradeCost = Math.floor(baseCost * componentMultiplier * Math.pow(1.15, currentLevel));
                             
                             return (
                               <div key={componentType} className="p-3 border rounded-lg">
                                 <div className="flex items-center justify-between mb-2">
                                   <h5 className="font-medium text-sm">{componentType}</h5>
-                                  <Badge variant="outline" className="text-xs">Level {getComponentLevel(owned.id, componentType)}</Badge>
+                                  <Badge variant="outline" className="text-xs">Level {currentLevel}/10</Badge>
                                 </div>
                                 <p className="text-xs text-muted-foreground mb-2">
                                   +{(owned.equipmentType.baseHashrate * 0.05 * owned.quantity).toFixed(2)} GH/s
@@ -826,7 +827,7 @@ export default function Shop() {
                                         currency: "CS"
                                       });
                                     }}
-                                    disabled={componentUpgradeMutation.isPending}
+                                    disabled={componentUpgradeMutation.isPending || currentLevel >= 10}
                                   >
                                     {componentUpgradeMutation.isPending ? "..." : `CS: ${upgradeCost.toLocaleString()}`}
                                   </Button>
@@ -841,9 +842,9 @@ export default function Shop() {
                                         currency: "TON"
                                       });
                                     }}
-                                    disabled={componentUpgradeMutation.isPending}
+                                    disabled={componentUpgradeMutation.isPending || currentLevel >= 10}
                                   >
-                                    {componentUpgradeMutation.isPending ? "..." : `TON: ${Math.floor(upgradeCost * 0.001).toFixed(3)}`}
+                                    {componentUpgradeMutation.isPending ? "..." : `TON: ${(upgradeCost * 0.001).toFixed(3)}`}
                                   </Button>
                                 </div>
                               </div>
