@@ -411,45 +411,72 @@ export default function Shop() {
         throw new Error("Please connect your TON wallet first");
       }
 
+      // Check TON balance
+      const currentBalance = parseFloat(tonBalance);
+      if (currentBalance < tonAmount) {
+        throw new Error(`Insufficient TON balance. You have ${tonBalance} TON but need ${tonAmount} TON`);
+      }
+
       // Send TON transaction
       const tonConnectUI = getTonConnectUI();
       const userAddress = tonConnectUI.account?.address;
       
       if (!userAddress) {
-        throw new Error("Wallet not properly connected");
+        throw new Error("Wallet not properly connected. Please reconnect your wallet.");
       }
 
-      const result = await tonConnectUI.sendTransaction({
-        messages: [
-          {
-            address: TON_PAYMENT_ADDRESS,
-            amount: toNano(tonAmount).toString(),
-          },
-        ],
-        validUntil: Math.floor(Date.now() / 1000) + 600,
-      });
-      
-      console.log("TON transaction result:", result);
-
-      // Call backend to verify and grant power-up
-      const response = await apiRequest("POST", `/api/user/${userId}/powerups/purchase`, {
-        powerUpType,
-        tonTransactionHash: result.boc,
-        userWalletAddress: userAddress,
-        tonAmount,
+      console.log("Sending TON transaction:", {
+        to: TON_PAYMENT_ADDRESS,
+        amount: tonAmount,
+        from: userAddress,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to purchase power-up");
+      try {
+        const result = await tonConnectUI.sendTransaction({
+          messages: [
+            {
+              address: TON_PAYMENT_ADDRESS,
+              amount: toNano(tonAmount).toString(),
+            },
+          ],
+          validUntil: Math.floor(Date.now() / 1000) + 600,
+        });
+        
+        console.log("TON transaction sent successfully:", result);
+
+        // Call backend to verify and grant power-up
+        const response = await apiRequest("POST", `/api/user/${userId}/powerups/purchase`, {
+          powerUpType,
+          tonTransactionHash: result.boc,
+          userWalletAddress: userAddress,
+          tonAmount,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to purchase power-up");
+        }
+
+        const data = await response.json();
+        return data;
+      } catch (txError: any) {
+        console.error("TON transaction error:", txError);
+        
+        // Handle specific error types
+        if (txError.message && txError.message.includes("Transaction was not sent")) {
+          throw new Error("Transaction cancelled or rejected by wallet. Please try again.");
+        }
+        
+        throw new Error(txError.message || "Failed to send TON transaction");
       }
-
-      const data = await response.json();
-      return data;
     },
     onSuccess: (data) => {
       console.log("Premium power-up purchased:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
+      // Refresh TON balance
+      if (isWalletConnected()) {
+        getTonBalance().then(setTonBalance).catch(console.error);
+      }
       toast({ 
         title: "Power-up activated!",
         description: `${data.powerUpType} active for 1 hour! +${data.boost_percentage}% boost`
