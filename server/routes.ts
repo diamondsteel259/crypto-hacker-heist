@@ -609,6 +609,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: true, paused: false });
   });
 
+  // Bulk reset all users - admin only
+  app.delete("/api/admin/reset-all-users", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const result = await db.transaction(async (tx: any) => {
+        // Delete all data in correct order (respecting foreign keys)
+        const deletedActivePowerUps = await tx.delete(activePowerUps);
+        const deletedPowerUpPurchases = await tx.delete(powerUpPurchases);
+        const deletedLootBoxPurchases = await tx.delete(lootBoxPurchases);
+        const deletedDailyClaims = await tx.delete(dailyClaims);
+        const deletedUserTasks = await tx.delete(userTasks);
+        const deletedBlockRewards = await tx.delete(blockRewards);
+        const deletedComponentUpgrades = await tx.delete(componentUpgrades);
+        const deletedOwnedEquipment = await tx.delete(ownedEquipment);
+        const deletedReferrals = await tx.delete(referrals);
+
+        // Get user count before reset
+        const allUsers = await tx.select().from(users);
+        const userCount = allUsers.length;
+
+        // Reset all users' balances and hashrate (keep accounts)
+        await tx.update(users).set({
+          csBalance: 0,
+          chstBalance: 0,
+          totalHashrate: 0,
+        });
+
+        return {
+          success: true,
+          users_reset: userCount,
+          records_deleted: {
+            active_power_ups: deletedActivePowerUps.length || 0,
+            power_up_purchases: deletedPowerUpPurchases.length || 0,
+            loot_box_purchases: deletedLootBoxPurchases.length || 0,
+            daily_claims: deletedDailyClaims.length || 0,
+            user_tasks: deletedUserTasks.length || 0,
+            block_rewards: deletedBlockRewards.length || 0,
+            component_upgrades: deletedComponentUpgrades.length || 0,
+            owned_equipment: deletedOwnedEquipment.length || 0,
+            referrals: deletedReferrals.length || 0,
+          },
+          reset_at: new Date().toISOString(),
+        };
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Bulk reset error:", error);
+      res.status(500).json({
+        error: "Reset failed: Database transaction error",
+        details: "All changes have been rolled back. Database is in original state.",
+      });
+    }
+  });
+
   // Task system routes
   
   // Get user's completed tasks
