@@ -505,24 +505,46 @@ export default function Shop() {
           throw new Error("Please connect your TON wallet first");
         }
 
+        // Check TON balance
+        const currentBalance = parseFloat(tonBalance);
+        if (currentBalance < cost) {
+          throw new Error(`Insufficient TON balance. You have ${tonBalance} TON but need ${cost} TON`);
+        }
+
         const tonConnectUI = getTonConnectUI();
         userAddress = tonConnectUI.account?.address;
 
         if (!userAddress) {
-          throw new Error("Wallet not properly connected");
+          throw new Error("Wallet not properly connected. Please reconnect your wallet.");
         }
 
-        const result = await tonConnectUI.sendTransaction({
-          messages: [
-            {
-              address: TON_PAYMENT_ADDRESS,
-              amount: toNano(cost).toString(),
-            },
-          ],
-          validUntil: Math.floor(Date.now() / 1000) + 600,
+        console.log("Sending TON transaction for loot box:", {
+          to: TON_PAYMENT_ADDRESS,
+          amount: cost,
+          from: userAddress,
         });
-        console.log("TON transaction result:", result);
-        txHash = result.boc;
+
+        try {
+          const result = await tonConnectUI.sendTransaction({
+            messages: [
+              {
+                address: TON_PAYMENT_ADDRESS,
+                amount: toNano(cost).toString(),
+              },
+            ],
+            validUntil: Math.floor(Date.now() / 1000) + 600,
+          });
+          console.log("TON transaction sent successfully:", result);
+          txHash = result.boc;
+        } catch (txError: any) {
+          console.error("TON transaction error:", txError);
+          
+          if (txError.message && txError.message.includes("Transaction was not sent")) {
+            throw new Error("Transaction cancelled or rejected by wallet. Please try again.");
+          }
+          
+          throw new Error(txError.message || "Failed to send TON transaction");
+        }
       }
 
       const response = await apiRequest("POST", `/api/user/${userId}/lootbox/open`, {
@@ -541,9 +563,13 @@ export default function Shop() {
     onSuccess: (data) => {
       console.log("Loot box opened successfully:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
+      // Refresh TON balance
+      if (isWalletConnected()) {
+        getTonBalance().then(setTonBalance).catch(console.error);
+      }
       toast({ 
         title: "Loot box opened!",
-        description: `You received: ${data.rewards?.map((r: any) => `${r.amount} ${r.type}`).join(", ") || "Something special!"}`
+        description: `You received: ${data.rewards?.cs ? `${data.rewards.cs} CS` : ''} ${data.rewards?.chst ? `${data.rewards.chst} CHST` : ''}`
       });
     },
     onError: (error: any) => {
