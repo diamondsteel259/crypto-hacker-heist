@@ -451,7 +451,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     try {
       // Get user info
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -2698,7 +2698,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { userId } = req.params;
 
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -2731,7 +2731,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -2781,7 +2781,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { userId, alertId } = req.params;
 
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -2816,7 +2816,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { userId } = req.params;
 
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -2868,7 +2868,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { userId } = req.params;
 
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -2911,7 +2911,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -2976,7 +2976,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { userId, settingId } = req.params;
 
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -3291,7 +3291,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { userId } = req.params;
 
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -3425,7 +3425,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { userId } = req.params;
 
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -3563,7 +3563,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { userId } = req.params;
 
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -3671,7 +3671,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { userId } = req.params;
 
     try {
-      const user = await storage.getUserByPrimaryId(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
