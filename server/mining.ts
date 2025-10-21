@@ -153,7 +153,7 @@ export class MiningService {
       });
 
       this.lastBlockNumber = blockNumber;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error during block mining:", error);
       throw error;
     } finally {
