@@ -9,6 +9,7 @@ import HashrateChart from "@/components/HashrateChart";
 import RecentBlocks from "@/components/RecentBlocks";
 import MiningCalendar from "@/components/MiningCalendar";
 import PriceAlerts from "@/components/PriceAlerts";
+import ActiveSeason from "@/components/ActiveSeason";
 import { Terminal, Gem, Package, TrendingUp, Zap, Shield, Sparkles, Flame, Clock, Gift } from "lucide-react";
 import { initializeUser, getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
