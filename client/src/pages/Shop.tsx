@@ -884,19 +884,19 @@ export default function Shop() {
                 <div className="grid grid-cols-1 gap-3">
                   <Button 
                     className="bg-cyber-blue hover:bg-cyber-blue/90 text-white"
-                    onClick={() => powerUpClaimMutation.mutate("hashrate-boost")}
-                    disabled={powerUpClaimMutation.isPending}
+                    onClick={() => premiumPowerUpMutation.mutate({ powerUpType: "hashrate-boost", tonAmount: 0.1 })}
+                    disabled={premiumPowerUpMutation.isPending}
                   >
                     <Shield className="w-4 h-4 mr-2" />
-                    {powerUpClaimMutation.isPending ? "Buying..." : "Buy Hashrate Boost (0.1 TON)"}
+                    {premiumPowerUpMutation.isPending ? "Buying..." : "Buy Hashrate Boost (0.1 TON)"}
                   </Button>
                   <Button 
                     className="bg-cyber-blue hover:bg-cyber-blue/90 text-white"
-                    onClick={() => powerUpClaimMutation.mutate("luck-boost")}
-                    disabled={powerUpClaimMutation.isPending}
+                    onClick={() => premiumPowerUpMutation.mutate({ powerUpType: "luck-boost", tonAmount: 0.2 })}
+                    disabled={premiumPowerUpMutation.isPending}
                   >
                     <Sparkles className="w-4 h-4 mr-2" />
-                    {powerUpClaimMutation.isPending ? "Buying..." : "Buy Luck Boost (0.2 TON)"}
+                    {premiumPowerUpMutation.isPending ? "Buying..." : "Buy Luck Boost (0.2 TON)"}
                   </Button>
                 </div>
               </Card>
