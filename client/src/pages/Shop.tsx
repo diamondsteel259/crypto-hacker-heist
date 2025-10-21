@@ -150,6 +150,7 @@ export default function Shop() {
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [tonBalance, setTonBalance] = useState<string>("0.0000");
   const { toast } = useToast();
+  const { tonConnectUI, isConnected, userFriendlyAddress } = useTonConnect();
   const userId = getCurrentUserId();
   
   // Initialize TON Connect
