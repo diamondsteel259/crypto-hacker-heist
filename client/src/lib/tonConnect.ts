@@ -65,9 +65,8 @@ export async function sendTonTransaction(to: string, amount: number, comment?: s
   }
 
   const transaction = {
-    to: to,
-    value: (amount * 1000000000).toString(), // Convert TON to nanoTON
-    body: comment || 'Payment',
+    address: to,
+    amount: (amount * 1000000000).toString(), // Convert TON to nanoTON
   };
 
   try {
