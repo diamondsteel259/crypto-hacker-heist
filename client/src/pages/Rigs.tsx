@@ -3,15 +3,26 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Package, Zap, Monitor, TrendingUp, AlertCircle } from "lucide-react";
+import { Package, Zap, Monitor, TrendingUp, AlertCircle, Save, Trash2, FolderOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { OwnedEquipment, EquipmentType, User } from "@shared/schema";
 
 type UserEquipment = OwnedEquipment & { equipmentType: EquipmentType };
+
+interface EquipmentPreset {
+  id: number;
+  userId: string;
+  presetName: string;
+  equipmentSnapshot: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 interface UpgradeResponse {
   success: boolean;
@@ -42,6 +53,10 @@ function calculateUpgradeCost(basePrice: number, currentLevel: number, tier: str
 export default function Rigs() {
   const [selectedRig, setSelectedRig] = useState<UserEquipment | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [presetDialogOpen, setPresetDialogOpen] = useState(false);
+  const [presetName, setPresetName] = useState("");
+  const [viewPresetDialog, setViewPresetDialog] = useState(false);
+  const [selectedPreset, setSelectedPreset] = useState<EquipmentPreset | null>(null);
   const { toast } = useToast();
   const userId = getCurrentUserId();
 
@@ -52,6 +67,11 @@ export default function Rigs() {
 
   const { data: user } = useQuery<User>({
     queryKey: ["/api/user", userId],
+    enabled: !!userId,
+  });
+
+  const { data: presets = [] } = useQuery<EquipmentPreset[]>({
+    queryKey: ["/api/user", userId, "equipment", "presets"],
     enabled: !!userId,
   });
 
