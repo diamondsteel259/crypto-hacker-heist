@@ -17,7 +17,9 @@ export const users = pgTable("users", {
   referredBy: text("referred_by"),
   isAdmin: boolean("is_admin").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  referralCodeIdx: index("users_referral_code_idx").on(table.referralCode),
+}));
 
 export const gameSettings = pgTable("game_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -48,6 +50,8 @@ export const ownedEquipment = pgTable("owned_equipment", {
   purchasedAt: timestamp("purchased_at").notNull().defaultNow(),
 }, (table) => ({
   userEquipmentUnique: unique().on(table.userId, table.equipmentTypeId),
+  userIdx: index("owned_equipment_user_idx").on(table.userId),
+  equipmentTypeIdx: index("owned_equipment_type_idx").on(table.equipmentTypeId),
 }));
 
 export const blocks = pgTable("blocks", {
@@ -68,7 +72,10 @@ export const blockRewards = pgTable("block_rewards", {
   sharePercent: real("share_percent").notNull(),
   reward: real("reward").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  userIdx: index("block_rewards_user_idx").on(table.userId),
+  blockIdx: index("block_rewards_block_idx").on(table.blockId),
+}));
 
 export const referrals = pgTable("referrals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
