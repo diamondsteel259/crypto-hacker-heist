@@ -9,7 +9,7 @@ import { Monitor, Cpu, Server, Boxes, Zap, Rocket, Shield, ShoppingBag, CheckCir
 import { useToast } from "@/hooks/use-toast";
 import { getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { getTonConnectUI, isWalletConnected, getTonBalance, sendTonTransaction } from "@/lib/tonConnect";
+import { useTonConnect, sendTonTransaction, getTonBalance } from "@/lib/tonConnect";
 import { Address, toNano } from "@ton/core";
 import type { EquipmentType, OwnedEquipment, User } from "@shared/schema";
 
@@ -71,7 +71,7 @@ function EquipmentCard({ equipment, owned, onPurchase, onTonPurchase, isPurchasi
   const canAfford = equipment.currency === "CS" 
     ? userBalance >= currentPrice 
     : equipment.currency === "TON" 
-    ? isWalletConnected() // TON purchases require wallet connection
+    ? isConnected // TON purchases require wallet connection
     : false;
 
   return (
@@ -157,9 +157,9 @@ export default function Shop() {
   // Fetch TON balance when wallet is connected
   useEffect(() => {
     const fetchTonBalance = async () => {
-      if (isWalletConnected()) {
+      if (isConnected) {
         try {
-          const balance = await getTonBalance();
+          const balance = await getTonBalance(userFriendlyAddress);
           setTonBalance(balance);
         } catch (error) {
           console.error("Failed to fetch TON balance:", error);
@@ -276,7 +276,7 @@ export default function Shop() {
         throw new Error("Purchase cancelled by user");
       }
       
-      if (!isWalletConnected()) {
+      if (!isConnected) {
         throw new Error("Please connect your TON wallet first");
       }
 
@@ -293,8 +293,7 @@ export default function Shop() {
 
       try {
         // Send TON payment using the utility function
-        const result = await sendTonTransaction(
-          TON_PAYMENT_ADDRESS,
+        const result = await sendTonTransaction(tonConnectUI, TON_PAYMENT_ADDRESS,
           price,
           `Equipment purchase: ${equipmentTypeId}`
         );
@@ -328,8 +327,8 @@ export default function Shop() {
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "equipment"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
       // Refresh TON balance after successful purchase
-      if (isWalletConnected()) {
-        getTonBalance().then(setTonBalance).catch(console.error);
+      if (isConnected) {
+        getTonBalance(userFriendlyAddress).then(setTonBalance).catch(console.error);
       }
       toast({ 
         title: "Equipment purchased successfully!",
@@ -446,7 +445,7 @@ export default function Shop() {
       }
       
       // Check wallet connection
-      if (!isWalletConnected()) {
+      if (!isConnected) {
         throw new Error("Please connect your TON wallet first");
       }
 
@@ -457,7 +456,7 @@ export default function Shop() {
       }
 
       // Send TON transaction
-      const tonConnectUI = getTonConnectUI();
+      
       const userAddress = tonConnectUI.account?.address;
       
       if (!userAddress) {
@@ -513,8 +512,8 @@ export default function Shop() {
       console.log("Premium power-up purchased:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
       // Refresh TON balance
-      if (isWalletConnected()) {
-        getTonBalance().then(setTonBalance).catch(console.error);
+      if (isConnected) {
+        getTonBalance(userFriendlyAddress).then(setTonBalance).catch(console.error);
       }
       toast({ 
         title: "Power-up activated!",
@@ -550,7 +549,7 @@ export default function Shop() {
         }
         
         // TON purchase for paid loot boxes
-        if (!isWalletConnected()) {
+        if (!isConnected) {
           throw new Error("Please connect your TON wallet first");
         }
 
@@ -560,7 +559,7 @@ export default function Shop() {
           throw new Error(`Insufficient TON balance. You have ${tonBalance} TON but need ${cost} TON`);
         }
 
-        const tonConnectUI = getTonConnectUI();
+        
         userAddress = tonConnectUI.account?.address;
 
         if (!userAddress) {
@@ -613,8 +612,8 @@ export default function Shop() {
       console.log("Loot box opened successfully:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
       // Refresh TON balance
-      if (isWalletConnected()) {
-        getTonBalance().then(setTonBalance).catch(console.error);
+      if (isConnected) {
+        getTonBalance(userFriendlyAddress).then(setTonBalance).catch(console.error);
       }
       toast({ 
         title: "Loot box opened!",
@@ -741,7 +740,7 @@ export default function Shop() {
                 <p className="text-xs text-muted-foreground">CS</p>
                 <p className="text-sm sm:text-base font-mono text-matrix-green">{csBalance.toLocaleString()}</p>
               </div>
-              {isWalletConnected() && (
+              {isConnected && (
                 <div>
                   <p className="text-xs text-muted-foreground">TON</p>
                   <p className="text-sm sm:text-base font-mono text-cyber-blue">{tonBalance}</p>
