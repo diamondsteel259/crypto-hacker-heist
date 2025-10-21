@@ -1192,6 +1192,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ error: "Payment verification required for this loot box" });
     }
 
+    // Validate TON addresses if payment required
+    if (requiresPayment) {
+      if (!isValidTONAddress(userWalletAddress)) {
+        return res.status(400).json({ error: "Invalid user wallet address format" });
+      }
+
+      const gameWallet = getGameWalletAddress();
+      if (!isValidTONAddress(gameWallet)) {
+        return res.status(500).json({ error: "Game wallet not configured correctly" });
+      }
+    }
+
     try {
       const result = await db.transaction(async (tx: any) => {
         const user = await tx.select().from(users)
@@ -1212,22 +1224,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
           }
 
-          // TODO: Implement actual TON blockchain verification here
-          // For now, we'll store the transaction and mark as verified
-          // Production should verify: amount, recipient address, transaction existence on-chain
-          const verified = true; // Placeholder
+          // Verify transaction on TON blockchain
+          console.log(`Verifying loot box TON transaction: ${tonTransactionHash} for ${tonAmount} TON`);
+          const gameWallet = getGameWalletAddress();
+          const verification = await verifyTONTransaction(
+            tonTransactionHash,
+            tonAmount,
+            gameWallet,
+            userWalletAddress
+          );
 
-          if (!verified) {
+          if (!verification.verified) {
+            console.error('TON verification failed:', verification.error);
             return res.status(400).json({
-              error: "Payment verification failed: Transaction not found on blockchain",
+              error: verification.error || "Payment verification failed: Transaction not found on blockchain",
             });
           }
+
+          console.log('Loot box TON transaction verified successfully:', verification.transaction);
         }
 
         // Generate loot box rewards based on type
         let totalCS = 0;
         let totalCHST = 0;
-        const equipmentRewards: any[] = [];
+        const equipmentRewards = [];
 
         switch (boxType) {
           case "basic":
@@ -1315,6 +1335,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             chst: updatedUser[0].chstBalance,
           },
           opened_at: new Date().toISOString(),
+          verification: requiresPayment ? {
+            verified: true,
+            txHash: tonTransactionHash,
+          } : undefined,
         };
       });
 
