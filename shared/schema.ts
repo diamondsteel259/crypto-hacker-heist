@@ -167,6 +167,177 @@ export const activePowerUps = pgTable("active_power_ups", {
   userActiveIdx: index("active_power_ups_user_active_idx").on(table.userId, table.isActive, table.expiresAt),
 }));
 
+// Daily Challenges
+export const dailyChallenges = pgTable("daily_challenges", {
+  id: serial("id").primaryKey(),
+  challengeId: text("challenge_id").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  requirement: text("requirement").notNull(),
+  rewardCs: integer("reward_cs").notNull(),
+  rewardChst: integer("reward_chst"),
+  rewardItem: text("reward_item"), // Equipment or loot box ID
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+export const userDailyChallenges = pgTable("user_daily_challenges", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  challengeId: text("challenge_id").notNull(),
+  completedDate: text("completed_date").notNull(), // YYYY-MM-DD format
+  completedAt: timestamp("completed_at").notNull().defaultNow(),
+  rewardClaimed: boolean("reward_claimed").notNull().default(true),
+}, (table) => ({
+  userChallengeUnique: unique().on(table.userId, table.challengeId, table.completedDate),
+  userChallengeIdx: index("user_daily_challenges_user_idx").on(table.userId, table.completedDate),
+}));
+
+// Achievement System
+export const achievements = pgTable("achievements", {
+  id: serial("id").primaryKey(),
+  achievementId: text("achievement_id").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  requirement: text("requirement").notNull(),
+  category: text("category").notNull(), // milestone, social, spending, mining
+  rewardCs: integer("reward_cs"),
+  rewardChst: integer("reward_chst"),
+  rewardItem: text("reward_item"),
+  badgeIcon: text("badge_icon"),
+  isActive: boolean("is_active").notNull().default(true),
+  orderIndex: integer("order_index").notNull().default(0),
+});
+
+export const userAchievements = pgTable("user_achievements", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  achievementId: text("achievement_id").notNull(),
+  unlockedAt: timestamp("unlocked_at").notNull().defaultNow(),
+  rewardClaimed: boolean("reward_claimed").notNull().default(true),
+}, (table) => ({
+  userAchievementUnique: unique().on(table.userId, table.achievementId),
+  userAchievementIdx: index("user_achievements_user_idx").on(table.userId),
+}));
+
+// Seasons & Events
+export const seasons = pgTable("seasons", {
+  id: serial("id").primaryKey(),
+  seasonId: text("season_id").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  bonusMultiplier: real("bonus_multiplier").notNull().default(1.0),
+  specialRewards: text("special_rewards"), // JSON string
+  isActive: boolean("is_active").notNull().default(false),
+});
+
+// Cosmetic Items
+export const cosmeticItems = pgTable("cosmetic_items", {
+  id: serial("id").primaryKey(),
+  itemId: text("item_id").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  category: text("category").notNull(), // background, nameColor, badge
+  priceCs: integer("price_cs"),
+  priceChst: integer("price_chst"),
+  priceTon: decimal("price_ton", { precision: 10, scale: 2 }),
+  imageUrl: text("image_url"),
+  isAnimated: boolean("is_animated").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  orderIndex: integer("order_index").notNull().default(0),
+});
+
+export const userCosmetics = pgTable("user_cosmetics", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  cosmeticId: text("cosmetic_id").notNull(),
+  purchasedAt: timestamp("purchased_at").notNull().defaultNow(),
+  isEquipped: boolean("is_equipped").notNull().default(false),
+}, (table) => ({
+  userCosmeticUnique: unique().on(table.userId, table.cosmeticId),
+  userCosmeticIdx: index("user_cosmetics_user_idx").on(table.userId),
+}));
+
+// Streak Tracking
+export const userStreaks = pgTable("user_streaks", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }).unique(),
+  currentStreak: integer("current_streak").notNull().default(0),
+  longestStreak: integer("longest_streak").notNull().default(0),
+  lastLoginDate: text("last_login_date").notNull(), // YYYY-MM-DD format
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  userStreakIdx: index("user_streaks_user_idx").on(table.userId),
+}));
+
+// Hourly Bonuses
+export const userHourlyBonuses = pgTable("user_hourly_bonuses", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  claimedAt: timestamp("claimed_at").notNull().defaultNow(),
+  rewardAmount: integer("reward_amount").notNull(),
+}, (table) => ({
+  userHourlyIdx: index("user_hourly_bonuses_user_idx").on(table.userId, table.claimedAt),
+}));
+
+// Spin the Wheel
+export const userSpins = pgTable("user_spins", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  spinDate: text("spin_date").notNull(), // YYYY-MM-DD format
+  freeSpinUsed: boolean("free_spin_used").notNull().default(false),
+  paidSpinsCount: integer("paid_spins_count").notNull().default(0),
+  lastSpinAt: timestamp("last_spin_at").notNull().defaultNow(),
+}, (table) => ({
+  userSpinUnique: unique().on(table.userId, table.spinDate),
+  userSpinIdx: index("user_spins_user_idx").on(table.userId, table.spinDate),
+}));
+
+export const spinHistory = pgTable("spin_history", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  prizeType: text("prize_type").notNull(), // cs, chst, equipment, powerup
+  prizeValue: text("prize_value").notNull(),
+  wasFree: boolean("was_free").notNull(),
+  spunAt: timestamp("spun_at").notNull().defaultNow(),
+}, (table) => ({
+  userSpinHistoryIdx: index("spin_history_user_idx").on(table.userId),
+}));
+
+// Subscriptions
+export const userSubscriptions = pgTable("user_subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }).unique(),
+  subscriptionType: text("subscription_type").notNull(), // monthly, lifetime
+  startDate: timestamp("start_date").notNull().defaultNow(),
+  endDate: timestamp("end_date"),
+  isActive: boolean("is_active").notNull().default(true),
+  tonTransactionHash: text("ton_transaction_hash"),
+  autoRenew: boolean("auto_renew").notNull().default(false),
+}, (table) => ({
+  userSubscriptionIdx: index("user_subscriptions_user_idx").on(table.userId),
+}));
+
+// User Statistics Enhancement
+export const userStatistics = pgTable("user_statistics", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }).unique(),
+  totalCsEarned: real("total_cs_earned").notNull().default(0),
+  totalChstEarned: real("total_chst_earned").notNull().default(0),
+  totalBlocksMined: integer("total_blocks_mined").notNull().default(0),
+  bestBlockReward: real("best_block_reward").notNull().default(0),
+  highestHashrate: real("highest_hashrate").notNull().default(0),
+  totalTonSpent: decimal("total_ton_spent", { precision: 10, scale: 2 }).notNull().default('0'),
+  totalCsSpent: real("total_cs_spent").notNull().default(0),
+  totalReferrals: integer("total_referrals").notNull().default(0),
+  achievementsUnlocked: integer("achievements_unlocked").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  userStatsIdx: index("user_statistics_user_idx").on(table.userId),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
