@@ -271,6 +271,9 @@ export default function Dashboard() {
         {/* Active Season */}
         <ActiveSeason />
 
+        {/* Prestige System */}
+        <PrestigeSystem />
+
 
         {/* Active Power-Ups */}
         {activePowerUps && activePowerUps.active_power_ups && activePowerUps.active_power_ups.length > 0 && (
