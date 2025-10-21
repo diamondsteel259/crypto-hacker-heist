@@ -1066,11 +1066,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               nextDay.setUTCHours(0, 0, 0, 0);
               const nextResetUtc = new Date(nextDay.getTime() - offsetMs);
               
-              return res.status(429).json({
-                error: "Daily limit reached. You've claimed 5/5 times today.",
-                remaining_claims: 0,
-                next_reset: nextResetUtc.toISOString(),
-              });
+              const error: any = new Error("Daily limit reached. You've claimed 5/5 times today.");
+              error.statusCode = 429;
+              error.remaining_claims = 0;
+              error.next_reset = nextResetUtc.toISOString();
+              throw error;
             }
             
             // Increment count
