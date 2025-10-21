@@ -44,21 +44,18 @@ export default function Dashboard() {
   });
 
   const { data: equipment } = useQuery<any[]>({
-    queryKey: ['/api/user/equipment', userId],
-    queryFn: () => fetch(`/api/user/${userId}/equipment`).then(r => r.json()),
+    queryKey: ['/api/user', userId, 'equipment'],
     enabled: !!userId,
   });
 
   const { data: networkStats } = useQuery<any>({
-    queryKey: ['/api/user/network-stats', userId],
-    queryFn: () => fetch(`/api/user/${userId}/network-stats`).then(r => r.json()),
+    queryKey: ['/api/user', userId, 'network-stats'],
     enabled: !!userId,
     refetchInterval: 60000, // Refresh every minute
   });
 
   const { data: activePowerUps } = useQuery<ActivePowerUpsResponse>({
     queryKey: ['/api/user', userId, 'powerups', 'active'],
-    queryFn: () => fetch(`/api/user/${userId}/powerups/active`).then(r => r.json()),
     enabled: !!userId,
     refetchInterval: 10000, // Refresh every 10 seconds to update time remaining
   });
