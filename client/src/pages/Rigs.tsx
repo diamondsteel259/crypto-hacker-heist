@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Package, Zap, Monitor, TrendingUp, AlertCircle, Save, Trash2, FolderOpen } from "lucide-react";
+import { Package, Zap, Monitor, TrendingUp, AlertCircle, Save, Trash2, FolderOpen, Settings, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
