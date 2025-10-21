@@ -52,11 +52,16 @@ export async function seedDatabase() {
       // Clear existing equipment and reseed with new data
       console.log(`🗑️  Clearing existing equipment data...`);
       
-      // First, delete all owned equipment to avoid foreign key constraints
+      // Delete in correct order to avoid foreign key constraints
+      // 1. Delete component_upgrades first (references owned_equipment)
+      await db.delete(componentUpgrades);
+      console.log(`🗑️  Cleared component upgrades...`);
+      
+      // 2. Then delete owned_equipment (references equipment_types)
       await db.delete(ownedEquipment);
       console.log(`🗑️  Cleared owned equipment...`);
       
-      // Then delete equipment types
+      // 3. Finally delete equipment_types
       await db.delete(equipmentTypes);
       console.log(`🗑️  Cleared equipment types...`);
       
