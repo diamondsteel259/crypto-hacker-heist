@@ -435,6 +435,16 @@ export default function Shop() {
     mutationFn: async ({ powerUpType, tonAmount }: { powerUpType: string; tonAmount: number }) => {
       console.log("Purchasing premium power-up:", { powerUpType, tonAmount });
       
+      // Confirmation dialog for TON power-up purchases
+      const powerUpName = powerUpType === 'hashrate-boost' ? 'Hashrate Boost (+50%)' : 'Luck Boost (+25%)';
+      const confirmed = window.confirm(
+        `Purchase ${powerUpName} for ${tonAmount} TON?\n\nBoost lasts 1 hour.\nThis will deduct ${tonAmount} TON from your wallet.`
+      );
+      
+      if (!confirmed) {
+        throw new Error("Purchase cancelled by user");
+      }
+      
       // Check wallet connection
       if (!isWalletConnected()) {
         throw new Error("Please connect your TON wallet first");
