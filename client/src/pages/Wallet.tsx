@@ -9,7 +9,7 @@ import type { User } from "@shared/schema";
 
 interface BlockReward {
   blockNumber: number;
-  cipherShards: number;
+  reward: number;
   hashrate: number;
   createdAt: string;
 }
@@ -45,7 +45,7 @@ export default function WalletPage() {
   const chstBalance = user?.chstBalance ?? 0;
 
   // Calculate total earned from mining
-  const totalFromMining = blockRewards.reduce((sum, reward) => sum + reward.cipherShards, 0);
+  const totalFromMining = blockRewards.reduce((sum, reward) => sum + reward.reward, 0);
 
   // Calculate total earned from referrals
   const totalFromReferrals = referrals.reduce((sum, ref) => sum + ref.bonusEarned, 0);
