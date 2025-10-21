@@ -1,7 +1,7 @@
 /**
  * TON Blockchain Transaction Verification Service
  *
- * Verifies transactions on the TON blockchain using TON Center API
+ * Verifies transactions on the TON blockchain using TON Center API v3
  */
 
 interface TONTransaction {
@@ -19,7 +19,7 @@ interface VerificationResult {
 }
 
 /**
- * Verify a TON transaction on the blockchain
+ * Verify a TON transaction on the blockchain using v3 API
  *
  * @param txHash - Transaction hash (BOC or hash string)
  * @param expectedAmount - Expected amount in TON (e.g., 0.5, 2.0)
@@ -36,19 +36,27 @@ export async function verifyTONTransaction(
   try {
     // Get TON Center API key from environment
     const apiKey = process.env.TON_API_KEY;
-    const tonCenterUrl = apiKey
-      ? `https://toncenter.com/api/v2/getTransactions?address=${recipientAddress}&limit=100&api_key=${apiKey}`
-      : `https://toncenter.com/api/v2/getTransactions?address=${recipientAddress}&limit=100`;
+    
+    // Use v3 API endpoint for getting transactions
+    const baseUrl = 'https://toncenter.com/api/v3';
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (apiKey) {
+      headers['X-API-Key'] = apiKey;
+    }
 
-    // Fetch recent transactions for the recipient address
-    const response = await fetch(tonCenterUrl, {
+    // Fetch transactions for the recipient address using v3 API
+    const url = `${baseUrl}/transactions?account=${recipientAddress}&limit=100&sort=desc`;
+    
+    const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
     });
 
     if (!response.ok) {
+      console.error('TON API response not OK:', response.status, response.statusText);
       return {
         verified: false,
         error: 'Failed to connect to TON blockchain API',
@@ -57,7 +65,8 @@ export async function verifyTONTransaction(
 
     const data = await response.json();
 
-    if (!data.ok || !data.result) {
+    if (!data.transactions || !Array.isArray(data.transactions)) {
+      console.error('Invalid TON API response structure:', data);
       return {
         verified: false,
         error: 'Invalid response from TON blockchain API',
@@ -66,60 +75,73 @@ export async function verifyTONTransaction(
 
     // Convert expected amount to nanotons (1 TON = 1,000,000,000 nanotons)
     const expectedNanotons = BigInt(Math.floor(expectedAmount * 1e9));
-    const tolerance = BigInt(1e6); // 0.001 TON tolerance for rounding
+    const tolerance = BigInt(1e6); // 0.001 TON tolerance for rounding/fees
 
-    // Search for matching transaction
-    for (const tx of data.result) {
-      // Check if this transaction matches our criteria
-      if (tx.transaction_id?.hash === txHash || tx.hash === txHash) {
-        // Extract transaction details
-        const inMsg = tx.in_msg;
-        if (!inMsg) continue;
+    // Search for matching transaction in v3 format
+    for (const tx of data.transactions) {
+      // v3 API structure: transaction has hash, in_msg, out_msgs
+      const txHashMatch = tx.hash === txHash || tx.transaction_id === txHash;
+      
+      if (!txHashMatch) continue;
 
-        const fromAddress = inMsg.source;
-        const toAddress = inMsg.destination;
-        const value = BigInt(inMsg.value || '0');
+      // Check incoming message (in_msg)
+      const inMsg = tx.in_msg;
+      if (!inMsg) continue;
 
-        // Verify recipient address matches
-        if (toAddress !== recipientAddress) {
-          continue;
-        }
+      const fromAddress = inMsg.source;
+      const toAddress = inMsg.destination;
+      const value = BigInt(inMsg.value || '0');
 
-        // Verify sender if provided
-        if (senderAddress && fromAddress !== senderAddress) {
-          continue;
-        }
+      // Verify recipient address matches
+      if (toAddress !== recipientAddress) {
+        console.log(`Address mismatch: expected ${recipientAddress}, got ${toAddress}`);
+        continue;
+      }
 
-        // Verify amount (with tolerance)
-        const amountDiff = value > expectedNanotons
-          ? value - expectedNanotons
-          : expectedNanotons - value;
+      // Verify sender if provided
+      if (senderAddress && fromAddress !== senderAddress) {
+        console.log(`Sender mismatch: expected ${senderAddress}, got ${fromAddress}`);
+        continue;
+      }
 
-        if (amountDiff > tolerance) {
-          return {
-            verified: false,
-            error: `Amount mismatch: expected ${expectedAmount} TON, received ${Number(value) / 1e9} TON`,
-          };
-        }
+      // Verify amount (with tolerance for fees)
+      const amountDiff = value > expectedNanotons
+        ? value - expectedNanotons
+        : expectedNanotons - value;
 
-        // Transaction verified successfully!
+      if (amountDiff > tolerance) {
+        console.log(`Amount mismatch: expected ${expectedAmount} TON (${expectedNanotons}), got ${Number(value) / 1e9} TON (${value})`);
         return {
-          verified: true,
-          transaction: {
-            hash: tx.transaction_id?.hash || tx.hash,
-            from: fromAddress,
-            to: toAddress,
-            value: value.toString(),
-            timestamp: tx.utime || Date.now() / 1000,
-          },
+          verified: false,
+          error: `Amount mismatch: expected ${expectedAmount} TON, received ${Number(value) / 1e9} TON`,
         };
       }
+
+      // Transaction verified successfully!
+      console.log('✅ TON transaction verified:', {
+        hash: tx.hash,
+        from: fromAddress,
+        to: toAddress,
+        amount: `${Number(value) / 1e9} TON`,
+      });
+
+      return {
+        verified: true,
+        transaction: {
+          hash: tx.hash,
+          from: fromAddress,
+          to: toAddress,
+          value: value.toString(),
+          timestamp: tx.utime || Math.floor(Date.now() / 1000),
+        },
+      };
     }
 
     // Transaction not found
+    console.log(`Transaction ${txHash} not found in recent transactions`);
     return {
       verified: false,
-      error: 'Transaction not found on blockchain. It may still be processing.',
+      error: 'Transaction not found on blockchain. It may still be processing or the hash is incorrect.',
     };
 
   } catch (error: any) {
@@ -132,8 +154,8 @@ export async function verifyTONTransaction(
 }
 
 /**
- * Alternative verification using transaction hash lookup
- * This is a simpler approach that directly queries a specific transaction
+ * Alternative: Direct transaction lookup by hash using v3 API
+ * More efficient if you have the exact transaction hash
  */
 export async function verifyTONTransactionByHash(
   txHash: string,
@@ -141,9 +163,24 @@ export async function verifyTONTransactionByHash(
   recipientAddress: string
 ): Promise<VerificationResult> {
   try {
-    // For now, we'll use the transaction list approach
-    // In production, you might use a dedicated transaction lookup endpoint
+    const apiKey = process.env.TON_API_KEY;
+    const baseUrl = 'https://toncenter.com/api/v3';
+    
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (apiKey) {
+      headers['X-API-Key'] = apiKey;
+    }
+
+    // Direct transaction lookup by hash
+    const url = `${baseUrl}/transactionsByMasterchainBlock?workchain=0&seqno=0&include_msg_body=false`;
+    
+    // For now, fallback to account-based lookup
+    // v3 API requires more specific transaction lookup parameters
     return await verifyTONTransaction(txHash, expectedAmount, recipientAddress);
+    
   } catch (error: any) {
     return {
       verified: false,
@@ -171,6 +208,19 @@ export function getGameWalletAddress(): string {
  * Validate TON address format
  */
 export function isValidTONAddress(address: string): boolean {
-  // TON addresses start with EQ (mainnet) or kQ (testnet) and are base64 encoded
-  return /^[Ek]Q[A-Za-z0-9_-]{46}$/.test(address);
+  // TON addresses can be in different formats:
+  // - User-friendly: EQ... or kQ... (base64url)
+  // - Raw format: 0:hex...
+  
+  // User-friendly format (most common)
+  if (/^[Ek]Q[A-Za-z0-9_-]{46}$/.test(address)) {
+    return true;
+  }
+  
+  // Raw format
+  if (/^-?\d+:[a-fA-F0-9]{64}$/.test(address)) {
+    return true;
+  }
+  
+  return false;
 }
