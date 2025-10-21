@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { miningService } from "./mining";
 import { seedDatabase } from "./seedDatabase";
+import { seedGameContent } from "./seedGameContent";
 import { initializeBot } from "./bot";
 
 // Crypto Hacker Heist - v1.0.1 (Deployment trigger)
@@ -11,6 +12,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { miningService } from "./mining";
 import { seedDatabase } from "./seedDatabase";
+import { seedGameContent } from "./seedGameContent";
 import { initializeBot } from "./bot";
 
 const app = express();
@@ -83,6 +85,11 @@ app.use((req, res, next) => {
     seedDatabase().catch(err => {
       console.error("⚠️  Database seeding failed (non-fatal):", err.message || err);
       console.log("✅ Server will continue running. Database will seed when connection is available.");
+    });
+    
+    // Seed game content (challenges, achievements, cosmetics)
+    seedGameContent().catch(err => {
+      console.error("⚠️  Game content seeding failed (non-fatal):", err.message || err);
     });
     
     // Start mining service (also non-fatal)
