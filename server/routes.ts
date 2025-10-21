@@ -610,12 +610,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Task system routes
-  app.post("/api/user/:userId/tasks/claim", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+  
+  // Get user's completed tasks
+  app.get("/api/user/:userId/tasks/status", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
-    const { taskId } = req.body;
+
+    try {
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Get all completed tasks
+      const completedTasks = await db.select().from(userTasks)
+        .where(eq(userTasks.userId, user[0].telegramId));
+
+      const completedTaskIds = completedTasks.map(t => t.taskId);
+
+      res.json({
+        completed_task_ids: completedTaskIds,
+        completed_count: completedTasks.length,
+      });
+    } catch (error: any) {
+      console.error("Get task status error:", error);
+      res.status(500).json({ error: "Failed to get task status" });
+    }
+  });
+
+  // Claim task reward with completion tracking
+  app.post("/api/user/:userId/tasks/:taskId/claim", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId, taskId } = req.params;
 
     if (!taskId) {
-      return res.status(400).json({ message: "Task ID is required" });
+      return res.status(400).json({ error: "Task ID is required" });
     }
 
     try {
@@ -625,31 +652,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .for('update');
         if (!user[0]) throw new Error("User not found");
 
-        let reward = 0;
-        let message = "Task completed!";
+        // Check if task already claimed
+        const existing = await tx.select().from(userTasks)
+          .where(and(
+            eq(userTasks.userId, user[0].telegramId),
+            eq(userTasks.taskId, taskId)
+          ))
+          .limit(1);
+
+        if (existing.length > 0) {
+          return res.status(400).json({
+            error: "You've already completed this task.",
+            claimed_at: existing[0].claimedAt,
+          });
+        }
+
+        let rewardCs = 0;
+        let rewardChst = 0;
+        let conditionsMet = true;
+        let errorMsg = "";
 
         switch (taskId) {
           case "mine-first-block":
-            // Check if user has any equipment
             const userEquipment = await tx.select().from(ownedEquipment)
               .where(eq(ownedEquipment.userId, userId));
             if (userEquipment.length === 0) {
-              throw new Error("You need to purchase equipment first to mine blocks");
+              conditionsMet = false;
+              errorMsg = "You need to purchase equipment first to mine blocks";
             }
-            reward = 1000;
-            message = "First block mined! You earned 1,000 CS!";
+            rewardCs = 1000;
+            rewardChst = 10;
             break;
           
           case "reach-1000-hashrate":
             if (user[0].totalHashrate < 1000) {
-              throw new Error("You need at least 1,000 H/s total hashrate");
+              conditionsMet = false;
+              errorMsg = "You need at least 1,000 H/s total hashrate";
             }
-            reward = 2000;
-            message = "Hashrate milestone reached! You earned 2,000 CS!";
+            rewardCs = 2000;
+            rewardChst = 20;
             break;
           
           case "buy-first-asic":
-            // Check if user has any ASIC equipment
             const asicEquipment = await tx.select()
               .from(ownedEquipment)
               .leftJoin(equipmentTypes, eq(ownedEquipment.equipmentTypeId, equipmentTypes.id))
@@ -658,52 +702,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 eq(equipmentTypes.category, "ASIC Rig")
               ));
             if (asicEquipment.length === 0) {
-              throw new Error("You need to purchase an ASIC rig first");
+              conditionsMet = false;
+              errorMsg = "You need to purchase an ASIC rig first";
             }
-            reward = 0; // Free loot box instead of CS
-            message = "ASIC acquired! You earned a free loot box!";
+            rewardCs = 3000;
+            rewardChst = 30;
             break;
           
           case "invite-1-friend":
-            // Check if user has referrals
             const referrals1 = await tx.select().from(referrals)
               .where(eq(referrals.referrerId, userId));
             if (referrals1.length === 0) {
-              throw new Error("You need to invite at least 1 friend first");
+              conditionsMet = false;
+              errorMsg = "You need to invite at least 1 friend first";
             }
-            reward = 5000;
-            message = "Friend invited! You earned 5,000 CS!";
+            rewardCs = 5000;
+            rewardChst = 50;
             break;
           
           case "invite-5-friends":
-            // Check if user has 5+ referrals
             const referrals5 = await tx.select().from(referrals)
               .where(eq(referrals.referrerId, userId));
             if (referrals5.length < 5) {
-              throw new Error("You need to invite at least 5 friends first");
+              conditionsMet = false;
+              errorMsg = "You need to invite at least 5 friends first";
             }
-            reward = 0; // Premium loot box instead of CS
-            message = "Network built! You earned a premium loot box!";
+            rewardCs = 15000;
+            rewardChst = 150;
             break;
           
           default:
-            throw new Error("Unknown task ID");
+            return res.status(400).json({ error: "Unknown task ID" });
         }
 
-        if (reward > 0) {
-          await tx.update(users)
-            .set({ 
-              csBalance: sql`${users.csBalance} + ${reward}` 
-            })
-            .where(eq(users.id, userId));
+        if (!conditionsMet) {
+          return res.status(400).json({
+            error: "Task conditions not met.",
+            message: errorMsg,
+          });
         }
 
-        return { success: true, reward, message };
+        // Grant rewards
+        await tx.update(users)
+          .set({ 
+            csBalance: sql`${users.csBalance} + ${rewardCs}`,
+            chstBalance: sql`${users.chstBalance} + ${rewardChst}`
+          })
+          .where(eq(users.id, userId));
+
+        // Record task completion
+        await tx.insert(userTasks).values({
+          userId: user[0].telegramId,
+          taskId,
+          rewardCs,
+          rewardChst,
+        });
+
+        // Get updated balances
+        const updatedUser = await tx.select().from(users).where(eq(users.id, userId));
+
+        return {
+          success: true,
+          taskId,
+          reward: {
+            cs: rewardCs,
+            chst: rewardChst,
+          },
+          new_balance: {
+            cs: updatedUser[0].csBalance,
+            chst: updatedUser[0].chstBalance,
+          },
+          completed_at: new Date().toISOString(),
+        };
       });
 
-      res.json(result);
+      if (typeof result === 'object' && 'success' in result) {
+        res.json(result);
+      }
     } catch (error: any) {
-      res.status(400).json({ message: error.message || "Failed to claim task" });
+      console.error("Task claim error:", error);
+      res.status(500).json({ error: error.message || "Failed to claim task" });
     }
   });
 
