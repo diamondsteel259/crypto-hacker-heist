@@ -452,6 +452,8 @@ export default function Admin() {
             💡 Game content is automatically seeded from server/seedGameContent.ts. To modify challenges, achievements, or cosmetic items, update that file and redeploy.
           </p>
         </Card>
+        <SeasonsAdmin />
+
 
         {/* Game Reset Section */}
         <Card className="p-6">
