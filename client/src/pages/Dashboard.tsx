@@ -1,13 +1,16 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import BlockTimer from "@/components/BlockTimer";
 import NetworkStats from "@/components/NetworkStats";
 import HashrateChart from "@/components/HashrateChart";
 import RecentBlocks from "@/components/RecentBlocks";
-import { Terminal, Gem, Package, TrendingUp, Zap, Shield, Sparkles } from "lucide-react";
+import { Terminal, Gem, Package, TrendingUp, Zap, Shield, Sparkles, Flame, Clock, Gift } from "lucide-react";
 import { initializeUser, getCurrentUserId } from "@/lib/user";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { User } from "@shared/schema";
 
 interface ActivePowerUp {
@@ -27,7 +30,20 @@ interface ActivePowerUpsResponse {
   };
 }
 
+interface UserStreak {
+  currentStreak: number;
+  longestStreak: number;
+  lastLoginDate: string;
+}
+
+interface HourlyBonusStatus {
+  available: boolean;
+  nextAvailableAt: string | null;
+  minutesRemaining: number;
+}
+
 export default function Dashboard() {
+  const { toast } = useToast();
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -58,6 +74,54 @@ export default function Dashboard() {
     queryKey: ['/api/user', userId, 'powerups', 'active'],
     enabled: !!userId,
     refetchInterval: 10000, // Refresh every 10 seconds to update time remaining
+  });
+
+  const { data: streak } = useQuery<UserStreak>({
+    queryKey: ['/api/user', userId, 'streak'],
+    enabled: !!userId,
+  });
+
+  const { data: hourlyBonusStatus } = useQuery<HourlyBonusStatus>({
+    queryKey: ['/api/user', userId, 'hourly-bonus', 'status'],
+    enabled: !!userId,
+    refetchInterval: 60000, // Check every minute
+  });
+
+  const checkinMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', `/api/user/${userId}/streak/checkin`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'streak'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user', userId] });
+      toast({
+        title: "Daily Check-in!",
+        description: data.message || `Earned ${data.reward} CS!`,
+      });
+    },
+  });
+
+  const claimHourlyMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', `/api/user/${userId}/hourly-bonus/claim`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'hourly-bonus'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user', userId] });
+      toast({
+        title: "Bonus Claimed!",
+        description: data.message || `Earned ${data.reward} CS!`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Claim Failed",
+        description: error.message || "Failed to claim hourly bonus",
+        variant: "destructive",
+      });
+    },
   });
 
   if (userError) {
