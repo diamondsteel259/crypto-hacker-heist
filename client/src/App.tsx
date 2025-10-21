@@ -36,6 +36,8 @@ function Router() {
       <Route path="/challenges" component={Challenges} />
       <Route path="/achievements" component={Achievements} />
       <Route path="/cosmetics" component={Cosmetics} />
+      <Route path="/packs" component={Packs} />
+      <Route path="/subscription" component={Subscription} />
       <Route path="/statistics" component={Statistics} />
       <Route path="/spin" component={SpinWheel} />
       <Route path="/admin" component={Admin} />
