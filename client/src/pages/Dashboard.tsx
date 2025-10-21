@@ -25,6 +25,19 @@ export default function Dashboard() {
     enabled: !!userId,
   });
 
+  const { data: equipment } = useQuery<any[]>({
+    queryKey: ['/api/user/equipment', userId],
+    queryFn: () => fetch(`/api/user/${userId}/equipment`).then(r => r.json()),
+    enabled: !!userId,
+  });
+
+  const { data: networkStats } = useQuery<any>({
+    queryKey: ['/api/user/network-stats', userId],
+    queryFn: () => fetch(`/api/user/${userId}/network-stats`).then(r => r.json()),
+    enabled: !!userId,
+    refetchInterval: 60000, // Refresh every minute
+  });
+
   if (userError) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -61,7 +74,9 @@ export default function Dashboard() {
               <Package className="w-3 md:w-4 h-3 md:h-4 text-cyber-blue" />
               <p className="text-[10px] md:text-xs text-muted-foreground uppercase">Your Rigs</p>
             </div>
-            <p className="text-lg md:text-2xl font-bold font-mono" data-testid="text-rig-count">-</p>
+            <p className="text-lg md:text-2xl font-bold font-mono" data-testid="text-rig-count">
+              {equipment?.length || 0}
+            </p>
             <p className="text-[10px] md:text-xs text-muted-foreground">Active</p>
           </Card>
 
@@ -81,7 +96,9 @@ export default function Dashboard() {
               <Terminal className="w-3 md:w-4 h-3 md:h-4 text-chart-2" />
               <p className="text-[10px] md:text-xs text-muted-foreground uppercase">Network %</p>
             </div>
-            <p className="text-lg md:text-2xl font-bold font-mono text-cyber-blue">-</p>
+            <p className="text-lg md:text-2xl font-bold font-mono text-cyber-blue">
+              {networkStats?.userSharePercentage?.toFixed(2) || '0.00'}%
+            </p>
             <p className="text-[10px] md:text-xs text-muted-foreground">of total</p>
           </Card>
         </div>
