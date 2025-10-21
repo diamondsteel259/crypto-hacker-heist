@@ -918,37 +918,20 @@ export default function Shop() {
                                 <p className="text-xs text-muted-foreground mb-2">
                                   +{(owned.equipmentType.baseHashrate * 0.05 * owned.quantity).toFixed(2)} GH/s
                                 </p>
-                                <div className="flex gap-1">
-                                  <Button 
-                                    size="sm" 
-                                    className="flex-1 text-xs"
-                                    onClick={() => {
-                                      componentUpgradeMutation.mutate({
-                                        equipmentId: owned.id,
-                                        componentType,
-                                        currency: "CS"
-                                      });
-                                    }}
-                                    disabled={componentUpgradeMutation.isPending || currentLevel >= 10}
-                                  >
-                                    {componentUpgradeMutation.isPending ? "..." : `CS: ${upgradeCost.toLocaleString()}`}
-                                  </Button>
-                                  <Button 
-                                    size="sm" 
-                                    variant="outline"
-                                    className="flex-1 text-xs"
-                                    onClick={() => {
-                                      componentUpgradeMutation.mutate({
-                                        equipmentId: owned.id,
-                                        componentType,
-                                        currency: "TON"
-                                      });
-                                    }}
-                                    disabled={componentUpgradeMutation.isPending || currentLevel >= 10}
-                                  >
-                                    {componentUpgradeMutation.isPending ? "..." : `TON: ${(upgradeCost * 0.001).toFixed(3)}`}
-                                  </Button>
-                                </div>
+                                <Button 
+                                  size="sm" 
+                                  className="w-full text-xs bg-matrix-green hover:bg-matrix-green/90 text-black"
+                                  onClick={() => {
+                                    componentUpgradeMutation.mutate({
+                                      equipmentId: owned.id,
+                                      componentType,
+                                      currency: "CS"
+                                    });
+                                  }}
+                                  disabled={componentUpgradeMutation.isPending || currentLevel >= 10}
+                                >
+                                  {componentUpgradeMutation.isPending ? "Upgrading..." : currentLevel >= 10 ? "Max Level" : `Upgrade: ${upgradeCost.toLocaleString()} CS`}
+                                </Button>
                               </div>
                             );
                           })}
