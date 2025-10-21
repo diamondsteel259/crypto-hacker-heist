@@ -1370,7 +1370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     // Check if this box type requires TON payment
-    const paidBoxTypes = ["basic", "advanced", "elite"];
+    const paidBoxTypes = ["basic", "premium", "epic"];
     const requiresPayment = paidBoxTypes.includes(boxType);
 
     if (requiresPayment && (!tonTransactionHash || !userWalletAddress || !tonAmount)) {
@@ -1441,8 +1441,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             totalCHST = Math.floor(Math.random() * 20) + 10; // 10-30 CHST
             break;
           
-          case "advanced":
-            // Advanced box: 2 TON
+          case "premium":
+            // Premium box: 2 TON (was "advanced")
             totalCS = Math.floor(Math.random() * 2000) + 2000; // 2000-4000 CS
             totalCHST = Math.floor(Math.random() * 100) + 100; // 100-200 CHST
             // 10% chance for equipment
@@ -1455,8 +1455,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
             break;
           
-          case "elite":
-            // Elite box: 5 TON
+          case "epic":
+            // Epic box: 5 TON (was "elite")
             totalCS = Math.floor(Math.random() * 5000) + 5000; // 5000-10000 CS
             totalCHST = Math.floor(Math.random() * 300) + 200; // 200-500 CHST
             // 25% chance for equipment
@@ -1467,6 +1467,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 quantity: 1,
               });
             }
+            break;
+          
+          case "daily-task":
+            // Free daily task box
+            totalCS = Math.floor(Math.random() * 100) + 50; // 50-150 CS
+            totalCHST = Math.floor(Math.random() * 10) + 5; // 5-15 CHST
+            break;
+          
+          case "invite-friend":
+            // Free invite friend box
+            totalCS = Math.floor(Math.random() * 200) + 100; // 100-300 CS
+            totalCHST = Math.floor(Math.random() * 20) + 10; // 10-30 CHST
             break;
           
           default:
