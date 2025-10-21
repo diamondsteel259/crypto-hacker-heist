@@ -257,6 +257,125 @@ export default function Admin() {
           </div>
         </Card>
 
+        {/* Equipment Price Management */}
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <DollarSign className="w-5 h-5" />
+            Equipment Price Management
+          </h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Modify equipment prices and currency types (CS, CHST, or TON)
+          </p>
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {equipmentLoading ? (
+              <p className="text-sm text-muted-foreground">Loading equipment...</p>
+            ) : (
+              equipment?.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between p-4 bg-muted/30 rounded-md"
+                >
+                  {editingEquipment === item.id ? (
+                    <div className="flex-1 flex items-center gap-3">
+                      <div className="flex-1">
+                        <p className="font-semibold text-sm mb-2">{item.name}</p>
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <Label htmlFor={`price-${item.id}`} className="text-xs">Price</Label>
+                            <Input
+                              id={`price-${item.id}`}
+                              type="number"
+                              value={editPrice}
+                              onChange={(e) => setEditPrice(e.target.value)}
+                              placeholder={item.basePrice.toString()}
+                              className="mt-1"
+                            />
+                          </div>
+                          <div className="w-32">
+                            <Label htmlFor={`currency-${item.id}`} className="text-xs">Currency</Label>
+                            <select
+                              id={`currency-${item.id}`}
+                              value={editCurrency}
+                              onChange={(e) => setEditCurrency(e.target.value)}
+                              className="mt-1 w-full h-10 px-3 rounded-md border border-input bg-background"
+                            >
+                              <option value="CS">CS</option>
+                              <option value="CHST">CHST</option>
+                              <option value="TON">TON</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            const newPrice = editPrice ? parseFloat(editPrice) : undefined;
+                            const newCurrency = editCurrency || undefined;
+                            if (newPrice || newCurrency) {
+                              updateEquipmentMutation.mutate({
+                                equipmentId: item.id,
+                                basePrice: newPrice,
+                                currency: newCurrency,
+                              });
+                            }
+                          }}
+                          disabled={updateEquipmentMutation.isPending}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setEditingEquipment(null);
+                            setEditPrice("");
+                            setEditCurrency("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <p className="font-semibold text-sm">{item.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.category} • {item.tier}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="font-mono text-sm font-semibold">
+                            {item.basePrice.toLocaleString()} {item.currency}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.baseHashrate.toLocaleString()} H/s
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setEditingEquipment(item.id);
+                            setEditPrice(item.basePrice.toString());
+                            setEditCurrency(item.currency);
+                          }}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
+
         {/* User Management */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -399,52 +518,6 @@ export default function Admin() {
               </div>
             </div>
           )}
-        </Card>
-
-        {/* Equipment Price Management */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Edit className="w-5 h-5 text-destructive mr-2" />
-            Equipment Price Management
-          </h3>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {equipmentLoading ? (
-              <p className="text-sm text-muted-foreground">Loading equipment...</p>
-            ) : (
-              equipment?.map((e) => (
-                <div
-                  key={e.id}
-                  className="flex items-center justify-between p-4 bg-muted/30 rounded-md"
-                  data-testid={`equipment-row-${e.id}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <p className="font-semibold">{e.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {e.currency} {e.price}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Input
-                      type="number"
-                      value={editPrice}
-                      onChange={(e) => setEditPrice(e.target.value)}
-                      placeholder="Price"
-                      className="mt-1 mr-2 w-24 text-right"
-                    />
-                    <Input
-                      type="text"
-                      value={editCurrency}
-                      onChange={(e) => setEditCurrency(e.target.value)}
-                      placeholder="Currency"
-                      className="mt-1 w-24 text-right"
-                    />
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
         </Card>
       </div>
     </div>
