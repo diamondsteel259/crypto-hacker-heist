@@ -361,10 +361,76 @@ export default function Shop() {
     },
   });
 
+  const premiumPowerUpMutation = useMutation({
+    mutationFn: async ({ powerUpType, tonAmount }: { powerUpType: string; tonAmount: number }) => {
+      console.log("Purchasing premium power-up:", { powerUpType, tonAmount });
+      
+      // Check wallet connection
+      if (!isWalletConnected()) {
+        throw new Error("Please connect your TON wallet first");
+      }
+
+      // Send TON transaction
+      const tonConnectUI = getTonConnectUI();
+      const userAddress = tonConnectUI.account?.address;
+      
+      if (!userAddress) {
+        throw new Error("Wallet not properly connected");
+      }
+
+      const result = await tonConnectUI.sendTransaction({
+        messages: [
+          {
+            address: TON_PAYMENT_ADDRESS,
+            amount: toNano(tonAmount).toString(),
+          },
+        ],
+        validUntil: Math.floor(Date.now() / 1000) + 600,
+      });
+      
+      console.log("TON transaction result:", result);
+
+      // Call backend to verify and grant power-up
+      const response = await apiRequest("POST", `/api/user/${userId}/powerups/purchase`, {
+        powerUpType,
+        tonTransactionHash: result.boc,
+        userWalletAddress: userAddress,
+        tonAmount,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to purchase power-up");
+      }
+
+      const data = await response.json();
+      return data;
+    },
+    onSuccess: (data) => {
+      console.log("Premium power-up purchased:", data);
+      queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
+      toast({ 
+        title: "Power-up activated!",
+        description: `${data.powerUpType} active for 1 hour! +${data.boost_percentage}% boost`
+      });
+    },
+    onError: (error: any) => {
+      console.error("Premium power-up purchase failed:", error);
+      toast({ 
+        title: "Purchase failed", 
+        description: error.message || "Failed to purchase power-up. Please try again.",
+        variant: "destructive" 
+      });
+    },
+  });
+
   const lootBoxOpenMutation = useMutation({
     mutationFn: async ({ boxType, cost }: { boxType: string; cost?: number }) => {
       console.log("Opening loot box:", { boxType, cost });
       
+      let txHash = undefined;
+      let userAddress = undefined;
+
       if (cost && cost > 0) {
         // TON purchase for paid loot boxes
         if (!isWalletConnected()) {
@@ -372,6 +438,12 @@ export default function Shop() {
         }
 
         const tonConnectUI = getTonConnectUI();
+        userAddress = tonConnectUI.account?.address;
+
+        if (!userAddress) {
+          throw new Error("Wallet not properly connected");
+        }
+
         const result = await tonConnectUI.sendTransaction({
           messages: [
             {
@@ -382,11 +454,19 @@ export default function Shop() {
           validUntil: Math.floor(Date.now() / 1000) + 600,
         });
         console.log("TON transaction result:", result);
+        txHash = result.boc;
       }
 
-      const response = await apiRequest("POST", `/api/user/${userId}/lootboxes/open`, {
-        boxType
+      const response = await apiRequest("POST", `/api/user/${userId}/lootbox/open`, {
+        boxType,
+        ...(txHash && { tonTransactionHash: txHash, userWalletAddress: userAddress, tonAmount: cost })
       });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to open loot box");
+      }
+
       const data = await response.json();
       return data;
     },
