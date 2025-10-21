@@ -7,7 +7,7 @@ import { Crown, Check, Zap, Gift, Star, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { sendTonTransaction, isWalletConnected, getTonConnectUI } from "@/lib/tonConnect";
+import { useTonConnect, sendTonTransaction } from "@/lib/tonConnect";
 
 const TON_PAYMENT_ADDRESS = "UQBdFhwckY9C8MU0AC4uiPbRH_C3QIjZH6OzV47ROfHjnyfe";
 
@@ -34,6 +34,7 @@ const benefits = [
 export default function SubscriptionPage() {
   const { toast } = useToast();
   const userId = getCurrentUserId();
+  const { tonConnectUI, isConnected } = useTonConnect();
   const [subscribing, setSubscribing] = useState<string | null>(null);
 
   const { data: subInfo } = useQuery<Subscription>({
@@ -90,8 +91,7 @@ export default function SubscriptionPage() {
   });
 
   const handleSubscribe = async (type: "monthly" | "lifetime", price: number) => {
-    if (!isWalletConnected()) {
-      const tonConnectUI = getTonConnectUI();
+    if (!isConnected) {
       await tonConnectUI.openModal();
       return;
     }
@@ -100,6 +100,7 @@ export default function SubscriptionPage() {
 
     try {
       const txHash = await sendTonTransaction(
+        tonConnectUI,
         TON_PAYMENT_ADDRESS,
         price.toString(),
         `Subscription: ${type}`
