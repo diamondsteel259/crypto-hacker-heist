@@ -607,6 +607,22 @@ export type AutoUpgradeSetting = typeof autoUpgradeSettings.$inferSelect;
 export type InsertAutoUpgradeSetting = z.infer<typeof insertAutoUpgradeSettingSchema>;
 
 
+// Pack Purchase schemas and types
+export const insertPackPurchaseSchema = createInsertSchema(packPurchases).omit({ id: true, purchasedAt: true });
+
+export type PackPurchase = typeof packPurchases.$inferSelect;
+export type InsertPackPurchase = z.infer<typeof insertPackPurchaseSchema>;
+
+// Prestige schemas and types
+export const insertUserPrestigeSchema = createInsertSchema(userPrestige).omit({ id: true, createdAt: true });
+export const insertPrestigeHistorySchema = createInsertSchema(prestigeHistory).omit({ id: true, prestigedAt: true });
+
+export type UserPrestige = typeof userPrestige.$inferSelect;
+export type InsertUserPrestige = z.infer<typeof insertUserPrestigeSchema>;
+export type PrestigeHistory = typeof prestigeHistory.$inferSelect;
+export type InsertPrestigeHistory = z.infer<typeof insertPrestigeHistorySchema>;
+
+
 // Subscription schemas and types
 export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, startDate: true });
 
