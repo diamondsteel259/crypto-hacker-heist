@@ -223,7 +223,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Calculate upgrade cost based on component type and level
-        const baseCost = owned[0].equipmentType.basePrice * 0.1; // 10% of equipment base price
+        const baseCost = owned[0].equipment_types.basePrice * 0.1; // 10% of equipment base price
         const componentMultiplier = {
           "RAM": 0.8,
           "CPU": 1.2,
@@ -258,7 +258,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(eq(componentUpgrades.id, component[0].id));
 
         // Calculate hashrate increase (5% per component level)
-        const hashrateIncrease = owned[0].equipmentType.baseHashrate * 0.05 * owned[0].ownedEquipment.quantity;
+        const hashrateIncrease = owned[0].equipment_types.baseHashrate * 0.05 * owned[0].owned_equipment.quantity;
         
         // Update equipment hashrate
         await tx.update(ownedEquipment)
