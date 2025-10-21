@@ -7,7 +7,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Palette, Check, ShoppingCart, Sparkles } from "lucide-react";
 import { initializeUser } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { sendTonTransaction } from "@/lib/tonConnect";
+import { sendTonTransaction, isWalletConnected, getTonConnectUI } from "@/lib/tonConnect";
+
+const TON_PAYMENT_ADDRESS = "UQBdFhwckY9C8MU0AC4uiPbRH_C3QIjZH6OzV47ROfHjnyfe";
 
 interface CosmeticItem {
   id: number;
@@ -92,20 +94,23 @@ export default function Cosmetics() {
 
     if (currency === 'TON' && item.priceTon) {
       // Handle TON payment
+      if (!isWalletConnected()) {
+        const tonConnectUI = getTonConnectUI();
+        await tonConnectUI.openModal();
+        return;
+      }
+
       try {
-        const result = await sendTonTransaction(item.priceTon);
-        if (result.success) {
+        const txHash = await sendTonTransaction(TON_PAYMENT_ADDRESS, item.priceTon, `Cosmetic: ${item.name}`);
+        
+        if (txHash) {
           purchaseMutation.mutate({
             cosmeticId: item.itemId,
             currency: 'TON',
-            tonData: result,
+            tonData: { txHash },
           });
         } else {
-          toast({
-            title: "Transaction Cancelled",
-            description: "TON transaction was cancelled",
-            variant: "destructive",
-          });
+          throw new Error("Transaction cancelled");
         }
       } catch (error: any) {
         toast({
