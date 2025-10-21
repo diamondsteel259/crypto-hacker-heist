@@ -3163,6 +3163,127 @@ async function registerRoutes(app2) {
       res.status(500).json({ error: error.message || "Failed to execute auto-upgrade" });
     }
   });
+  app2.get("/api/seasons", async (req, res) => {
+    try {
+      const allSeasons = await db.select().from(seasons).orderBy(sql4`${seasons.startDate} DESC`);
+      res.json(allSeasons);
+    } catch (error) {
+      console.error("Get seasons error:", error);
+      res.status(500).json({ error: error.message || "Failed to get seasons" });
+    }
+  });
+  app2.get("/api/seasons/active", async (req, res) => {
+    try {
+      const now = /* @__PURE__ */ new Date();
+      const activeSeason = await db.select().from(seasons).where(and3(
+        eq3(seasons.isActive, true),
+        sql4`${seasons.startDate} <= ${now}`,
+        sql4`${seasons.endDate} >= ${now}`
+      )).limit(1);
+      res.json(activeSeason[0] || null);
+    } catch (error) {
+      console.error("Get active season error:", error);
+      res.status(500).json({ error: error.message || "Failed to get active season" });
+    }
+  });
+  app2.post("/api/admin/seasons", validateTelegramAuth, requireAdmin, async (req, res) => {
+    const { seasonId, name, description, startDate, endDate, bonusMultiplier, specialRewards } = req.body;
+    if (!seasonId || !name || !description || !startDate || !endDate) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+    try {
+      const existing = await db.select().from(seasons).where(eq3(seasons.seasonId, seasonId)).limit(1);
+      if (existing.length > 0) {
+        return res.status(400).json({ error: "Season ID already exists" });
+      }
+      const newSeason = await db.insert(seasons).values({
+        seasonId,
+        name,
+        description,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        bonusMultiplier: bonusMultiplier || 1,
+        specialRewards: specialRewards || null,
+        isActive: false
+      }).returning();
+      res.json({
+        success: true,
+        message: "Season created successfully",
+        season: newSeason[0]
+      });
+    } catch (error) {
+      console.error("Create season error:", error);
+      res.status(500).json({ error: error.message || "Failed to create season" });
+    }
+  });
+  app2.put("/api/admin/seasons/:seasonId", validateTelegramAuth, requireAdmin, async (req, res) => {
+    const { seasonId } = req.params;
+    const { name, description, startDate, endDate, bonusMultiplier, specialRewards } = req.body;
+    try {
+      const existing = await db.select().from(seasons).where(eq3(seasons.seasonId, seasonId)).limit(1);
+      if (existing.length === 0) {
+        return res.status(404).json({ error: "Season not found" });
+      }
+      const updateData = {};
+      if (name !== void 0) updateData.name = name;
+      if (description !== void 0) updateData.description = description;
+      if (startDate !== void 0) updateData.startDate = new Date(startDate);
+      if (endDate !== void 0) updateData.endDate = new Date(endDate);
+      if (bonusMultiplier !== void 0) updateData.bonusMultiplier = bonusMultiplier;
+      if (specialRewards !== void 0) updateData.specialRewards = specialRewards;
+      const updated = await db.update(seasons).set(updateData).where(eq3(seasons.id, existing[0].id)).returning();
+      res.json({
+        success: true,
+        message: "Season updated successfully",
+        season: updated[0]
+      });
+    } catch (error) {
+      console.error("Update season error:", error);
+      res.status(500).json({ error: error.message || "Failed to update season" });
+    }
+  });
+  app2.post("/api/admin/seasons/:seasonId/toggle", validateTelegramAuth, requireAdmin, async (req, res) => {
+    const { seasonId } = req.params;
+    const { isActive } = req.body;
+    if (isActive === void 0) {
+      return res.status(400).json({ error: "isActive field is required" });
+    }
+    try {
+      const existing = await db.select().from(seasons).where(eq3(seasons.seasonId, seasonId)).limit(1);
+      if (existing.length === 0) {
+        return res.status(404).json({ error: "Season not found" });
+      }
+      if (isActive) {
+        await db.update(seasons).set({ isActive: false }).where(eq3(seasons.isActive, true));
+      }
+      const updated = await db.update(seasons).set({ isActive }).where(eq3(seasons.id, existing[0].id)).returning();
+      res.json({
+        success: true,
+        message: isActive ? "Season activated" : "Season deactivated",
+        season: updated[0]
+      });
+    } catch (error) {
+      console.error("Toggle season error:", error);
+      res.status(500).json({ error: error.message || "Failed to toggle season" });
+    }
+  });
+  app2.delete("/api/admin/seasons/:seasonId", validateTelegramAuth, requireAdmin, async (req, res) => {
+    const { seasonId } = req.params;
+    try {
+      const existing = await db.select().from(seasons).where(eq3(seasons.seasonId, seasonId)).limit(1);
+      if (existing.length === 0) {
+        return res.status(404).json({ error: "Season not found" });
+      }
+      await db.delete(seasons).where(eq3(seasons.id, existing[0].id));
+      res.json({
+        success: true,
+        message: "Season deleted successfully"
+      });
+    } catch (error) {
+      console.error("Delete season error:", error);
+      res.status(500).json({ error: error.message || "Failed to delete season" });
+    }
+  });
   const httpServer = createServer(app2);
   return httpServer;
 }
