@@ -51,7 +51,7 @@ export function validateTelegramWebAppData(
     const user = JSON.parse(userParam);
     const authDate = parseInt(urlParams.get('auth_date') || '0');
 
-    const maxAge = 24 * 60 * 60;
+    const maxAge = 7 * 24 * 60 * 60; // 7 days
     if (Date.now() / 1000 - authDate > maxAge) {
       return null;
     }
