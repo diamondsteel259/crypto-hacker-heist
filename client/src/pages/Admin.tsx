@@ -140,6 +140,37 @@ export default function Admin() {
     },
   });
 
+  const recalculateHashratesMutation = useMutation({
+    mutationFn: async () => {
+      const initData = getTelegramInitData();
+      if (!initData) throw new Error('Not authenticated');
+      
+      const response = await fetch(`/api/admin/recalculate-hashrates`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': initData,
+        },
+      });
+      if (!response.ok) throw new Error('Failed to recalculate hashrates');
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      toast({
+        title: "Hashrates Recalculated",
+        description: `Updated ${data.usersUpdated} out of ${data.totalUsers} users with corrected hashrates`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Recalculation Failed",
+        description: error.message || "Failed to recalculate hashrates",
+        variant: "destructive",
+      });
+    },
+  });
+
   const updateEquipmentMutation = useMutation({
     mutationFn: async ({ equipmentId, basePrice, currency }: { equipmentId: string; basePrice?: number; currency?: string }) => {
       const initData = getTelegramInitData();
