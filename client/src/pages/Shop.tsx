@@ -539,6 +539,16 @@ export default function Shop() {
       let userAddress = undefined;
 
       if (cost && cost > 0) {
+        // Confirmation dialog for paid loot boxes
+        const boxName = boxType === 'basic' ? 'Basic Box' : boxType === 'premium' ? 'Premium Box' : 'Epic Box';
+        const confirmed = window.confirm(
+          `Open ${boxName} for ${cost} TON?\n\nExpected rewards: CS/CHST (100-110% RTP)\nThis will deduct ${cost} TON from your wallet.`
+        );
+        
+        if (!confirmed) {
+          throw new Error("Purchase cancelled by user");
+        }
+        
         // TON purchase for paid loot boxes
         if (!isWalletConnected()) {
           throw new Error("Please connect your TON wallet first");
