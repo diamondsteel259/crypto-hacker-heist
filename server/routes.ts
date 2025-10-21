@@ -1127,6 +1127,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(result);
     } catch (error: any) {
       console.error("Daily claim error:", error);
+      
+      // Handle rate limit errors (429)
+      if (error.statusCode === 429) {
+        return res.status(429).json({ 
+          error: error.message,
+          remaining_claims: error.remaining_claims || 0,
+          next_reset: error.next_reset
+        });
+      }
+      
+      // Handle validation errors (400)
+      if (error.message && (error.message.includes('Invalid') || error.message.includes('not found'))) {
+        return res.status(400).json({ error: error.message });
+      }
+      
+      // Generic server error
       res.status(500).json({ error: error.message || "Failed to claim reward" });
     }
   });
