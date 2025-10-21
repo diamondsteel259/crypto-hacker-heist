@@ -6,6 +6,8 @@ import { eq } from 'drizzle-orm';
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const WEB_APP_URL = process.env.WEB_APP_URL || 'https://crypto-hacker-heist.onrender.com';
 const ADMIN_WHITELIST = process.env.ADMIN_WHITELIST?.split(',').map(id => parseInt(id.trim())) || [];
+const WEBHOOK_DOMAIN = process.env.WEBHOOK_DOMAIN || 'https://crypto-hacker-heist.onrender.com';
+const USE_WEBHOOKS = process.env.NODE_ENV === 'production'; // Use webhooks in production
 
 if (!BOT_TOKEN) {
   console.warn('⚠️  BOT_TOKEN not set - Bot commands will not work');
@@ -135,12 +137,57 @@ export async function initializeBot() {
   });
 
   try {
-    await bot.launch();
-    console.log('🤖 Bot started successfully');
-  } catch (error) {
+    if (USE_WEBHOOKS) {
+      // Use webhooks in production to avoid 409 conflicts
+      console.log('🤖 Starting bot with webhooks...');
+      const webhookPath = `/telegram-webhook/${BOT_TOKEN}`;
+      await bot.telegram.setWebhook(`${WEBHOOK_DOMAIN}${webhookPath}`);
+      console.log(`🤖 Webhook set to: ${WEBHOOK_DOMAIN}${webhookPath}`);
+      console.log('🤖 Bot configured for webhooks (webhook handler needs to be registered in routes)');
+    } else {
+      // Use polling in development
+      console.log('🤖 Starting bot with long polling...');
+      await bot.launch();
+      console.log('🤖 Bot started successfully with polling');
+    }
+  } catch (error: any) {
     console.error('Failed to start bot:', error);
+    
+    // Handle specific error cases
+    if (error.response?.error_code === 409) {
+      console.error('⚠️  Bot conflict (409): Another instance is running. This is normal during deployments.');
+      console.log('💡 Tip: The bot will work once the old instance stops. Commands may be delayed by 1-2 minutes.');
+    } else if (error.code === 'ETELEGRAM') {
+      console.error('⚠️  Telegram API error. Check your BOT_TOKEN.');
+    }
+    
     // Don't throw - let the server continue without the bot
   }
+
+  // Graceful shutdown
+  process.once('SIGINT', () => {
+    if (bot) {
+      console.log('🤖 Stopping bot...');
+      bot.stop('SIGINT');
+    }
+  });
+  process.once('SIGTERM', () => {
+    if (bot) {
+      console.log('🤖 Stopping bot...');
+      bot.stop('SIGTERM');
+    }
+  });
+}
+
+// Export bot middleware for webhook handling
+export function getBotWebhookHandler() {
+  if (!bot || !BOT_TOKEN) {
+    return null;
+  }
+  return {
+    path: `/telegram-webhook/${BOT_TOKEN}`,
+    handler: bot.webhookCallback(`/telegram-webhook/${BOT_TOKEN}`)
+  };
 }
 
 export { bot };
