@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Palette, Check, ShoppingCart, Sparkles } from "lucide-react";
 import { initializeUser } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { sendTONTransaction } from "@/lib/tonConnect";
+import { sendTonTransaction } from "@/lib/tonConnect";
 
 interface CosmeticItem {
   id: number;
@@ -93,7 +93,7 @@ export default function Cosmetics() {
     if (currency === 'TON' && item.priceTon) {
       // Handle TON payment
       try {
-        const result = await sendTONTransaction(item.priceTon);
+        const result = await sendTonTransaction(item.priceTon);
         if (result.success) {
           purchaseMutation.mutate({
             cosmeticId: item.itemId,
