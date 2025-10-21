@@ -7,12 +7,20 @@ import { eq, and, sql } from "drizzle-orm";
 import { validateTelegramAuth, requireAdmin, verifyUserAccess, type AuthRequest } from "./middleware/auth";
 import { verifyTONTransaction, getGameWalletAddress, isValidTONAddress } from "./tonVerification";
 import { miningService } from "./mining";
+import { getBotWebhookHandler } from "./bot";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health endpoint for Render
   app.get("/healthz", async (_req, res) => {
     res.status(200).json({ ok: true });
   });
+  
+  // Telegram bot webhook handler (for production)
+  const botWebhook = getBotWebhookHandler();
+  if (botWebhook) {
+    app.post(botWebhook.path, botWebhook.handler);
+    console.log(`🤖 Telegram webhook registered at ${botWebhook.path}`);
+  }
   
   // Auth and user routes
   app.post("/api/auth/telegram", validateTelegramAuth, async (req: AuthRequest, res) => {
