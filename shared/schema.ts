@@ -345,6 +345,47 @@ export const autoUpgradeSettings = pgTable("auto_upgrade_settings", {
 }, (table) => ({
   userEquipmentComponentUnique: unique().on(table.ownedEquipmentId, table.componentType),
   userAutoUpgradeIdx: index("auto_upgrade_settings_user_idx").on(table.userId),
+
+// Starter Packs
+export const packPurchases = pgTable("pack_purchases", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  packType: text("pack_type").notNull(), // starter, pro, whale
+  tonAmount: decimal("ton_amount", { precision: 10, scale: 2 }).notNull(),
+  tonTransactionHash: text("ton_transaction_hash").notNull().unique(),
+  tonTransactionVerified: boolean("ton_transaction_verified").notNull().default(false),
+  rewardsJson: text("rewards_json").notNull(), // JSON string of rewards granted
+  purchasedAt: timestamp("purchased_at").notNull().defaultNow(),
+}, (table) => ({
+  userIdx: index("pack_purchases_user_idx").on(table.userId),
+  packTypeIdx: index("pack_purchases_type_idx").on(table.packType),
+  userPackUnique: unique().on(table.userId, table.packType), // One purchase per pack type per user
+}));
+
+// Prestige System
+export const userPrestige = pgTable("user_prestige", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }).unique(),
+  prestigeLevel: integer("prestige_level").notNull().default(0),
+  totalPrestiges: integer("total_prestiges").notNull().default(0),
+  lastPrestigeAt: timestamp("last_prestige_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  userPrestigeIdx: index("user_prestige_user_idx").on(table.userId),
+}));
+
+export const prestigeHistory = pgTable("prestige_history", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  fromLevel: integer("from_level").notNull(),
+  toLevel: integer("to_level").notNull(),
+  csBalanceReset: real("cs_balance_reset").notNull(),
+  equipmentReset: text("equipment_reset"), // JSON of equipment that was reset
+  prestigedAt: timestamp("prestiged_at").notNull().defaultNow(),
+}, (table) => ({
+  userHistoryIdx: index("prestige_history_user_idx").on(table.userId),
+}));
+
 }));
 
 
