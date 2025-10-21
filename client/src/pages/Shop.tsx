@@ -267,6 +267,15 @@ export default function Shop() {
     mutationFn: async ({ equipmentTypeId, price }: { equipmentTypeId: string; price: number }) => {
       console.log("Attempting TON purchase:", { equipmentTypeId, price });
       
+      // Confirmation dialog for TON purchases
+      const confirmed = window.confirm(
+        `Purchase this equipment for ${price} TON?\n\nThis will deduct ${price} TON from your wallet.`
+      );
+      
+      if (!confirmed) {
+        throw new Error("Purchase cancelled by user");
+      }
+      
       if (!isWalletConnected()) {
         throw new Error("Please connect your TON wallet first");
       }
