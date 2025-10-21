@@ -2689,6 +2689,175 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==========================================
+  // PRICE ALERTS ROUTES
+  // ==========================================
+
+  // Get user's price alerts
+  app.get("/api/user/:userId/price-alerts", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const alerts = await db.select().from(priceAlerts)
+        .leftJoin(equipmentTypes, eq(priceAlerts.equipmentTypeId, equipmentTypes.id))
+        .where(eq(priceAlerts.userId, user.telegramId))
+        .orderBy(priceAlerts.createdAt);
+
+      const alertsWithStatus = alerts.map(row => ({
+        ...row.price_alerts,
+        equipment: row.equipment_types,
+        canAfford: user.csBalance >= (row.equipment_types?.basePrice || 0),
+      }));
+
+      res.json(alertsWithStatus);
+    } catch (error: any) {
+      console.error("Get price alerts error:", error);
+      res.status(500).json({ error: error.message || "Failed to get price alerts" });
+    }
+  });
+
+  // Create price alert
+  app.post("/api/user/:userId/price-alerts", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { equipmentTypeId } = req.body;
+
+    if (!equipmentTypeId) {
+      return res.status(400).json({ error: "Equipment type ID is required" });
+    }
+
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Get equipment details
+      const equipment = await db.select().from(equipmentTypes)
+        .where(eq(equipmentTypes.id, equipmentTypeId))
+        .limit(1);
+
+      if (!equipment[0]) {
+        return res.status(404).json({ error: "Equipment not found" });
+      }
+
+      // Check if alert already exists
+      const existingAlert = await db.select().from(priceAlerts)
+        .where(and(
+          eq(priceAlerts.userId, user.telegramId),
+          eq(priceAlerts.equipmentTypeId, equipmentTypeId)
+        ))
+        .limit(1);
+
+      if (existingAlert.length > 0) {
+        return res.status(400).json({ error: "Alert already exists for this equipment" });
+      }
+
+      // Create alert
+      const newAlert = await db.insert(priceAlerts).values({
+        userId: user.telegramId,
+        equipmentTypeId,
+        targetPrice: equipment[0].basePrice,
+        triggered: false,
+      }).returning();
+
+      res.json({
+        success: true,
+        message: `Alert set for ${equipment[0].name}`,
+        alert: newAlert[0],
+      });
+    } catch (error: any) {
+      console.error("Create price alert error:", error);
+      res.status(500).json({ error: error.message || "Failed to create price alert" });
+    }
+  });
+
+  // Delete price alert
+  app.delete("/api/user/:userId/price-alerts/:alertId", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId, alertId } = req.params;
+
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Verify ownership
+      const alert = await db.select().from(priceAlerts)
+        .where(and(
+          eq(priceAlerts.id, parseInt(alertId)),
+          eq(priceAlerts.userId, user.telegramId)
+        ))
+        .limit(1);
+
+      if (!alert[0]) {
+        return res.status(404).json({ error: "Alert not found" });
+      }
+
+      await db.delete(priceAlerts)
+        .where(eq(priceAlerts.id, parseInt(alertId)));
+
+      res.json({
+        success: true,
+        message: "Alert deleted successfully",
+      });
+    } catch (error: any) {
+      console.error("Delete price alert error:", error);
+      res.status(500).json({ error: error.message || "Failed to delete price alert" });
+    }
+  });
+
+  // Check price alerts (returns alerts that can now be afforded)
+  app.get("/api/user/:userId/price-alerts/check", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const alerts = await db.select().from(priceAlerts)
+        .leftJoin(equipmentTypes, eq(priceAlerts.equipmentTypeId, equipmentTypes.id))
+        .where(and(
+          eq(priceAlerts.userId, user.telegramId),
+          eq(priceAlerts.triggered, false)
+        ));
+
+      const triggeredAlerts = [];
+
+      for (const row of alerts) {
+        if (row.equipment_types && user.csBalance >= row.equipment_types.basePrice) {
+          // Mark as triggered
+          await db.update(priceAlerts)
+            .set({
+              triggered: true,
+              triggeredAt: new Date(),
+            })
+            .where(eq(priceAlerts.id, row.price_alerts.id));
+
+          triggeredAlerts.push({
+            ...row.price_alerts,
+            equipment: row.equipment_types,
+          });
+        }
+      }
+
+      res.json({
+        triggered: triggeredAlerts.length > 0,
+        alerts: triggeredAlerts,
+      });
+    } catch (error: any) {
+      console.error("Check price alerts error:", error);
+      res.status(500).json({ error: error.message || "Failed to check price alerts" });
+    }
+  });
+
+
   const httpServer = createServer(app);
 
   return httpServer;
