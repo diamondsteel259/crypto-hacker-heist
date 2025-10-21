@@ -622,6 +622,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const deletedDailyClaims = await tx.delete(dailyClaims);
         const deletedUserTasks = await tx.delete(userTasks);
         const deletedBlockRewards = await tx.delete(blockRewards);
+        const deletedBlocks = await tx.delete(blocks);
         const deletedComponentUpgrades = await tx.delete(componentUpgrades);
         const deletedOwnedEquipment = await tx.delete(ownedEquipment);
         const deletedReferrals = await tx.delete(referrals);
@@ -647,6 +648,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             daily_claims: deletedDailyClaims.length || 0,
             user_tasks: deletedUserTasks.length || 0,
             block_rewards: deletedBlockRewards.length || 0,
+            blocks: deletedBlocks.length || 0,
             component_upgrades: deletedComponentUpgrades.length || 0,
             owned_equipment: deletedOwnedEquipment.length || 0,
             referrals: deletedReferrals.length || 0,
@@ -654,6 +656,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           reset_at: new Date().toISOString(),
         };
       });
+
+      // Reset mining service block counter
+      await miningService.initializeBlockNumber();
 
       res.json(result);
     } catch (error: any) {
