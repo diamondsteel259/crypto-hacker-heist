@@ -3281,6 +3281,417 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+
+  // ==========================================
+  // STARTER/PRO/WHALE PACKS ROUTES
+  // ==========================================
+
+  // Get user's pack purchases
+  app.get("/api/user/:userId/packs", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const purchases = await db.select().from(packPurchases)
+        .where(eq(packPurchases.userId, user.telegramId))
+        .orderBy(packPurchases.purchasedAt);
+
+      res.json(purchases);
+    } catch (error: any) {
+      console.error("Get pack purchases error:", error);
+      res.status(500).json({ error: error.message || "Failed to get pack purchases" });
+    }
+  });
+
+  // Purchase pack with TON
+  app.post("/api/user/:userId/packs/purchase", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { packType, tonTransactionHash, tonAmount } = req.body;
+
+    if (!packType || !tonTransactionHash || !tonAmount) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const validPacks = ["starter", "pro", "whale"];
+    if (!validPacks.includes(packType)) {
+      return res.status(400).json({ error: "Invalid pack type" });
+    }
+
+    try {
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users)
+          .where(eq(users.id, userId))
+          .for('update');
+        
+        if (!user[0]) throw new Error("User not found");
+
+        // Check if pack already purchased
+        const existing = await tx.select().from(packPurchases)
+          .where(and(
+            eq(packPurchases.userId, user[0].telegramId),
+            eq(packPurchases.packType, packType)
+          ))
+          .limit(1);
+
+        if (existing.length > 0) {
+          throw new Error("You have already purchased this pack");
+        }
+
+        // Define pack rewards
+        const packRewards = {
+          starter: { cs: 50000, equipment: ["laptop-gaming"], chst: 0 },
+          pro: { cs: 250000, equipment: ["pc-server-farm"], chst: 100 },
+          whale: { cs: 1000000, equipment: ["asic-s19"], chst: 500 },
+        };
+
+        const rewards = packRewards[packType as keyof typeof packRewards];
+
+        // Grant rewards
+        await tx.update(users)
+          .set({
+            csBalance: user[0].csBalance + rewards.cs,
+            chstBalance: user[0].chstBalance + rewards.chst,
+          })
+          .where(eq(users.id, userId));
+
+        // Grant equipment
+        for (const equipId of rewards.equipment) {
+          const equipType = await tx.select().from(equipmentTypes)
+            .where(eq(equipmentTypes.id, equipId))
+            .limit(1);
+
+          if (equipType[0]) {
+            const existing = await tx.select().from(ownedEquipment)
+              .where(and(
+                eq(ownedEquipment.userId, userId),
+                eq(ownedEquipment.equipmentTypeId, equipId)
+              ))
+              .limit(1);
+
+            if (existing.length > 0) {
+              await tx.update(ownedEquipment)
+                .set({ quantity: existing[0].quantity + 1 })
+                .where(eq(ownedEquipment.id, existing[0].id));
+            } else {
+              await tx.insert(ownedEquipment).values({
+                userId,
+                equipmentTypeId: equipId,
+                quantity: 1,
+                upgradeLevel: 0,
+                currentHashrate: equipType[0].baseHashrate,
+              });
+            }
+          }
+        }
+
+        // Record purchase
+        const purchase = await tx.insert(packPurchases).values({
+          userId: user[0].telegramId,
+          packType,
+          tonAmount,
+          tonTransactionHash,
+          tonTransactionVerified: true,
+          rewardsJson: JSON.stringify(rewards),
+        }).returning();
+
+        return { purchase: purchase[0], rewards };
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['/api/user', userId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'equipment'] });
+
+      res.json({
+        success: true,
+        message: "Pack purchased successfully!",
+        purchase: result.purchase,
+        rewards: result.rewards,
+      });
+    } catch (error: any) {
+      console.error("Purchase pack error:", error);
+      res.status(500).json({ error: error.message || "Failed to purchase pack" });
+    }
+  });
+
+  // ==========================================
+  // PRESTIGE SYSTEM ROUTES
+  // ==========================================
+
+  // Get user's prestige info
+  app.get("/api/user/:userId/prestige", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      let prestige = await db.select().from(userPrestige)
+        .where(eq(userPrestige.userId, user.telegramId))
+        .limit(1);
+
+      if (prestige.length === 0) {
+        // Create default prestige record
+        const created = await db.insert(userPrestige).values({
+          userId: user.telegramId,
+          prestigeLevel: 0,
+          totalPrestiges: 0,
+        }).returning();
+        prestige = created;
+      }
+
+      const history = await db.select().from(prestigeHistory)
+        .where(eq(prestigeHistory.userId, user.telegramId))
+        .orderBy(sql`${prestigeHistory.prestigedAt} DESC`)
+        .limit(10);
+
+      // Calculate eligibility (need 1M CS and 100 total hashrate)
+      const eligible = user.csBalance >= 1000000 && user.totalHashrate >= 100;
+
+      res.json({
+        prestige: prestige[0],
+        history,
+        eligible,
+        currentBoost: prestige[0].prestigeLevel * 5, // 5% per prestige level
+      });
+    } catch (error: any) {
+      console.error("Get prestige error:", error);
+      res.status(500).json({ error: error.message || "Failed to get prestige info" });
+    }
+  });
+
+  // Execute prestige
+  app.post("/api/user/:userId/prestige/execute", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users)
+          .where(eq(users.id, userId))
+          .for('update');
+        
+        if (!user[0]) throw new Error("User not found");
+
+        // Check eligibility
+        if (user[0].csBalance < 1000000 || user[0].totalHashrate < 100) {
+          throw new Error("Not eligible for prestige. Need 1M CS and 100 total hashrate.");
+        }
+
+        // Get prestige record
+        let prestige = await tx.select().from(userPrestige)
+          .where(eq(userPrestige.userId, user[0].telegramId))
+          .limit(1);
+
+        if (prestige.length === 0) {
+          const created = await tx.insert(userPrestige).values({
+            userId: user[0].telegramId,
+            prestigeLevel: 0,
+            totalPrestiges: 0,
+          }).returning();
+          prestige = created;
+        }
+
+        const currentPrestige = prestige[0];
+
+        // Get equipment for history
+        const equipment = await tx.select().from(ownedEquipment)
+          .where(eq(ownedEquipment.userId, userId));
+
+        // Record history
+        await tx.insert(prestigeHistory).values({
+          userId: user[0].telegramId,
+          fromLevel: currentPrestige.prestigeLevel,
+          toLevel: currentPrestige.prestigeLevel + 1,
+          csBalanceReset: user[0].csBalance,
+          equipmentReset: JSON.stringify(equipment),
+        });
+
+        // Update prestige level
+        await tx.update(userPrestige)
+          .set({
+            prestigeLevel: currentPrestige.prestigeLevel + 1,
+            totalPrestiges: currentPrestige.totalPrestiges + 1,
+            lastPrestigeAt: new Date(),
+          })
+          .where(eq(userPrestige.id, currentPrestige.id));
+
+        // Reset user (keep CHST, reset CS and equipment)
+        await tx.update(users)
+          .set({
+            csBalance: 0,
+            totalHashrate: 0,
+          })
+          .where(eq(users.id, userId));
+
+        // Delete equipment
+        await tx.delete(ownedEquipment)
+          .where(eq(ownedEquipment.userId, userId));
+
+        // Delete component upgrades
+        await tx.delete(componentUpgrades)
+          .where(sql`${componentUpgrades.ownedEquipmentId} IN (SELECT id FROM ${ownedEquipment} WHERE user_id = ${userId})`);
+
+        return { newPrestigeLevel: currentPrestige.prestigeLevel + 1 };
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['/api/user', userId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'equipment'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'prestige'] });
+
+      res.json({
+        success: true,
+        message: `Prestige ${result.newPrestigeLevel} achieved!`,
+        newPrestigeLevel: result.newPrestigeLevel,
+        permanentBoost: result.newPrestigeLevel * 5,
+      });
+    } catch (error: any) {
+      console.error("Execute prestige error:", error);
+      res.status(500).json({ error: error.message || "Failed to execute prestige" });
+    }
+  });
+
+  // ==========================================
+  // SUBSCRIPTION SYSTEM ROUTES
+  // ==========================================
+
+  // Get user's subscription
+  app.get("/api/user/:userId/subscription", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const subscription = await db.select().from(userSubscriptions)
+        .where(eq(userSubscriptions.userId, user.telegramId))
+        .limit(1);
+
+      if (subscription.length === 0) {
+        return res.json({ subscribed: false, subscription: null });
+      }
+
+      const sub = subscription[0];
+      const now = new Date();
+      const isActive = sub.isActive && (!sub.endDate || new Date(sub.endDate) > now);
+
+      res.json({
+        subscribed: isActive,
+        subscription: { ...sub, isActive },
+      });
+    } catch (error: any) {
+      console.error("Get subscription error:", error);
+      res.status(500).json({ error: error.message || "Failed to get subscription" });
+    }
+  });
+
+  // Subscribe with TON
+  app.post("/api/user/:userId/subscription/subscribe", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { subscriptionType, tonTransactionHash, tonAmount } = req.body;
+
+    if (!subscriptionType || !tonTransactionHash || !tonAmount) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const validTypes = ["monthly", "lifetime"];
+    if (!validTypes.includes(subscriptionType)) {
+      return res.status(400).json({ error: "Invalid subscription type" });
+    }
+
+    try {
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users)
+          .where(eq(users.id, userId))
+          .for('update');
+        
+        if (!user[0]) throw new Error("User not found");
+
+        // Check existing subscription
+        const existing = await tx.select().from(userSubscriptions)
+          .where(eq(userSubscriptions.userId, user[0].telegramId))
+          .limit(1);
+
+        const now = new Date();
+        let endDate = null;
+
+        if (subscriptionType === "monthly") {
+          endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
+        }
+
+        if (existing.length > 0) {
+          // Update existing
+          const updated = await tx.update(userSubscriptions)
+            .set({
+              subscriptionType,
+              startDate: now,
+              endDate,
+              isActive: true,
+              tonTransactionHash,
+            })
+            .where(eq(userSubscriptions.id, existing[0].id))
+            .returning();
+
+          return updated[0];
+        } else {
+          // Create new
+          const created = await tx.insert(userSubscriptions).values({
+            userId: user[0].telegramId,
+            subscriptionType,
+            startDate: now,
+            endDate,
+            isActive: true,
+            tonTransactionHash,
+          }).returning();
+
+          return created[0];
+        }
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'subscription'] });
+
+      res.json({
+        success: true,
+        message: "Subscription activated!",
+        subscription: result,
+      });
+    } catch (error: any) {
+      console.error("Subscribe error:", error);
+      res.status(500).json({ error: error.message || "Failed to subscribe" });
+    }
+  });
+
+  // Cancel subscription
+  app.post("/api/user/:userId/subscription/cancel", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      await db.update(userSubscriptions)
+        .set({ isActive: false, autoRenew: false })
+        .where(eq(userSubscriptions.userId, user.telegramId));
+
+      queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'subscription'] });
+
+      res.json({
+        success: true,
+        message: "Subscription cancelled",
+      });
+    } catch (error: any) {
+      console.error("Cancel subscription error:", error);
+      res.status(500).json({ error: error.message || "Failed to cancel subscription" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
