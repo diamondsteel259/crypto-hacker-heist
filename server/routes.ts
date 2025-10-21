@@ -532,7 +532,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       totalNetworkHashrate,
       activeMiners: activeMiners.length,
       userHashrate,
-      networkShare
+      networkShare,
+      userSharePercentage: networkShare
+    });
+  });
+
+  // Public network stats endpoint (no auth required) for reward calculations
+  app.get("/api/network-stats", async (req, res) => {
+    const allUsers = await storage.getAllUsers();
+    const activeMiners = allUsers.filter(u => u.totalHashrate > 0);
+    const totalNetworkHashrate = activeMiners.reduce((sum, u) => sum + u.totalHashrate, 0);
+
+    res.json({
+      totalHashrate: totalNetworkHashrate,
+      activeMiners: activeMiners.length,
+      blockReward: 100000 // 100K CS per block
     });
   });
 
