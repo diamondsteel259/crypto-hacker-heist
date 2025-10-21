@@ -382,18 +382,6 @@ export default function Shop() {
           validUntil: Math.floor(Date.now() / 1000) + 600,
         });
         console.log("TON transaction result:", result);
-
-        const tonConnectUI = getTonConnectUI();
-        const result = await tonConnectUI.sendTransaction({
-          messages: [
-            {
-              address: TON_PAYMENT_ADDRESS,
-              amount: toNano(cost).toString(),
-            },
-          ],
-          validUntil: Math.floor(Date.now() / 1000) + 600,
-        });
-        console.log("TON transaction result:", result);
       }
 
       const response = await apiRequest("POST", `/api/user/${userId}/lootboxes/open`, {
