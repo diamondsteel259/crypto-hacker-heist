@@ -62,7 +62,7 @@ export default function BlockTimer({ onBlockMined }: BlockTimerProps) {
           {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
         </div>
         <p className="text-xs text-muted-foreground mt-2 uppercase tracking-wider">
-          Block #{latestBlock ? latestBlock.blockNumber + 1 : '...'}
+          Block #{latestBlock ? latestBlock.blockNumber + 1 : 1}
         </p>
       </div>
     </Card>
