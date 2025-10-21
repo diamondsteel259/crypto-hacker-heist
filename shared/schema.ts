@@ -305,6 +305,18 @@ export const spinHistory = pgTable("spin_history", {
   userSpinHistoryIdx: index("spin_history_user_idx").on(table.userId),
 }));
 
+// Equipment Presets
+export const equipmentPresets = pgTable("equipment_presets", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  presetName: text("preset_name").notNull(),
+  equipmentSnapshot: text("equipment_snapshot").notNull(), // JSON string of equipment IDs
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  userPresetIdx: index("equipment_presets_user_idx").on(table.userId),
+}));
+
 // Subscriptions
 export const userSubscriptions = pgTable("user_subscriptions", {
   id: serial("id").primaryKey(),
