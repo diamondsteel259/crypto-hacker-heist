@@ -2461,6 +2461,161 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==========================================
+  // EQUIPMENT PRESETS ROUTES
+  // ==========================================
+
+  // Get user's equipment presets
+  app.get("/api/user/:userId/equipment/presets", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const { equipmentPresets } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const presets = await db.select().from(equipmentPresets)
+        .where(eq(equipmentPresets.userId, user[0].telegramId))
+        .orderBy(sql`${equipmentPresets.createdAt} DESC`);
+
+      res.json(presets);
+    } catch (error: any) {
+      console.error("Get equipment presets error:", error);
+      res.status(500).json({ error: "Failed to get equipment presets" });
+    }
+  });
+
+  // Create new equipment preset (save current setup)
+  app.post("/api/user/:userId/equipment/presets", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { presetName } = req.body;
+
+    if (!presetName || presetName.trim().length === 0) {
+      return res.status(400).json({ error: "Preset name is required" });
+    }
+
+    if (presetName.length > 50) {
+      return res.status(400).json({ error: "Preset name too long (max 50 characters)" });
+    }
+
+    try {
+      const { equipmentPresets } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Get user's current equipment
+      const currentEquipment = await db.select().from(ownedEquipment)
+        .where(eq(ownedEquipment.userId, userId));
+
+      if (currentEquipment.length === 0) {
+        return res.status(400).json({ error: "No equipment to save" });
+      }
+
+      // Create snapshot of current equipment
+      const snapshot = currentEquipment.map(eq => ({
+        equipmentTypeId: eq.equipmentTypeId,
+        quantity: eq.quantity,
+        upgradeLevel: eq.upgradeLevel,
+      }));
+
+      // Save preset
+      const newPreset = await db.insert(equipmentPresets).values({
+        userId: user[0].telegramId,
+        presetName: presetName.trim(),
+        equipmentSnapshot: JSON.stringify(snapshot),
+      }).returning();
+
+      res.json({
+        success: true,
+        preset: newPreset[0],
+        message: `Preset "${presetName}" saved successfully`,
+      });
+    } catch (error: any) {
+      console.error("Create equipment preset error:", error);
+      res.status(500).json({ error: "Failed to create preset" });
+    }
+  });
+
+  // Load equipment preset (informational only - shows what equipment is in the preset)
+  app.get("/api/user/:userId/equipment/presets/:presetId", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId, presetId } = req.params;
+
+    try {
+      const { equipmentPresets } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const preset = await db.select().from(equipmentPresets)
+        .where(and(
+          eq(equipmentPresets.id, parseInt(presetId)),
+          eq(equipmentPresets.userId, user[0].telegramId)
+        ))
+        .limit(1);
+
+      if (!preset[0]) {
+        return res.status(404).json({ error: "Preset not found" });
+      }
+
+      // Parse the equipment snapshot
+      const snapshot = JSON.parse(preset[0].equipmentSnapshot);
+
+      res.json({
+        preset: preset[0],
+        equipment: snapshot,
+      });
+    } catch (error: any) {
+      console.error("Get equipment preset error:", error);
+      res.status(500).json({ error: "Failed to get preset" });
+    }
+  });
+
+  // Delete equipment preset
+  app.delete("/api/user/:userId/equipment/presets/:presetId", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId, presetId } = req.params;
+
+    try {
+      const { equipmentPresets } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Check if preset exists and belongs to user
+      const preset = await db.select().from(equipmentPresets)
+        .where(and(
+          eq(equipmentPresets.id, parseInt(presetId)),
+          eq(equipmentPresets.userId, user[0].telegramId)
+        ))
+        .limit(1);
+
+      if (!preset[0]) {
+        return res.status(404).json({ error: "Preset not found" });
+      }
+
+      // Delete preset
+      await db.delete(equipmentPresets)
+        .where(eq(equipmentPresets.id, parseInt(presetId)));
+
+      res.json({
+        success: true,
+        message: `Preset "${preset[0].presetName}" deleted successfully`,
+      });
+    } catch (error: any) {
+      console.error("Delete equipment preset error:", error);
+      res.status(500).json({ error: "Failed to delete preset" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
