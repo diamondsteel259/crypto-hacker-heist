@@ -267,6 +267,9 @@ export default function Dashboard() {
             </Card>
           )}
         </div>
+        {/* Active Season */}
+        <ActiveSeason />
+
 
         {/* Active Power-Ups */}
         {activePowerUps && activePowerUps.active_power_ups && activePowerUps.active_power_ups.length > 0 && (
