@@ -1,13 +1,31 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import BlockTimer from "@/components/BlockTimer";
 import NetworkStats from "@/components/NetworkStats";
 import HashrateChart from "@/components/HashrateChart";
 import RecentBlocks from "@/components/RecentBlocks";
-import { Terminal, Gem, Package, TrendingUp } from "lucide-react";
+import { Terminal, Gem, Package, TrendingUp, Zap, Shield, Sparkles } from "lucide-react";
 import { initializeUser, getCurrentUserId } from "@/lib/user";
 import type { User } from "@shared/schema";
+
+interface ActivePowerUp {
+  power_up_type: string;
+  boost_percentage: number;
+  activated_at: string;
+  expires_at: string;
+  time_remaining_minutes: number;
+  time_remaining_seconds: number;
+}
+
+interface ActivePowerUpsResponse {
+  active_power_ups: ActivePowerUp[];
+  effects: {
+    total_hashrate_boost: number;
+    total_luck_boost: number;
+  };
+}
 
 export default function Dashboard() {
   const [userId, setUserId] = useState<string | null>(null);
@@ -36,6 +54,13 @@ export default function Dashboard() {
     queryFn: () => fetch(`/api/user/${userId}/network-stats`).then(r => r.json()),
     enabled: !!userId,
     refetchInterval: 60000, // Refresh every minute
+  });
+
+  const { data: activePowerUps } = useQuery<ActivePowerUpsResponse>({
+    queryKey: ['/api/user', userId, 'powerups', 'active'],
+    queryFn: () => fetch(`/api/user/${userId}/powerups/active`).then(r => r.json()),
+    enabled: !!userId,
+    refetchInterval: 10000, // Refresh every 10 seconds to update time remaining
   });
 
   if (userError) {
