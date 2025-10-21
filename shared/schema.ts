@@ -515,6 +515,12 @@ export type InsertUserSpin = z.infer<typeof insertUserSpinSchema>;
 export type SpinHistory = typeof spinHistory.$inferSelect;
 export type InsertSpinHistory = z.infer<typeof insertSpinHistorySchema>;
 
+// Equipment Preset schemas and types
+export const insertEquipmentPresetSchema = createInsertSchema(equipmentPresets).omit({ id: true, createdAt: true, updatedAt: true });
+
+export type EquipmentPreset = typeof equipmentPresets.$inferSelect;
+export type InsertEquipmentPreset = z.infer<typeof insertEquipmentPresetSchema>;
+
 // Subscription schemas and types
 export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, startDate: true });
 
