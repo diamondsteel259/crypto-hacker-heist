@@ -100,28 +100,27 @@ export default function Admin() {
   });
 
   const resetGameMutation = useMutation({
-    mutationFn: async (userId: string) => {
+    mutationFn: async () => {
       const initData = getTelegramInitData();
       if (!initData) throw new Error('Not authenticated');
       
-      const response = await fetch(`/api/user/${userId}/reset`, {
-        method: 'POST',
+      const response = await fetch(`/api/admin/reset-all-users`, {
+        method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
           'X-Telegram-Init-Data': initData,
         },
-        body: JSON.stringify({ confirmReset: true }),
       });
       if (!response.ok) throw new Error('Failed to reset game data');
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
       setResetConfirmText("");
       setShowResetSection(false);
       toast({
         title: "Game Reset Successful",
-        description: "All game data has been reset to start from scratch",
+        description: `Reset ${data.users_reset} users and deleted ${Object.values(data.records_deleted || {}).reduce((a: number, b: any) => a + (b || 0), 0)} records`,
       });
     },
     onError: (error: any) => {
@@ -332,10 +331,7 @@ export default function Admin() {
                     variant="destructive"
                     disabled={resetConfirmText !== "RESET ALL DATA" || resetGameMutation.isPending}
                     onClick={() => {
-                      // Reset all users
-                      users?.forEach(user => {
-                        resetGameMutation.mutate(user.id);
-                      });
+                      resetGameMutation.mutate();
                     }}
                   >
                     {resetGameMutation.isPending ? (
