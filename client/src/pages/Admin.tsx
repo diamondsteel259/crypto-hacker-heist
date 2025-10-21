@@ -11,6 +11,7 @@ import { Shield, Pause, Play, Users, Settings as SettingsIcon, DollarSign, Rotat
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getTelegramInitData } from "@/lib/user";
 import type { User, GameSetting, EquipmentType } from "@shared/schema";
+import SeasonsAdmin from "@/components/SeasonsAdmin";
 
 export default function Admin() {
   const { toast } = useToast();
