@@ -189,6 +189,82 @@ export default function Dashboard() {
           </Card>
         </div>
 
+        {/* Streak & Hourly Bonus */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+          {/* Streak Bonus */}
+          {streak && (
+            <Card className="p-4 bg-gradient-to-r from-orange-500/10 to-red-500/10 border-orange-500/30">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-5 h-5 text-orange-500" />
+                  <h3 className="text-sm md:text-base font-semibold">Daily Streak</h3>
+                </div>
+                <Badge variant="secondary" className="text-xs">
+                  {streak.currentStreak} days
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-2xl font-bold font-mono text-orange-500">
+                    {streak.currentStreak}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Best: {streak.longestStreak} days
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => checkinMutation.mutate()}
+                  disabled={checkinMutation.isPending}
+                  className="bg-orange-500 hover:bg-orange-600"
+                >
+                  {checkinMutation.isPending ? "Checking..." : "Check In"}
+                </Button>
+              </div>
+            </Card>
+          )}
+
+          {/* Hourly Bonus */}
+          {hourlyBonusStatus && (
+            <Card className="p-4 bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-green-500/30">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-green-500" />
+                  <h3 className="text-sm md:text-base font-semibold">Hourly Bonus</h3>
+                </div>
+                {hourlyBonusStatus.available ? (
+                  <Badge variant="default" className="text-xs bg-green-500">
+                    <Gift className="w-3 h-3 mr-1" />
+                    Available
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-xs">
+                    {hourlyBonusStatus.minutesRemaining}m left
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xl font-bold text-green-500">
+                    500-2,000 CS
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Random reward
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => claimHourlyMutation.mutate()}
+                  disabled={!hourlyBonusStatus.available || claimHourlyMutation.isPending}
+                  className="bg-green-500 hover:bg-green-600"
+                >
+                  {claimHourlyMutation.isPending ? "Claiming..." : "Claim Now"}
+                </Button>
+              </div>
+            </Card>
+          )}
+        </div>
+
         {/* Active Power-Ups */}
         {activePowerUps && activePowerUps.active_power_ups && activePowerUps.active_power_ups.length > 0 && (
           <Card className="p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border-purple-500/30">
