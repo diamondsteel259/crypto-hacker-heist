@@ -13,6 +13,7 @@ var schema_exports = {};
 __export(schema_exports, {
   achievements: () => achievements,
   activePowerUps: () => activePowerUps,
+  autoUpgradeSettings: () => autoUpgradeSettings,
   blockRewards: () => blockRewards,
   blocks: () => blocks,
   componentUpgrades: () => componentUpgrades,
@@ -24,6 +25,7 @@ __export(schema_exports, {
   gameSettings: () => gameSettings,
   insertAchievementSchema: () => insertAchievementSchema,
   insertActivePowerUpSchema: () => insertActivePowerUpSchema,
+  insertAutoUpgradeSettingSchema: () => insertAutoUpgradeSettingSchema,
   insertBlockRewardSchema: () => insertBlockRewardSchema,
   insertBlockSchema: () => insertBlockSchema,
   insertComponentUpgradeSchema: () => insertComponentUpgradeSchema,
@@ -71,7 +73,7 @@ __export(schema_exports, {
 import { sql } from "drizzle-orm";
 import { pgTable, varchar, text, integer, real, timestamp, boolean, unique, decimal, index, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-var users, gameSettings, equipmentTypes, ownedEquipment, blocks, blockRewards, referrals, componentUpgrades, userTasks, dailyClaims, powerUpPurchases, lootBoxPurchases, activePowerUps, dailyChallenges, userDailyChallenges, achievements, userAchievements, seasons, cosmeticItems, userCosmetics, userStreaks, userHourlyBonuses, userSpins, spinHistory, equipmentPresets, priceAlerts, userSubscriptions, userStatistics, insertUserSchema, insertEquipmentTypeSchema, insertOwnedEquipmentSchema, insertComponentUpgradeSchema, insertUserTaskSchema, insertDailyClaimSchema, insertPowerUpPurchaseSchema, insertLootBoxPurchaseSchema, insertActivePowerUpSchema, insertBlockSchema, insertBlockRewardSchema, insertReferralSchema, insertGameSettingSchema, insertDailyChallengeSchema, insertUserDailyChallengeSchema, insertAchievementSchema, insertUserAchievementSchema, insertSeasonSchema, insertCosmeticItemSchema, insertUserCosmeticSchema, insertUserStreakSchema, insertUserHourlyBonusSchema, insertUserSpinSchema, insertSpinHistorySchema, insertEquipmentPresetSchema, insertPriceAlertSchema, insertUserSubscriptionSchema, insertUserStatisticsSchema;
+var users, gameSettings, equipmentTypes, ownedEquipment, blocks, blockRewards, referrals, componentUpgrades, userTasks, dailyClaims, powerUpPurchases, lootBoxPurchases, activePowerUps, dailyChallenges, userDailyChallenges, achievements, userAchievements, seasons, cosmeticItems, userCosmetics, userStreaks, userHourlyBonuses, userSpins, spinHistory, equipmentPresets, priceAlerts, autoUpgradeSettings, userSubscriptions, userStatistics, insertUserSchema, insertEquipmentTypeSchema, insertOwnedEquipmentSchema, insertComponentUpgradeSchema, insertUserTaskSchema, insertDailyClaimSchema, insertPowerUpPurchaseSchema, insertLootBoxPurchaseSchema, insertActivePowerUpSchema, insertBlockSchema, insertBlockRewardSchema, insertReferralSchema, insertGameSettingSchema, insertDailyChallengeSchema, insertUserDailyChallengeSchema, insertAchievementSchema, insertUserAchievementSchema, insertSeasonSchema, insertCosmeticItemSchema, insertUserCosmeticSchema, insertUserStreakSchema, insertUserHourlyBonusSchema, insertUserSpinSchema, insertSpinHistorySchema, insertEquipmentPresetSchema, insertPriceAlertSchema, insertAutoUpgradeSettingSchema, insertUserSubscriptionSchema, insertUserStatisticsSchema;
 var init_schema = __esm({
   "shared/schema.ts"() {
     "use strict";
@@ -378,6 +380,20 @@ var init_schema = __esm({
       userAlertIdx: index("price_alerts_user_idx").on(table.userId),
       userEquipmentAlertUnique: unique().on(table.userId, table.equipmentTypeId)
     }));
+    autoUpgradeSettings = pgTable("auto_upgrade_settings", {
+      id: serial("id").primaryKey(),
+      userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: "cascade" }),
+      ownedEquipmentId: varchar("owned_equipment_id").notNull().references(() => ownedEquipment.id, { onDelete: "cascade" }),
+      componentType: text("component_type").notNull(),
+      // RAM, CPU, Storage, GPU
+      targetLevel: integer("target_level").notNull(),
+      enabled: boolean("enabled").notNull().default(true),
+      createdAt: timestamp("created_at").notNull().defaultNow(),
+      updatedAt: timestamp("updated_at").notNull().defaultNow()
+    }, (table) => ({
+      userEquipmentComponentUnique: unique().on(table.ownedEquipmentId, table.componentType),
+      userAutoUpgradeIdx: index("auto_upgrade_settings_user_idx").on(table.userId)
+    }));
     userSubscriptions = pgTable("user_subscriptions", {
       id: serial("id").primaryKey(),
       userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: "cascade" }).unique(),
@@ -478,6 +494,7 @@ var init_schema = __esm({
     insertSpinHistorySchema = createInsertSchema(spinHistory).omit({ id: true, spunAt: true });
     insertEquipmentPresetSchema = createInsertSchema(equipmentPresets).omit({ id: true, createdAt: true, updatedAt: true });
     insertPriceAlertSchema = createInsertSchema(priceAlerts).omit({ id: true, createdAt: true, triggeredAt: true });
+    insertAutoUpgradeSettingSchema = createInsertSchema(autoUpgradeSettings).omit({ id: true, createdAt: true, updatedAt: true });
     insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, startDate: true });
     insertUserStatisticsSchema = createInsertSchema(userStatistics).omit({ id: true, createdAt: true, updatedAt: true });
   }
@@ -2983,6 +3000,167 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Check price alerts error:", error);
       res.status(500).json({ error: error.message || "Failed to check price alerts" });
+    }
+  });
+  app2.get("/api/user/:userId/auto-upgrade/settings", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const settings = await db.select().from(autoUpgradeSettings).leftJoin(ownedEquipment, eq3(autoUpgradeSettings.ownedEquipmentId, ownedEquipment.id)).leftJoin(equipmentTypes, eq3(ownedEquipment.equipmentTypeId, equipmentTypes.id)).leftJoin(componentUpgrades, and3(
+        eq3(componentUpgrades.ownedEquipmentId, autoUpgradeSettings.ownedEquipmentId),
+        eq3(componentUpgrades.componentType, autoUpgradeSettings.componentType)
+      )).where(eq3(autoUpgradeSettings.userId, user.telegramId)).orderBy(autoUpgradeSettings.createdAt);
+      const settingsWithDetails = settings.map((row) => ({
+        ...row.auto_upgrade_settings,
+        equipment: row.owned_equipment,
+        equipmentType: row.equipment_types,
+        currentComponent: row.component_upgrades
+      }));
+      res.json(settingsWithDetails);
+    } catch (error) {
+      console.error("Get auto-upgrade settings error:", error);
+      res.status(500).json({ error: error.message || "Failed to get auto-upgrade settings" });
+    }
+  });
+  app2.post("/api/user/:userId/auto-upgrade/settings", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { ownedEquipmentId, componentType, targetLevel, enabled } = req.body;
+    if (!ownedEquipmentId || !componentType || targetLevel === void 0) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+    if (targetLevel < 0 || targetLevel > 10) {
+      return res.status(400).json({ error: "Target level must be between 0 and 10" });
+    }
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const equipment = await db.select().from(ownedEquipment).where(and3(
+        eq3(ownedEquipment.id, ownedEquipmentId),
+        eq3(ownedEquipment.userId, userId)
+      )).limit(1);
+      if (!equipment[0]) {
+        return res.status(404).json({ error: "Equipment not found or not owned" });
+      }
+      const existingSetting = await db.select().from(autoUpgradeSettings).where(and3(
+        eq3(autoUpgradeSettings.ownedEquipmentId, ownedEquipmentId),
+        eq3(autoUpgradeSettings.componentType, componentType)
+      )).limit(1);
+      let setting;
+      if (existingSetting.length > 0) {
+        const updated = await db.update(autoUpgradeSettings).set({
+          targetLevel,
+          enabled: enabled !== void 0 ? enabled : true,
+          updatedAt: /* @__PURE__ */ new Date()
+        }).where(eq3(autoUpgradeSettings.id, existingSetting[0].id)).returning();
+        setting = updated[0];
+      } else {
+        const created = await db.insert(autoUpgradeSettings).values({
+          userId: user.telegramId,
+          ownedEquipmentId,
+          componentType,
+          targetLevel,
+          enabled: enabled !== void 0 ? enabled : true
+        }).returning();
+        setting = created[0];
+      }
+      res.json({
+        success: true,
+        message: "Auto-upgrade setting saved",
+        setting
+      });
+    } catch (error) {
+      console.error("Save auto-upgrade setting error:", error);
+      res.status(500).json({ error: error.message || "Failed to save auto-upgrade setting" });
+    }
+  });
+  app2.delete("/api/user/:userId/auto-upgrade/settings/:settingId", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId, settingId } = req.params;
+    try {
+      const user = await storage.getUserByPrimaryId(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const setting = await db.select().from(autoUpgradeSettings).where(and3(
+        eq3(autoUpgradeSettings.id, parseInt(settingId)),
+        eq3(autoUpgradeSettings.userId, user.telegramId)
+      )).limit(1);
+      if (!setting[0]) {
+        return res.status(404).json({ error: "Setting not found" });
+      }
+      await db.delete(autoUpgradeSettings).where(eq3(autoUpgradeSettings.id, parseInt(settingId)));
+      res.json({
+        success: true,
+        message: "Auto-upgrade setting deleted"
+      });
+    } catch (error) {
+      console.error("Delete auto-upgrade setting error:", error);
+      res.status(500).json({ error: error.message || "Failed to delete auto-upgrade setting" });
+    }
+  });
+  app2.post("/api/user/:userId/auto-upgrade/execute", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const result = await db.transaction(async (tx) => {
+        const user = await tx.select().from(users).where(eq3(users.id, userId)).for("update");
+        if (!user[0]) throw new Error("User not found");
+        const settings = await tx.select().from(autoUpgradeSettings).leftJoin(componentUpgrades, and3(
+          eq3(componentUpgrades.ownedEquipmentId, autoUpgradeSettings.ownedEquipmentId),
+          eq3(componentUpgrades.componentType, autoUpgradeSettings.componentType)
+        )).leftJoin(ownedEquipment, eq3(ownedEquipment.id, autoUpgradeSettings.ownedEquipmentId)).where(and3(
+          eq3(autoUpgradeSettings.userId, user[0].telegramId),
+          eq3(autoUpgradeSettings.enabled, true)
+        ));
+        const upgrades = [];
+        let totalCost = 0;
+        for (const row of settings) {
+          const setting = row.auto_upgrade_settings;
+          const component = row.component_upgrades;
+          const equipment = row.owned_equipment;
+          if (!component || !equipment) continue;
+          const currentLevel = component.currentLevel;
+          const targetLevel = setting.targetLevel;
+          if (currentLevel >= targetLevel) continue;
+          const upgradeCost = 100;
+          if (user[0].csBalance >= upgradeCost + totalCost) {
+            await tx.update(componentUpgrades).set({
+              currentLevel: currentLevel + 1,
+              updatedAt: /* @__PURE__ */ new Date()
+            }).where(eq3(componentUpgrades.id, component.id));
+            totalCost += upgradeCost;
+            upgrades.push({
+              equipmentId: equipment.id,
+              componentType: setting.componentType,
+              fromLevel: currentLevel,
+              toLevel: currentLevel + 1,
+              cost: upgradeCost
+            });
+          }
+        }
+        if (totalCost > 0) {
+          await tx.update(users).set({
+            csBalance: user[0].csBalance - totalCost
+          }).where(eq3(users.id, userId));
+        }
+        return { upgrades, totalCost };
+      });
+      res.json({
+        success: true,
+        upgrades: result.upgrades,
+        totalCost: result.totalCost,
+        upgradesPerformed: result.upgrades.length
+      });
+      if (result.upgrades.length > 0) {
+        queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "equipment"] });
+      }
+    } catch (error) {
+      console.error("Execute auto-upgrade error:", error);
+      res.status(500).json({ error: error.message || "Failed to execute auto-upgrade" });
     }
   });
   const httpServer = createServer(app2);
