@@ -85,7 +85,7 @@ export async function sendTonTransaction(to: string, amount: string, comment?: s
       validUntil: Math.floor(Date.now() / 1000) + 600, // 10 minutes
     });
     
-    return result;
+    return result.boc || JSON.stringify(result);
   } catch (error) {
     console.error('Transaction failed:', error);
     throw error;
