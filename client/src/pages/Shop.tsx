@@ -178,7 +178,7 @@ export default function Shop() {
     // Refresh balance every 30 seconds
     const interval = setInterval(fetchTonBalance, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isConnected, userFriendlyAddress]);
 
   const { data: allEquipment = [], isLoading: isLoadingTypes, error: equipmentError, refetch: refetchEquipment } = useQuery<EquipmentType[]>({
     queryKey: ["/api/equipment-types"],
