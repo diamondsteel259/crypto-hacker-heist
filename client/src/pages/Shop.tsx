@@ -529,25 +529,25 @@ export default function Shop() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="w-full grid grid-cols-5 mb-4">
-            <TabsTrigger value="equipment" data-testid="tab-equipment">
-              <Cpu className="w-4 h-4 mr-2" />
-              Equipment
+            <TabsTrigger value="equipment" data-testid="tab-equipment" className="text-xs px-1">
+              <Cpu className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Equipment</span>
             </TabsTrigger>
-            <TabsTrigger value="upgrades" data-testid="tab-upgrades">
-              <Rocket className="w-4 h-4 mr-2" />
-              Upgrades
+            <TabsTrigger value="upgrades" data-testid="tab-upgrades" className="text-xs px-1">
+              <Rocket className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Upgrades</span>
             </TabsTrigger>
-            <TabsTrigger value="powerups" data-testid="tab-powerups">
-              <Zap className="w-4 h-4 mr-2" />
-              Power-Ups
+            <TabsTrigger value="powerups" data-testid="tab-powerups" className="text-xs px-1">
+              <Zap className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Power-Ups</span>
             </TabsTrigger>
-            <TabsTrigger value="lootboxes" data-testid="tab-lootboxes">
-              <Gem className="w-4 h-4 mr-2" />
-              Loot Boxes
+            <TabsTrigger value="lootboxes" data-testid="tab-lootboxes" className="text-xs px-1">
+              <Gem className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Loot Boxes</span>
             </TabsTrigger>
-            <TabsTrigger value="tasks" data-testid="tab-tasks">
-              <CheckCircle2 className="w-4 h-4 mr-2" />
-              Tasks
+            <TabsTrigger value="tasks" data-testid="tab-tasks" className="text-xs px-1">
+              <CheckCircle2 className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Tasks</span>
             </TabsTrigger>
           </TabsList>
 
