@@ -277,22 +277,42 @@ export default function Shop() {
         throw new Error(`Insufficient TON balance. You have ${tonBalance} TON but need ${price} TON`);
       }
 
-      // Send TON payment using the new utility function
-      const result = await sendTonTransaction(
-        TON_PAYMENT_ADDRESS,
-        price,
-        `Equipment purchase: ${equipmentTypeId}`
-      );
-
-      console.log("TON transaction result:", result);
-
-      // After successful TON payment, purchase the equipment
-      const response = await apiRequest("POST", `/api/user/${userId}/equipment/purchase`, {
-        equipmentTypeId
+      console.log("Sending TON payment for equipment:", {
+        to: TON_PAYMENT_ADDRESS,
+        amount: price,
       });
-      
-      const data = await response.json();
-      return data;
+
+      try {
+        // Send TON payment using the utility function
+        const result = await sendTonTransaction(
+          TON_PAYMENT_ADDRESS,
+          price,
+          `Equipment purchase: ${equipmentTypeId}`
+        );
+
+        console.log("TON transaction result:", result);
+
+        // After successful TON payment, purchase the equipment
+        const response = await apiRequest("POST", `/api/user/${userId}/equipment/purchase`, {
+          equipmentTypeId
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to purchase equipment");
+        }
+
+        const data = await response.json();
+        return data;
+      } catch (txError: any) {
+        console.error("TON transaction/purchase error:", txError);
+        
+        if (txError.message && txError.message.includes("Transaction was not sent")) {
+          throw new Error("Transaction cancelled or rejected by wallet. Please try again.");
+        }
+        
+        throw new Error(txError.message || "Failed to complete purchase");
+      }
     },
     onSuccess: (data) => {
       console.log("TON purchase successful:", data);
