@@ -12,7 +12,6 @@ import Rigs from "@/pages/Rigs";
 import Shop from "@/pages/Shop";
 import BlockExplorer from "@/pages/BlockExplorer";
 import Referrals from "@/pages/Referrals";
-import LootBoxes from "@/pages/LootBoxes";
 import Challenges from "@/pages/Challenges";
 import Achievements from "@/pages/Achievements";
 import Cosmetics from "@/pages/Cosmetics";
@@ -32,7 +31,6 @@ function Router() {
       <Route path="/shop" component={Shop} />
       <Route path="/blocks" component={BlockExplorer} />
       <Route path="/referrals" component={Referrals} />
-      <Route path="/lootboxes" component={LootBoxes} />
       <Route path="/challenges" component={Challenges} />
       <Route path="/achievements" component={Achievements} />
       <Route path="/cosmetics" component={Cosmetics} />
