@@ -22,6 +22,9 @@ export default function Admin() {
   const [editPrice, setEditPrice] = useState<string>("");
   const [editCurrency, setEditCurrency] = useState<string>("");
   const [selectedUserForPayments, setSelectedUserForPayments] = useState<string | null>(null);
+  const [selectedUserForBalanceEdit, setSelectedUserForBalanceEdit] = useState<string | null>(null);
+  const [editCs, setEditCs] = useState<string>("");
+  const [editChst, setEditChst] = useState<string>("");
 
   const { data: settings, isLoading: settingsLoading } = useQuery<GameSetting[]>({
     queryKey: ['/api/admin/settings'],
