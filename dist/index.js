@@ -4028,18 +4028,16 @@ async function seedDatabase() {
       { id: "asic-bitmain-s21e-xp-hydro", name: "Bitmain Antminer S21e XP Hydro", tier: "ASIC", category: "ASIC Rig", baseHashrate: 3e5, basePrice: 30, currency: "TON", maxOwned: 50, orderIndex: 29 },
       { id: "asic-whatsminer-m63s-hydro", name: "WhatsMiner M63S Hydro", tier: "ASIC", category: "ASIC Rig", baseHashrate: 5e5, basePrice: 50, currency: "TON", maxOwned: 50, orderIndex: 30 }
     ];
-    console.log(`\u{1F5D1}\uFE0F  Clearing existing equipment data...`);
-    await db.delete(componentUpgrades);
-    console.log(`\u{1F5D1}\uFE0F  Cleared component upgrades...`);
-    await db.delete(ownedEquipment);
-    console.log(`\u{1F5D1}\uFE0F  Cleared owned equipment...`);
-    await db.delete(equipmentTypes);
-    console.log(`\u{1F5D1}\uFE0F  Cleared equipment types...`);
-    console.log(`\u{1F4E6} Inserting ${equipmentCatalog.length} equipment items...`);
-    await db.insert(equipmentTypes).values(equipmentCatalog);
-    console.log(`\u2705 Equipment types seeded: ${equipmentCatalog.length}`);
-    const insertedCount = await db.select().from(equipmentTypes);
-    console.log(`\u{1F50D} Verification: ${insertedCount.length} equipment items in database`);
+    const existingEquipment = await db.select().from(equipmentTypes);
+    if (existingEquipment.length === 0) {
+      console.log(`\u{1F4E6} Inserting ${equipmentCatalog.length} equipment items...`);
+      await db.insert(equipmentTypes).values(equipmentCatalog);
+      console.log(`\u2705 Equipment types seeded: ${equipmentCatalog.length}`);
+    } else {
+      console.log(`\u2705 Equipment types already exist (${existingEquipment.length} items) - skipping seed`);
+    }
+    const finalCount = await db.select().from(equipmentTypes);
+    console.log(`\u{1F50D} Verification: ${finalCount.length} equipment items in database`);
     const defaultSettings = [
       { key: "mining_paused", value: "false" },
       { key: "equipment_price_multiplier", value: "1.0" },
