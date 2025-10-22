@@ -35,6 +35,7 @@ __export(schema_exports, {
   insertEquipmentPresetSchema: () => insertEquipmentPresetSchema,
   insertEquipmentTypeSchema: () => insertEquipmentTypeSchema,
   insertGameSettingSchema: () => insertGameSettingSchema,
+  insertJackpotWinSchema: () => insertJackpotWinSchema,
   insertLootBoxPurchaseSchema: () => insertLootBoxPurchaseSchema,
   insertOwnedEquipmentSchema: () => insertOwnedEquipmentSchema,
   insertPackPurchaseSchema: () => insertPackPurchaseSchema,
@@ -55,6 +56,7 @@ __export(schema_exports, {
   insertUserStreakSchema: () => insertUserStreakSchema,
   insertUserSubscriptionSchema: () => insertUserSubscriptionSchema,
   insertUserTaskSchema: () => insertUserTaskSchema,
+  jackpotWins: () => jackpotWins,
   lootBoxPurchases: () => lootBoxPurchases,
   ownedEquipment: () => ownedEquipment,
   packPurchases: () => packPurchases,
@@ -79,7 +81,7 @@ __export(schema_exports, {
 import { sql } from "drizzle-orm";
 import { pgTable, varchar, text, integer, real, timestamp, boolean, unique, decimal, index, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-var users, gameSettings, equipmentTypes, ownedEquipment, blocks, blockRewards, referrals, componentUpgrades, userTasks, dailyClaims, powerUpPurchases, lootBoxPurchases, activePowerUps, dailyChallenges, userDailyChallenges, achievements, userAchievements, seasons, cosmeticItems, userCosmetics, userStreaks, userHourlyBonuses, userSpins, spinHistory, equipmentPresets, priceAlerts, autoUpgradeSettings, packPurchases, userPrestige, prestigeHistory, userSubscriptions, userStatistics, insertUserSchema, insertEquipmentTypeSchema, insertOwnedEquipmentSchema, insertComponentUpgradeSchema, insertUserTaskSchema, insertDailyClaimSchema, insertPowerUpPurchaseSchema, insertLootBoxPurchaseSchema, insertActivePowerUpSchema, insertBlockSchema, insertBlockRewardSchema, insertReferralSchema, insertGameSettingSchema, insertDailyChallengeSchema, insertUserDailyChallengeSchema, insertAchievementSchema, insertUserAchievementSchema, insertSeasonSchema, insertCosmeticItemSchema, insertUserCosmeticSchema, insertUserStreakSchema, insertUserHourlyBonusSchema, insertUserSpinSchema, insertSpinHistorySchema, insertEquipmentPresetSchema, insertPriceAlertSchema, insertAutoUpgradeSettingSchema, insertPackPurchaseSchema, insertUserPrestigeSchema, insertPrestigeHistorySchema, insertUserSubscriptionSchema, insertUserStatisticsSchema;
+var users, gameSettings, equipmentTypes, ownedEquipment, blocks, blockRewards, referrals, componentUpgrades, userTasks, dailyClaims, powerUpPurchases, lootBoxPurchases, activePowerUps, dailyChallenges, userDailyChallenges, achievements, userAchievements, seasons, cosmeticItems, userCosmetics, userStreaks, userHourlyBonuses, userSpins, spinHistory, jackpotWins, equipmentPresets, priceAlerts, autoUpgradeSettings, packPurchases, userPrestige, prestigeHistory, userSubscriptions, userStatistics, insertUserSchema, insertEquipmentTypeSchema, insertOwnedEquipmentSchema, insertComponentUpgradeSchema, insertUserTaskSchema, insertDailyClaimSchema, insertPowerUpPurchaseSchema, insertLootBoxPurchaseSchema, insertActivePowerUpSchema, insertBlockSchema, insertBlockRewardSchema, insertReferralSchema, insertGameSettingSchema, insertDailyChallengeSchema, insertUserDailyChallengeSchema, insertAchievementSchema, insertUserAchievementSchema, insertSeasonSchema, insertCosmeticItemSchema, insertUserCosmeticSchema, insertUserStreakSchema, insertUserHourlyBonusSchema, insertUserSpinSchema, insertSpinHistorySchema, insertJackpotWinSchema, insertEquipmentPresetSchema, insertPriceAlertSchema, insertAutoUpgradeSettingSchema, insertPackPurchaseSchema, insertUserPrestigeSchema, insertPrestigeHistorySchema, insertUserSubscriptionSchema, insertUserStatisticsSchema;
 var init_schema = __esm({
   "shared/schema.ts"() {
     "use strict";
@@ -96,6 +98,7 @@ var init_schema = __esm({
       referralCode: text("referral_code").notNull().unique(),
       referredBy: text("referred_by"),
       isAdmin: boolean("is_admin").notNull().default(false),
+      tutorialCompleted: boolean("tutorial_completed").notNull().default(false),
       createdAt: timestamp("created_at").notNull().defaultNow()
     }, (table) => ({
       referralCodeIdx: index("users_referral_code_idx").on(table.referralCode)
@@ -363,6 +366,22 @@ var init_schema = __esm({
     }, (table) => ({
       userSpinHistoryIdx: index("spin_history_user_idx").on(table.userId)
     }));
+    jackpotWins = pgTable("jackpot_wins", {
+      id: serial("id").primaryKey(),
+      userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: "cascade" }),
+      username: text("username").notNull(),
+      walletAddress: text("wallet_address"),
+      amount: text("amount").notNull().default("1.0"),
+      // 1 TON jackpot
+      wonAt: timestamp("won_at").notNull().defaultNow(),
+      paidOut: boolean("paid_out").notNull().default(false),
+      paidAt: timestamp("paid_at"),
+      paidByAdmin: text("paid_by_admin"),
+      notes: text("notes")
+    }, (table) => ({
+      userJackpotIdx: index("jackpot_wins_user_idx").on(table.userId),
+      paidOutIdx: index("jackpot_wins_paid_out_idx").on(table.paidOut)
+    }));
     equipmentPresets = pgTable("equipment_presets", {
       id: serial("id").primaryKey(),
       userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: "cascade" }),
@@ -537,6 +556,7 @@ var init_schema = __esm({
     insertUserHourlyBonusSchema = createInsertSchema(userHourlyBonuses).omit({ id: true, claimedAt: true });
     insertUserSpinSchema = createInsertSchema(userSpins).omit({ id: true, lastSpinAt: true });
     insertSpinHistorySchema = createInsertSchema(spinHistory).omit({ id: true, spunAt: true });
+    insertJackpotWinSchema = createInsertSchema(jackpotWins).omit({ id: true, wonAt: true });
     insertEquipmentPresetSchema = createInsertSchema(equipmentPresets).omit({ id: true, createdAt: true, updatedAt: true });
     insertPriceAlertSchema = createInsertSchema(priceAlerts).omit({ id: true, createdAt: true, triggeredAt: true });
     insertAutoUpgradeSettingSchema = createInsertSchema(autoUpgradeSettings).omit({ id: true, createdAt: true, updatedAt: true });
@@ -639,16 +659,16 @@ var init_storage = __esm({
         ));
         return result[0];
       }
-      async purchaseEquipment(equipment) {
-        const existing = await this.getSpecificEquipment(equipment.userId, equipment.equipmentTypeId);
+      async purchaseEquipment(equipment2) {
+        const existing = await this.getSpecificEquipment(equipment2.userId, equipment2.equipmentTypeId);
         if (existing) {
           const result2 = await db.update(ownedEquipment).set({
             quantity: existing.quantity + 1,
-            currentHashrate: existing.currentHashrate + equipment.currentHashrate
+            currentHashrate: existing.currentHashrate + equipment2.currentHashrate
           }).where(eq(ownedEquipment.id, existing.id)).returning();
           return result2[0];
         }
-        const result = await db.insert(ownedEquipment).values(equipment).returning();
+        const result = await db.insert(ownedEquipment).values(equipment2).returning();
         return result[0];
       }
       async upgradeEquipment(equipmentId, newLevel, newHashrate) {
@@ -978,8 +998,8 @@ var MiningService = class {
         const allUsers = await tx.select().from(users);
         let usersUpdated = 0;
         for (const user of allUsers) {
-          const equipment = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq2(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(eq2(ownedEquipment.userId, user.telegramId));
-          const actualHashrate = equipment.reduce((sum, row) => {
+          const equipment2 = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq2(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(eq2(ownedEquipment.userId, user.telegramId));
+          const actualHashrate = equipment2.reduce((sum, row) => {
             return sum + (row.owned_equipment?.currentHashrate || 0);
           }, 0);
           if (user.totalHashrate !== actualHashrate) {
@@ -1276,6 +1296,35 @@ async function registerRoutes(app2) {
     if (!user) return res.status(404).json({ message: "User not found" });
     res.json(user);
   });
+  app2.post("/api/user/:userId/tutorial/complete", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const result = await db.transaction(async (tx) => {
+        const user = await tx.select().from(users).where(eq4(users.id, userId)).for("update");
+        if (!user[0]) throw new Error("User not found");
+        if (user[0].tutorialCompleted) {
+          return {
+            success: true,
+            message: "Tutorial already completed",
+            alreadyCompleted: true
+          };
+        }
+        await tx.update(users).set({
+          tutorialCompleted: true,
+          csBalance: sql4`${users.csBalance} + 5000`
+        }).where(eq4(users.id, userId));
+        return {
+          success: true,
+          message: "Tutorial completed! Earned 5,000 CS bonus",
+          bonus: 5e3
+        };
+      });
+      res.json(result);
+    } catch (error) {
+      console.error("Tutorial completion error:", error);
+      res.status(500).json({ error: error.message || "Failed to complete tutorial" });
+    }
+  });
   app2.get("/api/equipment-types", async (req, res) => {
     try {
       const equipmentTypes2 = await storage.getAllEquipmentTypes();
@@ -1292,8 +1341,8 @@ async function registerRoutes(app2) {
     res.json(equipmentTypes2);
   });
   app2.get("/api/user/:userId/equipment", validateTelegramAuth, verifyUserAccess, async (req, res) => {
-    const equipment = await storage.getUserEquipment(req.params.userId);
-    res.json(equipment);
+    const equipment2 = await storage.getUserEquipment(req.params.userId);
+    res.json(equipment2);
   });
   app2.post("/api/user/:userId/equipment/upgrade", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
@@ -1363,9 +1412,12 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/user/:userId/equipment/:equipmentId/components/upgrade", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId, equipmentId } = req.params;
-    const { componentType, currency = "CS" } = req.body;
+    const { componentType, currency = "CS", tonTransactionHash, userWalletAddress, tonAmount } = req.body;
     if (!componentType || !["RAM", "CPU", "Storage", "GPU"].includes(componentType)) {
       return res.status(400).json({ message: "Invalid component type" });
+    }
+    if (!["CS", "CHST", "TON"].includes(currency)) {
+      return res.status(400).json({ message: "Invalid currency. Must be CS, CHST, or TON" });
     }
     try {
       const result = await db.transaction(async (tx) => {
@@ -1400,17 +1452,38 @@ async function registerRoutes(app2) {
           "Storage": 0.6,
           "GPU": 1.5
         }[componentType] || 1;
-        const upgradeCost = Math.floor(baseCost * componentMultiplier * Math.pow(1.15, currentLevel));
-        const user = await tx.select().from(users).where(eq4(users.id, userId));
-        const balanceField = currency === "CS" ? "csBalance" : "chstBalance";
-        const currentBalance = user[0][balanceField];
-        if (currentBalance < upgradeCost) {
-          throw new Error(`Insufficient ${currency} balance. Need ${upgradeCost} ${currency}`);
+        const upgradeCostCS = Math.floor(baseCost * componentMultiplier * Math.pow(1.15, currentLevel));
+        let upgradeCost = upgradeCostCS;
+        if (currency === "TON") {
+          upgradeCost = parseFloat((upgradeCostCS / 1e4).toFixed(3));
+        }
+        if (currency === "TON") {
+          if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
+            throw new Error("TON transaction details required");
+          }
+          if (parseFloat(tonAmount) < upgradeCost) {
+            throw new Error(`Insufficient TON amount. Required: ${upgradeCost} TON`);
+          }
+          const isValid = await verifyTONTransaction(
+            tonTransactionHash,
+            userWalletAddress,
+            tonAmount
+          );
+          if (!isValid) {
+            throw new Error("TON transaction verification failed");
+          }
+        } else {
+          const user = await tx.select().from(users).where(eq4(users.id, userId));
+          const balanceField = currency === "CS" ? "csBalance" : "chstBalance";
+          const currentBalance = user[0][balanceField];
+          if (currentBalance < upgradeCost) {
+            throw new Error(`Insufficient ${currency} balance. Need ${upgradeCost} ${currency}`);
+          }
+          await tx.update(users).set({
+            [balanceField]: sql4`${balanceField === "csBalance" ? users.csBalance : users.chstBalance} - ${upgradeCost}`
+          }).where(eq4(users.id, userId));
         }
         const newLevel = currentLevel + 1;
-        await tx.update(users).set({
-          [balanceField]: sql4`${balanceField === "csBalance" ? users.csBalance : users.chstBalance} - ${upgradeCost}`
-        }).where(eq4(users.id, userId));
         await tx.update(componentUpgrades).set({
           currentLevel: newLevel,
           updatedAt: sql4`NOW()`
@@ -1427,6 +1500,7 @@ async function registerRoutes(app2) {
           componentType,
           newLevel,
           upgradeCost,
+          currency,
           hashrateIncrease,
           message: `${componentType} upgraded to level ${newLevel}! +${hashrateIncrease.toFixed(2)} GH/s`
         };
@@ -1491,20 +1565,20 @@ async function registerRoutes(app2) {
         if (owned && owned.quantity >= et.maxOwned) {
           throw new Error(`Maximum owned limit reached (${et.maxOwned})`);
         }
-        let equipment;
+        let equipment2;
         if (owned) {
           const updated = await tx.update(ownedEquipment).set({
             quantity: sql4`${ownedEquipment.quantity} + 1`,
             currentHashrate: sql4`${ownedEquipment.currentHashrate} + ${et.baseHashrate}`
           }).where(eq4(ownedEquipment.id, owned.id)).returning();
-          equipment = updated[0];
+          equipment2 = updated[0];
         } else {
           const inserted = await tx.insert(ownedEquipment).values({
             userId,
             equipmentTypeId: parsed.data.equipmentTypeId,
             currentHashrate: et.baseHashrate
           }).returning();
-          equipment = inserted[0];
+          equipment2 = inserted[0];
         }
         if (!(isFirstBasicLaptop && isFirstPurchase)) {
           const balanceField = et.currency === "CS" ? "csBalance" : "chstBalance";
@@ -1521,7 +1595,7 @@ async function registerRoutes(app2) {
         }
         const updatedUser = await tx.select().from(users).where(eq4(users.id, userId));
         console.log(`User ${userId} now has hashrate: ${updatedUser[0]?.totalHashrate}`);
-        return equipment;
+        return equipment2;
       });
       res.json(result);
     } catch (error) {
@@ -1827,8 +1901,8 @@ async function registerRoutes(app2) {
         let usersUpdated = 0;
         const updates = [];
         for (const user of allUsers) {
-          const equipment = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq4(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(eq4(ownedEquipment.userId, user.telegramId));
-          const actualHashrate = equipment.reduce((sum, row) => {
+          const equipment2 = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq4(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(eq4(ownedEquipment.userId, user.telegramId));
+          const actualHashrate = equipment2.reduce((sum, row) => {
             return sum + (row.owned_equipment?.currentHashrate || 0);
           }, 0);
           if (user.totalHashrate !== actualHashrate) {
@@ -1839,7 +1913,7 @@ async function registerRoutes(app2) {
               username: user.username,
               oldHashrate: user.totalHashrate,
               newHashrate: actualHashrate,
-              equipmentCount: equipment.length
+              equipmentCount: equipment2.length
             });
           }
         }
@@ -1861,6 +1935,65 @@ async function registerRoutes(app2) {
       });
     }
   });
+  app2.get("/api/admin/jackpots", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const { jackpotWins: jackpotWins2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const allJackpots = await db.select().from(jackpotWins2).orderBy(sql4`${jackpotWins2.wonAt} DESC`);
+      const unpaidCount = allJackpots.filter((j) => !j.paidOut).length;
+      const totalPaidOut = allJackpots.filter((j) => j.paidOut).length;
+      res.json({
+        success: true,
+        jackpots: allJackpots,
+        summary: {
+          total_wins: allJackpots.length,
+          unpaid: unpaidCount,
+          paid: totalPaidOut
+        }
+      });
+    } catch (error) {
+      console.error("Get jackpots error:", error);
+      res.status(500).json({
+        error: "Failed to fetch jackpots",
+        details: error.message
+      });
+    }
+  });
+  app2.post("/api/admin/jackpots/:jackpotId/mark-paid", validateTelegramAuth, requireAdmin, async (req, res) => {
+    const { jackpotId } = req.params;
+    const { notes } = req.body;
+    try {
+      const { jackpotWins: jackpotWins2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const adminUser = req.user;
+      const result = await db.transaction(async (tx) => {
+        const jackpot = await tx.select().from(jackpotWins2).where(eq4(jackpotWins2.id, parseInt(jackpotId))).limit(1);
+        if (!jackpot[0]) {
+          throw new Error("Jackpot not found");
+        }
+        if (jackpot[0].paidOut) {
+          throw new Error("Jackpot already marked as paid");
+        }
+        await tx.update(jackpotWins2).set({
+          paidOut: true,
+          paidAt: /* @__PURE__ */ new Date(),
+          paidByAdmin: adminUser?.telegramId || "unknown",
+          notes: notes || null
+        }).where(eq4(jackpotWins2.id, parseInt(jackpotId)));
+        const updated = await tx.select().from(jackpotWins2).where(eq4(jackpotWins2.id, parseInt(jackpotId))).limit(1);
+        return updated[0];
+      });
+      console.log(`Jackpot ${jackpotId} marked as paid by admin ${req.user?.telegramId}`);
+      res.json({
+        success: true,
+        jackpot: result,
+        message: "Jackpot marked as paid successfully"
+      });
+    } catch (error) {
+      console.error("Mark jackpot paid error:", error);
+      res.status(400).json({
+        error: error.message || "Failed to mark jackpot as paid"
+      });
+    }
+  });
   app2.post("/api/admin/equipment/:equipmentId/update", validateTelegramAuth, requireAdmin, async (req, res) => {
     const { equipmentId } = req.params;
     const { basePrice, currency } = req.body;
@@ -1871,8 +2004,8 @@ async function registerRoutes(app2) {
       if (currency !== void 0 && !["CS", "CHST", "TON"].includes(currency)) {
         return res.status(400).json({ error: "Invalid currency. Must be CS, CHST, or TON." });
       }
-      const equipment = await db.select().from(equipmentTypes).where(eq4(equipmentTypes.id, equipmentId)).limit(1);
-      if (!equipment[0]) {
+      const equipment2 = await db.select().from(equipmentTypes).where(eq4(equipmentTypes.id, equipmentId)).limit(1);
+      if (!equipment2[0]) {
         return res.status(404).json({ error: "Equipment not found" });
       }
       const updateData = {};
@@ -2452,7 +2585,7 @@ async function registerRoutes(app2) {
           }
         }
         await tx.update(users).set({
-          csBalance: sql4`${users.csBalance} + ${csReward}`,
+          csBalance: sql4`${users.csBalance} + ${rewards.cs}`,
           ...rewards.chst && { chstBalance: sql4`${users.chstBalance} + ${rewards.chst}` }
         }).where(eq4(users.id, userId));
         if (boxConfig.tonCost > 0) {
@@ -2631,8 +2764,8 @@ async function registerRoutes(app2) {
         return res.status(404).json({ error: "User not found" });
       }
       const stats = await db.select().from(userStatistics3).where(eq4(userStatistics3.userId, user[0].telegramId)).limit(1);
-      const equipment = await db.select().from(ownedEquipment).where(eq4(ownedEquipment.userId, userId));
-      const uniqueEquipment = new Set(equipment.map((e) => e.equipmentTypeId)).size;
+      const equipment2 = await db.select().from(ownedEquipment).where(eq4(ownedEquipment.userId, userId));
+      const uniqueEquipment = new Set(equipment2.map((e) => e.equipmentTypeId)).size;
       const refCount = await db.select({ count: sql4`COUNT(*)` }).from(referrals).where(eq4(referrals.referrerId, userId));
       const newlyUnlocked = [];
       const allAchievements = await db.select().from(achievementsTable).where(eq4(achievementsTable.isActive, true));
@@ -2643,7 +2776,7 @@ async function registerRoutes(app2) {
         let shouldUnlock = false;
         switch (achievement.requirement) {
           case "own_1_equipment":
-            shouldUnlock = equipment.length >= 1;
+            shouldUnlock = equipment2.length >= 1;
             break;
           case "hashrate_1000":
             shouldUnlock = user[0].totalHashrate >= 1e3;
@@ -3042,9 +3175,19 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/user/:userId/spin", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
-    const { isFree, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
+    const { isFree, quantity = 1, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
     try {
-      const { userSpins: userSpins2, spinHistory: spinHistory2, userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const { userSpins: userSpins2, spinHistory: spinHistory2, userStatistics: userStatistics3, jackpotWins: jackpotWins2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      if (![1, 10, 20].includes(quantity) && !isFree) {
+        return res.status(400).json({ error: "Invalid quantity. Must be 1, 10, or 20" });
+      }
+      const tonPricing = {
+        1: 0.1,
+        10: 0.9,
+        // 10% discount
+        20: 1.7
+        // 15% discount
+      };
       const result = await db.transaction(async (tx) => {
         const user = await tx.select().from(users).where(eq4(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
@@ -3069,15 +3212,18 @@ async function registerRoutes(app2) {
           if (todaySpins[0].freeSpinUsed) {
             throw new Error("Free spin already used today");
           }
+          if (quantity !== 1) {
+            throw new Error("Free spin can only be used once");
+          }
         } else {
           if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
             throw new Error("Payment verification required");
           }
+          const expectedCost = tonPricing[quantity];
           const gameWallet2 = getGameWalletAddress();
           const verification = await verifyTONTransaction(
             tonTransactionHash,
-            "0.1",
-            // 0.1 TON per paid spin
+            expectedCost.toString(),
             gameWallet2,
             userWalletAddress
           );
@@ -3085,48 +3231,109 @@ async function registerRoutes(app2) {
             throw new Error(verification.error || "Payment verification failed");
           }
         }
-        const rand = Math.random();
-        let prizeType, prizeValue, reward;
-        if (rand < 0.4) {
-          const csAmounts = [1e3, 2500, 5e3, 1e4, 25e3];
-          prizeValue = csAmounts[Math.floor(Math.random() * csAmounts.length)];
-          prizeType = "cs";
-          reward = { cs: prizeValue };
-          await tx.update(users).set({ csBalance: sql4`${users.csBalance} + ${prizeValue}` }).where(eq4(users.id, userId));
+        const prizes = [];
+        let totalCs = 0;
+        let totalChst = 0;
+        let jackpotWon = false;
+        for (let i = 0; i < quantity; i++) {
+          const jackpotRoll = Math.random();
+          if (jackpotRoll < 1e-3 && !isFree) {
+            jackpotWon = true;
+            const prizeType2 = "jackpot";
+            const prizeValue2 = "1.0 TON";
+            await tx.insert(jackpotWins2).values({
+              userId: user[0].telegramId,
+              username: user[0].username || user[0].telegramId,
+              walletAddress: userWalletAddress || null,
+              amount: "1.0",
+              paidOut: false
+            });
+            prizes.push({
+              type: prizeType2,
+              value: prizeValue2,
+              display: "\u{1F3B0} 1 TON JACKPOT! \u{1F3B0}"
+            });
+            await tx.insert(spinHistory2).values({
+              userId: user[0].telegramId,
+              prizeType: prizeType2,
+              prizeValue: prizeValue2,
+              wasFree: isFree
+            });
+            continue;
+          }
+          const rand = Math.random();
+          let prizeType, prizeValue;
+          if (rand < 0.4) {
+            const csAmounts = [1e3, 2500, 5e3, 1e4, 25e3];
+            prizeValue = csAmounts[Math.floor(Math.random() * csAmounts.length)];
+            prizeType = "cs";
+            totalCs += prizeValue;
+            prizes.push({
+              type: prizeType,
+              value: prizeValue,
+              display: `${prizeValue.toLocaleString()} CS`
+            });
+          } else if (rand < 0.7) {
+            const chstAmounts = [50, 100, 250, 500];
+            prizeValue = chstAmounts[Math.floor(Math.random() * chstAmounts.length)];
+            prizeType = "chst";
+            totalChst += prizeValue;
+            prizes.push({
+              type: prizeType,
+              value: prizeValue,
+              display: `${prizeValue.toLocaleString()} CHST`
+            });
+          } else if (rand < 0.9) {
+            prizeType = "powerup";
+            prizeValue = 5e3;
+            totalCs += prizeValue;
+            prizes.push({
+              type: prizeType,
+              value: prizeValue,
+              display: "Power-up Boost (5,000 CS)"
+            });
+          } else {
+            prizeType = "equipment";
+            prizeValue = 1e4;
+            totalCs += prizeValue;
+            prizes.push({
+              type: prizeType,
+              value: prizeValue,
+              display: "Equipment Bonus (10,000 CS)"
+            });
+          }
+          await tx.insert(spinHistory2).values({
+            userId: user[0].telegramId,
+            prizeType,
+            prizeValue: prizeValue.toString(),
+            wasFree: isFree
+          });
+        }
+        if (totalCs > 0) {
+          await tx.update(users).set({ csBalance: sql4`${users.csBalance} + ${totalCs}` }).where(eq4(users.id, userId));
           await tx.insert(userStatistics3).values({
             userId: user[0].telegramId,
-            totalCsEarned: prizeValue
+            totalCsEarned: totalCs
           }).onConflictDoUpdate({
             target: userStatistics3.userId,
             set: {
-              totalCsEarned: sql4`${userStatistics3.totalCsEarned} + ${prizeValue}`,
+              totalCsEarned: sql4`${userStatistics3.totalCsEarned} + ${totalCs}`,
               updatedAt: sql4`NOW()`
             }
           });
-        } else if (rand < 0.7) {
-          const chstAmounts = [50, 100, 250, 500];
-          prizeValue = chstAmounts[Math.floor(Math.random() * chstAmounts.length)];
-          prizeType = "chst";
-          reward = { chst: prizeValue };
-          await tx.update(users).set({ chstBalance: sql4`${users.chstBalance} + ${prizeValue}` }).where(eq4(users.id, userId));
+        }
+        if (totalChst > 0) {
+          await tx.update(users).set({ chstBalance: sql4`${users.chstBalance} + ${totalChst}` }).where(eq4(users.id, userId));
           await tx.insert(userStatistics3).values({
             userId: user[0].telegramId,
-            totalChstEarned: prizeValue
+            totalChstEarned: totalChst
           }).onConflictDoUpdate({
             target: userStatistics3.userId,
             set: {
-              totalChstEarned: sql4`${userStatistics3.totalChstEarned} + ${prizeValue}`,
+              totalChstEarned: sql4`${userStatistics3.totalChstEarned} + ${totalChst}`,
               updatedAt: sql4`NOW()`
             }
           });
-        } else if (rand < 0.9) {
-          prizeType = "powerup";
-          prizeValue = "luck-boost-24h";
-          reward = { powerup: "Luck Boost (24h)" };
-        } else {
-          prizeType = "equipment";
-          prizeValue = "gaming-laptop";
-          reward = { equipment: "Gaming Laptop" };
         }
         if (isFree) {
           await tx.update(userSpins2).set({
@@ -3138,24 +3345,34 @@ async function registerRoutes(app2) {
           ));
         } else {
           await tx.update(userSpins2).set({
-            paidSpinsCount: sql4`${userSpins2.paidSpinsCount} + 1`,
+            paidSpinsCount: sql4`${userSpins2.paidSpinsCount} + ${quantity}`,
             lastSpinAt: sql4`NOW()`
           }).where(and3(
             eq4(userSpins2.userId, user[0].telegramId),
             eq4(userSpins2.spinDate, today)
           ));
         }
-        await tx.insert(spinHistory2).values({
-          userId: user[0].telegramId,
-          prizeType,
-          prizeValue: prizeValue.toString(),
-          wasFree: isFree
-        });
+        let message = "";
+        if (jackpotWon) {
+          message = "\u{1F3B0}\u{1F4B0} JACKPOT! You won 1 TON! Admin will process your payout. ";
+        }
+        if (quantity === 1) {
+          message += prizes[0].display;
+        } else {
+          message += `${quantity} spins complete! `;
+          if (totalCs > 0) message += `${totalCs.toLocaleString()} CS `;
+          if (totalChst > 0) message += `${totalChst.toLocaleString()} CHST `;
+        }
         return {
           success: true,
-          prize: { type: prizeType, value: prizeValue },
-          reward,
-          message: `You won ${JSON.stringify(reward)}!`
+          prizes,
+          summary: {
+            total_cs: totalCs,
+            total_chst: totalChst,
+            jackpot_won: jackpotWon,
+            spins_completed: quantity
+          },
+          message
         };
       });
       res.json(result);
@@ -3322,31 +3539,36 @@ async function registerRoutes(app2) {
       return res.status(400).json({ error: "Equipment type ID is required" });
     }
     try {
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-      const equipment = await db.select().from(equipmentTypes).where(eq4(equipmentTypes.id, equipmentTypeId)).limit(1);
-      if (!equipment[0]) {
-        return res.status(404).json({ error: "Equipment not found" });
-      }
-      const existingAlert = await db.select().from(priceAlerts).where(and3(
-        eq4(priceAlerts.userId, user.telegramId),
-        eq4(priceAlerts.equipmentTypeId, equipmentTypeId)
-      )).limit(1);
-      if (existingAlert.length > 0) {
-        return res.status(400).json({ error: "Alert already exists for this equipment" });
-      }
-      const newAlert = await db.insert(priceAlerts).values({
-        userId: user.telegramId,
-        equipmentTypeId,
-        targetPrice: equipment[0].basePrice,
-        triggered: false
-      }).returning();
+      const { equipmentTypes: equipmentTypes2, userCosmetics: userCosmetics2, userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const result = await db.transaction(async (tx) => {
+        const user = await tx.select().from(users).where(eq4(users.id, userId)).for("update");
+        if (!user[0]) throw new Error("User not found");
+        const existingAlert = await tx.select().from(priceAlerts).where(and3(
+          eq4(priceAlerts.userId, user[0].telegramId),
+          eq4(priceAlerts.equipmentTypeId, equipmentTypeId)
+        )).limit(1);
+        if (existingAlert.length > 0) {
+          throw new Error("Alert already exists for this equipment");
+        }
+        const equipment2 = await tx.select().from(equipmentTypes2).where(and3(
+          eq4(equipmentTypes2.id, equipmentTypeId),
+          eq4(equipmentTypes2.isActive, true)
+        )).limit(1);
+        if (!equipment2[0]) {
+          throw new Error("Equipment not found");
+        }
+        const newAlert = await tx.insert(priceAlerts).values({
+          userId: user[0].telegramId,
+          equipmentTypeId,
+          targetPrice: equipment2[0].basePrice,
+          triggered: false
+        }).returning();
+        return newAlert[0];
+      });
       res.json({
         success: true,
         message: `Alert set for ${equipment[0].name}`,
-        alert: newAlert[0]
+        alert: result
       });
     } catch (error) {
       console.error("Create price alert error:", error);
@@ -3356,13 +3578,14 @@ async function registerRoutes(app2) {
   app2.delete("/api/user/:userId/price-alerts/:alertId", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId, alertId } = req.params;
     try {
-      const user = await storage.getUser(userId);
-      if (!user) {
+      const { equipmentTypes: equipmentTypes2, userCosmetics: userCosmetics2, userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const user = await db.select().from(users).where(eq4(users.id, userId)).limit(1);
+      if (!user[0]) {
         return res.status(404).json({ error: "User not found" });
       }
       const alert = await db.select().from(priceAlerts).where(and3(
         eq4(priceAlerts.id, parseInt(alertId)),
-        eq4(priceAlerts.userId, user.telegramId)
+        eq4(priceAlerts.userId, user[0].telegramId)
       )).limit(1);
       if (!alert[0]) {
         return res.status(404).json({ error: "Alert not found" });
@@ -3447,11 +3670,11 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      const equipment = await db.select().from(ownedEquipment).where(and3(
+      const equipment2 = await db.select().from(ownedEquipment).where(and3(
         eq4(ownedEquipment.id, ownedEquipmentId),
         eq4(ownedEquipment.userId, userId)
       )).limit(1);
-      if (!equipment[0]) {
+      if (!equipment2[0]) {
         return res.status(404).json({ error: "Equipment not found or not owned" });
       }
       const existingSetting = await db.select().from(autoUpgradeSettings).where(and3(
@@ -3528,8 +3751,8 @@ async function registerRoutes(app2) {
         for (const row of settings) {
           const setting = row.auto_upgrade_settings;
           const component = row.component_upgrades;
-          const equipment = row.owned_equipment;
-          if (!component || !equipment) continue;
+          const equipment2 = row.owned_equipment;
+          if (!component || !equipment2) continue;
           const currentLevel = component.currentLevel;
           const targetLevel = setting.targetLevel;
           if (currentLevel >= targetLevel) continue;
@@ -3541,7 +3764,7 @@ async function registerRoutes(app2) {
             }).where(eq4(componentUpgrades.id, component.id));
             totalCost += upgradeCost;
             upgrades.push({
-              equipmentId: equipment.id,
+              equipmentId: equipment2.id,
               componentType: setting.componentType,
               fromLevel: currentLevel,
               toLevel: currentLevel + 1,
@@ -3653,9 +3876,6 @@ async function registerRoutes(app2) {
   app2.post("/api/admin/seasons/:seasonId/toggle", validateTelegramAuth, requireAdmin, async (req, res) => {
     const { seasonId } = req.params;
     const { isActive } = req.body;
-    if (isActive === void 0) {
-      return res.status(400).json({ error: "isActive field is required" });
-    }
     try {
       const existing = await db.select().from(seasons).where(eq4(seasons.seasonId, seasonId)).limit(1);
       if (existing.length === 0) {
@@ -3708,7 +3928,7 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/user/:userId/packs/purchase", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
-    const { packType, tonTransactionHash, tonAmount } = req.body;
+    const { packType, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
     if (!packType || !tonTransactionHash || !tonAmount) {
       return res.status(400).json({ error: "Missing required fields" });
     }
@@ -3734,8 +3954,8 @@ async function registerRoutes(app2) {
         };
         const rewards = packRewards[packType];
         await tx.update(users).set({
-          csBalance: user[0].csBalance + rewards.cs,
-          chstBalance: user[0].chstBalance + rewards.chst
+          csBalance: sql4`${users.csBalance} + ${rewards.cs}`,
+          chstBalance: sql4`${users.chstBalance} + ${rewards.chst}`
         }).where(eq4(users.id, userId));
         for (const equipId of rewards.equipment) {
           const equipType = await tx.select().from(equipmentTypes).where(eq4(equipmentTypes.id, equipId)).limit(1);
@@ -3829,13 +4049,13 @@ async function registerRoutes(app2) {
           prestige = created;
         }
         const currentPrestige = prestige[0];
-        const equipment = await tx.select().from(ownedEquipment).where(eq4(ownedEquipment.userId, userId));
+        const equipment2 = await tx.select().from(ownedEquipment).where(eq4(ownedEquipment.userId, userId));
         await tx.insert(prestigeHistory).values({
           userId: user[0].telegramId,
           fromLevel: currentPrestige.prestigeLevel,
           toLevel: currentPrestige.prestigeLevel + 1,
           csBalanceReset: user[0].csBalance,
-          equipmentReset: JSON.stringify(equipment)
+          equipmentReset: JSON.stringify(equipment2)
         });
         await tx.update(userPrestige).set({
           prestigeLevel: currentPrestige.prestigeLevel + 1,
