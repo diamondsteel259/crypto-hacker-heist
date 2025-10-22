@@ -13,7 +13,12 @@ import {
   Users,
   Shield,
   X,
-  Settings
+  Settings,
+  Blocks,
+  BarChart3,
+  Target,
+  Palette,
+  Zap
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -58,8 +63,14 @@ const getSecondaryNavItems = (user: User | null | undefined) => {
   
   // Always show these essential items
   items.push(
+    { title: "Block Explorer", url: "/blocks", icon: Blocks },
+    { title: "Leaderboard", url: "/leaderboard", icon: BarChart3 },
     { title: "Referrals", url: "/referrals", icon: Users },
     { title: "Achievements", url: "/achievements", icon: Trophy },
+    { title: "Challenges", url: "/challenges", icon: Target },
+    { title: "Cosmetics", url: "/cosmetics", icon: Palette },
+    { title: "Statistics", url: "/statistics", icon: BarChart3 },
+    { title: "Spin Wheel", url: "/spin", icon: Zap },
     { title: "Settings", url: "/settings", icon: Settings }
   );
   
