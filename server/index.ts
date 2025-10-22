@@ -5,6 +5,7 @@ import { miningService } from "./mining";
 import { seedDatabase } from "./seedDatabase";
 import { seedGameContent } from "./seedGameContent";
 import { initializeBot } from "./bot";
+import { applyPerformanceIndexes } from "./applyIndexes";
 
 // Crypto Hacker Heist - v1.0.1 (Deployment trigger)
 import express, { type Request, Response, NextFunction } from "express";
@@ -14,6 +15,7 @@ import { miningService } from "./mining";
 import { seedDatabase } from "./seedDatabase";
 import { seedGameContent } from "./seedGameContent";
 import { initializeBot } from "./bot";
+import { applyPerformanceIndexes } from "./applyIndexes";
 
 const app = express();
 app.use(express.json());
@@ -85,6 +87,11 @@ app.use((req, res, next) => {
     seedDatabase().catch(err => {
       console.error("⚠️  Database seeding failed (non-fatal):", err.message || err);
       console.log("✅ Server will continue running. Database will seed when connection is available.");
+    });
+    
+    // Apply performance indexes
+    applyPerformanceIndexes().catch(err => {
+      console.error("⚠️  Index application failed (non-fatal):", err.message || err);
     });
     
     // Seed game content (challenges, achievements, cosmetics)
