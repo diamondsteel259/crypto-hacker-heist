@@ -42,9 +42,10 @@ interface EquipmentCardProps {
   onTonPurchase: () => void;
   isPurchasing: boolean;
   userBalance: number;
+  isConnected: boolean;
 }
 
-function EquipmentCard({ equipment, owned, onPurchase, onTonPurchase, isPurchasing, userBalance }: EquipmentCardProps) {
+function EquipmentCard({ equipment, owned, onPurchase, onTonPurchase, isPurchasing, userBalance, isConnected }: EquipmentCardProps) {
   const Icon = categoryIcons[equipment.category as keyof typeof categoryIcons] || Cpu;
   const isMaxed = owned >= equipment.maxOwned;
   
@@ -893,6 +894,7 @@ export default function Shop() {
                                       onTonPurchase={() => handleTonPurchase(equipment.id, currentPrice)}
                                       isPurchasing={purchaseMutation.isPending || tonPurchaseMutation.isPending}
                                       userBalance={csBalance}
+                                      isConnected={isConnected}
                                     />
                                   );
                                 })}
