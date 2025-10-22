@@ -1,13 +1,3 @@
-import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
-import { miningService } from "./mining";
-import { seedDatabase } from "./seedDatabase";
-import { seedGameContent } from "./seedGameContent";
-import { initializeBot } from "./bot";
-import { applyPerformanceIndexes } from "./applyIndexes";
-import rateLimit from "express-rate-limit";
-
 // Crypto Hacker Heist - v1.0.1 (Deployment trigger)
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
