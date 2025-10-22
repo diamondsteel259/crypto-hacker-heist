@@ -820,3 +820,115 @@ function PaymentLogsSection({ userId, onClose }: { userId: string; onClose: () =
     </Card>
   );
 }
+
+// Balance Editor Component
+function BalanceEditorSection({ 
+  userId, 
+  user,
+  editCs,
+  editChst,
+  setEditCs,
+  setEditChst,
+  updateBalanceMutation,
+  onClose 
+}: { 
+  userId: string; 
+  user?: User;
+  editCs: string;
+  editChst: string;
+  setEditCs: (val: string) => void;
+  setEditChst: (val: string) => void;
+  updateBalanceMutation: any;
+  onClose: () => void;
+}) {
+  const handleUpdate = () => {
+    const csBalance = editCs ? parseFloat(editCs) : undefined;
+    const chstBalance = editChst ? parseFloat(editChst) : undefined;
+    
+    if (csBalance !== undefined || chstBalance !== undefined) {
+      updateBalanceMutation.mutate({ userId, csBalance, chstBalance });
+    }
+  };
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <Edit className="w-5 h-5 text-matrix-green" />
+          Edit Balance - {user?.username || userId.slice(0, 8) + '...'}
+        </h3>
+        <Button size="sm" variant="outline" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+
+      <div className="space-y-4">
+        <div className="p-4 bg-muted/30 rounded-md">
+          <p className="text-sm text-muted-foreground mb-2">Current Balances:</p>
+          <div className="flex gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground">CS</p>
+              <p className="text-lg font-mono font-bold text-matrix-green">
+                {user?.csBalance.toLocaleString() || '0'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">CHST</p>
+              <p className="text-lg font-mono font-bold text-cyber-blue">
+                {user?.chstBalance.toLocaleString() || '0'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="edit-cs" className="text-sm font-medium">
+              New CS Balance
+            </Label>
+            <Input
+              id="edit-cs"
+              type="number"
+              value={editCs}
+              onChange={(e) => setEditCs(e.target.value)}
+              placeholder="Enter CS amount"
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit-chst" className="text-sm font-medium">
+              New CHST Balance
+            </Label>
+            <Input
+              id="edit-chst"
+              type="number"
+              value={editChst}
+              onChange={(e) => setEditChst(e.target.value)}
+              placeholder="Enter CHST amount"
+              className="mt-1"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <Button
+            onClick={handleUpdate}
+            disabled={updateBalanceMutation.isPending || (!editCs && !editChst)}
+            className="bg-matrix-green hover:bg-matrix-green/90 text-black"
+          >
+            {updateBalanceMutation.isPending ? "Updating..." : "Update Balance"}
+          </Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
+
+        <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
+          <p className="text-xs text-yellow-600 dark:text-yellow-400">
+            ⚠️ This will set the user's balance to the exact amounts entered. Use this for testing or support purposes.
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+}
