@@ -797,48 +797,109 @@ export default function Shop() {
   return (
     <div className="min-h-screen bg-background p-3">
       <div className="max-w-7xl mx-auto space-y-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5 text-matrix-green" />
-            <h1 className="text-base sm:text-lg font-bold terminal-gradient">SHOP</h1>
-          </div>
-          <div className="text-right">
-            <div className="space-y-0.5">
-              <div>
-                <p className="text-xs text-muted-foreground">CS</p>
-                <p className="text-sm sm:text-base font-mono text-matrix-green">{csBalance.toLocaleString()}</p>
-              </div>
-              {isConnected && (
-                <div>
-                  <p className="text-xs text-muted-foreground">TON</p>
-                  <p className="text-sm sm:text-base font-mono text-cyber-blue">{tonBalance}</p>
-                </div>
-              )}
+        {/* Enhanced Shop Header with Stats */}
+        <Card className="p-4 bg-gradient-to-r from-matrix-green/10 to-cyber-blue/10 border-matrix-green/20">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <ShoppingBag className="w-5 h-5 text-matrix-green" />
+              <h1 className="text-lg sm:text-xl font-bold terminal-gradient">SHOP</h1>
             </div>
+            {!isConnected && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs border-cyber-blue text-cyber-blue"
+                onClick={() => tonConnectUI.openModal()}
+              >
+                Connect TON Wallet
+              </Button>
+            )}
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">CS Balance</p>
+              <p className="text-base sm:text-lg font-mono font-bold text-matrix-green">{csBalance.toLocaleString()}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Your Hashrate</p>
+              <p className="text-base sm:text-lg font-mono font-bold text-cyber-blue">{userHashrate.toLocaleString()} H/s</p>
+            </div>
+            {isConnected && (
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">TON Balance</p>
+                <p className="text-base sm:text-lg font-mono font-bold text-cyber-blue">{tonBalance}</p>
+              </div>
+            )}
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Equipment Owned</p>
+              <p className="text-base sm:text-lg font-mono font-bold text-neon-orange">{ownedEquipment.length}</p>
+            </div>
+          </div>
+        </Card>
+
+        {/* Search and Filter Bar */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search equipment..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant={currencyFilter === "all" ? "default" : "outline"}
+              onClick={() => setCurrencyFilter("all")}
+              className="text-xs"
+            >
+              <Filter className="w-3 h-3 mr-1" />
+              All
+            </Button>
+            <Button
+              size="sm"
+              variant={currencyFilter === "CS" ? "default" : "outline"}
+              onClick={() => setCurrencyFilter("CS")}
+              className="text-xs"
+            >
+              CS Only
+            </Button>
+            <Button
+              size="sm"
+              variant={currencyFilter === "TON" ? "default" : "outline"}
+              onClick={() => setCurrencyFilter("TON")}
+              className="text-xs"
+            >
+              TON Only
+            </Button>
           </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="w-full grid grid-cols-5 mb-4">
             <TabsTrigger value="equipment" data-testid="tab-equipment" className="text-xs px-1">
-              <Cpu className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Equipment</span>
+              <Cpu className="w-4 h-4 sm:mr-1" />
+              <span className="hidden sm:inline">⚡ Rigs</span>
             </TabsTrigger>
             <TabsTrigger value="upgrades" data-testid="tab-upgrades" className="text-xs px-1">
-              <Rocket className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Upgrades</span>
+              <Rocket className="w-4 h-4 sm:mr-1" />
+              <span className="hidden sm:inline">🔧 Upgrades</span>
             </TabsTrigger>
             <TabsTrigger value="powerups" data-testid="tab-powerups" className="text-xs px-1">
-              <Zap className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Power-Ups</span>
+              <Zap className="w-4 h-4 sm:mr-1" />
+              <span className="hidden sm:inline">⚡ Boosts</span>
             </TabsTrigger>
             <TabsTrigger value="lootboxes" data-testid="tab-lootboxes" className="text-xs px-1">
-              <Gem className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Loot Boxes</span>
+              <Gem className="w-4 h-4 sm:mr-1" />
+              <span className="hidden sm:inline">🎁 Boxes</span>
             </TabsTrigger>
             <TabsTrigger value="tasks" data-testid="tab-tasks" className="text-xs px-1">
-              <CheckCircle2 className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Tasks</span>
+              <CheckCircle2 className="w-4 h-4 sm:mr-1" />
+              <span className="hidden sm:inline">✅ Tasks</span>
             </TabsTrigger>
           </TabsList>
 
