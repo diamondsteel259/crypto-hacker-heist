@@ -1007,7 +1007,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Grant rewards
         await tx.update(users)
-          .set({ 
+          .set({
             csBalance: sql`${users.csBalance} + ${rewardCs}`,
             chstBalance: sql`${users.chstBalance} + ${rewardChst}`
           })
@@ -1155,7 +1155,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Grant rewards
         await tx.update(users)
-          .set({ 
+          .set({
             csBalance: sql`${users.csBalance} + ${rewardCs}`,
             chstBalance: sql`${users.chstBalance} + ${rewardChst}`
           })
@@ -1544,6 +1544,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Get active power-ups error:", error);
       res.status(500).json({ error: "Failed to get active power-ups" });
+    }
+  });
+
+  // ==========================================
+  // LOOT BOX / MYSTERY BOX ROUTES
+  // ==========================================
+
+  app.post("/api/user/:userId/lootbox/open", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { boxType, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
+
+    if (!boxType) {
+      return res.status(400).json({ error: "Box type is required" });
+    }
+
+    try {
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users)
+          .where(eq(users.id, userId))
+          .for('update');
+        if (!user[0]) throw new Error("User not found");
+
+        // Define box types and their rewards
+        const boxRewards: Record<string, { tonCost: number; minCS: number; maxCS: number; }> = {
+          'basic': { tonCost: 0.5, minCS: 50000, maxCS: 55000 }, // 100-110% RTP
+          'premium': { tonCost: 2, minCS: 200000, maxCS: 220000 },
+          'epic': { tonCost: 5, minCS: 500000, maxCS: 550000 },
+          'daily-task': { tonCost: 0, minCS: 5000, maxCS: 10000 }, // Free box
+          'invite-friend': { tonCost: 0, minCS: 10000, maxCS: 15000 }, // Free box
+        };
+
+        const boxConfig = boxRewards[boxType];
+        if (!boxConfig) {
+          throw new Error("Invalid box type");
+        }
+
+        // Handle TON payment boxes
+        if (boxConfig.tonCost > 0) {
+          if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
+            throw new Error("TON transaction details required for paid boxes");
+          }
+
+          // Verify TON amount matches box cost
+          if (parseFloat(tonAmount) < boxConfig.tonCost) {
+            throw new Error(`Insufficient TON amount. Required: ${boxConfig.tonCost} TON`);
+          }
+
+          // Check if transaction was already used
+          const existingPurchase = await tx.select().from(lootBoxPurchases)
+            .where(eq(lootBoxPurchases.tonTransactionHash, tonTransactionHash))
+            .limit(1);
+
+          if (existingPurchase[0]) {
+            throw new Error("This transaction has already been used");
+          }
+
+          // Verify TON transaction
+          const isValid = await verifyTONTransaction(
+            tonTransactionHash,
+            userWalletAddress,
+            tonAmount
+          );
+
+          if (!isValid) {
+            throw new Error("TON transaction verification failed");
+          }
+        }
+
+        // Calculate random reward (CS currency)
+        const csReward = Math.floor(
+          boxConfig.minCS + Math.random() * (boxConfig.maxCS - boxConfig.minCS)
+        );
+
+        // Determine if user gets bonus items (10% chance for premium/epic)
+        const bonusChance = boxType === 'epic' ? 0.2 : boxType === 'premium' ? 0.1 : 0;
+        const getBonus = Math.random() < bonusChance;
+
+        const rewards: any = {
+          cs: csReward,
+        };
+
+        // Add bonus rewards
+        if (getBonus) {
+          const bonusType = Math.random();
+          if (bonusType < 0.5) {
+            // CHST bonus
+            rewards.chst = Math.floor(csReward * 0.1); // 10% of CS reward in CHST
+          } else {
+            // Free spin bonus
+            rewards.freeSpins = boxType === 'epic' ? 3 : 1;
+          }
+        }
+
+        // Update user balance
+        await tx.update(users)
+          .set({
+            csBalance: sql`${users.csBalance} + ${csReward}`,
+            ...(rewards.chst && { chstBalance: sql`${users.chstBalance} + ${rewards.chst}` }),
+          })
+          .where(eq(users.telegramId, user[0].telegramId));
+
+        // Record purchase if TON was paid
+        if (boxConfig.tonCost > 0) {
+          await tx.insert(lootBoxPurchases).values({
+            userId: user[0].telegramId,
+            boxType,
+            tonAmount: tonAmount.toString(),
+            tonTransactionHash,
+            tonTransactionVerified: true,
+            rewardsJson: JSON.stringify(rewards),
+          });
+        }
+
+        // Get updated user balance
+        const updatedUser = await tx.select().from(users)
+          .where(eq(users.telegramId, user[0].telegramId))
+          .limit(1);
+
+        return {
+          success: true,
+          rewards,
+          newBalance: {
+            cs: updatedUser[0].csBalance,
+            chst: updatedUser[0].chstBalance,
+          },
+        };
+      });
+
+      console.log(`Loot box opened: ${boxType} for user ${userId}, rewards:`, result.rewards);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Loot box open error:", error);
+      res.status(400).json({ error: error.message || "Failed to open loot box" });
     }
   });
 
