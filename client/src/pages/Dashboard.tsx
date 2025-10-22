@@ -15,7 +15,7 @@ import { Terminal, Gem, Package, TrendingUp, Zap, Shield, Sparkles, Flame, Clock
 import { initializeUser, getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { hapticSuccess } from "@/lib/telegram";
+// import { hapticSuccess } from "@/lib/telegram";
 import type { User } from "@shared/schema";
 
 interface ActivePowerUp {
@@ -93,7 +93,7 @@ export default function Dashboard() {
         const reward = currentBalance - lastBalanceRef.current;
         
         // Show success notification
-        hapticSuccess();
+        // hapticSuccess();
         toast({
           title: "Block Mined! 🎉",
           description: `You earned ${reward.toLocaleString()} CS from Block #${currentBlockNumber}`,
