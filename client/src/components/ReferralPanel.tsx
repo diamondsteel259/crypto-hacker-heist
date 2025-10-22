@@ -10,7 +10,6 @@ export default function ReferralPanel() {
 
   const handleCopy = () => {
     navigator.clipboard.writeText(`https://t.me/cryptohackerheist_bot?start=${referralCode}`);
-    console.log('Referral link copied!');
   };
 
   return (
