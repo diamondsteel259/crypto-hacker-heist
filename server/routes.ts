@@ -204,12 +204,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Equipment catalog routes
   app.get("/api/equipment-types", async (req, res) => {
     try {
-      const equipmentTypes = await storage.getAllEquipmentTypes();
-      console.log(`Equipment types loaded: ${equipmentTypes.length}`);
-      res.json(equipmentTypes);
+      const equipment = await storage.getAllEquipmentTypes();
+      res.json(equipment);
     } catch (error) {
       console.error("Error loading equipment types:", error);
       res.status(500).json({ error: "Failed to load equipment types" });
+    }
+  });
+
+  // Get active flash sales
+  app.get("/api/flash-sales/active", validateTelegramAuth, async (req, res) => {
+    try {
+      const { flashSales } = await import("@shared/schema");
+      const now = new Date();
+      
+      const activeSales = await db.select()
+        .from(flashSales)
+        .where(and(
+          eq(flashSales.isActive, true),
+          sql`${flashSales.startTime} <= ${now}`,
+          sql`${flashSales.endTime} > ${now}`
+        ));
+
+      res.json(activeSales);
+    } catch (error: any) {
+      console.error("Get flash sales error:", error);
+      res.status(500).json({ error: "Failed to fetch flash sales" });
+    }
+  });
+
+  // Admin: Create flash sale
+  app.post("/api/admin/flash-sales", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const { flashSales } = await import("@shared/schema");
+      const { equipmentId, discountPercentage, durationHours } = req.body;
+
+      if (!equipmentId || !discountPercentage || !durationHours) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      if (discountPercentage < 10 || discountPercentage > 50) {
+        return res.status(400).json({ error: "Discount must be between 10% and 50%" });
+      }
+
+      const startTime = new Date();
+      const endTime = new Date(startTime.getTime() + durationHours * 60 * 60 * 1000);
+
+      const newSale = await db.insert(flashSales).values({
+        equipmentId,
+        discountPercentage,
+        startTime,
+        endTime,
+        isActive: true,
+      }).returning();
+
+      res.json(newSale[0]);
+    } catch (error: any) {
+      console.error("Create flash sale error:", error);
+      res.status(500).json({ error: "Failed to create flash sale" });
+    }
+  });
+
+  // Admin: End flash sale early
+  app.post("/api/admin/flash-sales/:saleId/end", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const { flashSales } = await import("@shared/schema");
+      const { saleId } = req.params;
+
+      await db.update(flashSales)
+        .set({ isActive: false })
+        .where(eq(flashSales.id, parseInt(saleId)));
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("End flash sale error:", error);
+      res.status(500).json({ error: "Failed to end flash sale" });
     }
   });
 
@@ -1429,6 +1498,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Get updated balances
         const updatedUser = await tx.select().from(users).where(eq(users.id, userId));
+        console.log(`User ${userId} now has hashrate: ${updatedUser[0]?.totalHashrate}`);
 
         return {
           success: true,
@@ -2473,21 +2543,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // COSMETICS ROUTES
   // ==========================================
 
-  // Get all cosmetic items
-  app.get("/api/cosmetics", async (req, res) => {
-    try {
-      const { cosmeticItems } = await import("@shared/schema");
-      const items = await db.select().from(cosmeticItems)
-        .where(eq(cosmeticItems.isActive, true))
-        .orderBy(cosmeticItems.category, cosmeticItems.orderIndex);
-      res.json(items);
-    } catch (error: any) {
-      console.error("Get cosmetics error:", error);
-      res.status(500).json({ error: "Failed to get cosmetics" });
-    }
-  });
-
-  // Get user's owned cosmetics
+  // Get user's cosmetic items
   app.get("/api/user/:userId/cosmetics", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
 
@@ -2509,888 +2565,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Purchase cosmetic item
-  app.post("/api/user/:userId/cosmetics/:cosmeticId/purchase", validateTelegramAuth, verifyUserAccess, async (req, res) => {
-    const { userId, cosmeticId } = req.params;
-    const { currency, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
-
-    try {
-      const { cosmeticItems, userCosmetics, userStatistics } = await import("@shared/schema");
-
-      const result = await db.transaction(async (tx: any) => {
-        const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
-        if (!user[0]) throw new Error("User not found");
-
-        // Check if already owned
-        const existing = await tx.select().from(userCosmetics)
-          .where(and(
-            eq(userCosmetics.userId, user[0].telegramId),
-            eq(userCosmetics.cosmeticId, cosmeticId)
-          ))
-          .limit(1);
-
-        if (existing[0]) {
-          throw new Error("Already owned");
-        }
-
-        // Get cosmetic details
-        const cosmetic = await tx.select().from(cosmeticItems)
-          .where(and(
-            eq(cosmeticItems.itemId, cosmeticId),
-            eq(cosmeticItems.isActive, true)
-          ))
-          .limit(1);
-
-        if (!cosmetic[0]) {
-          throw new Error("Cosmetic not found");
-        }
-
-        // Handle payment based on currency
-        if (currency === "CS" && cosmetic[0].priceCs) {
-          if (user[0].csBalance < cosmetic[0].priceCs) {
-            throw new Error(`Insufficient CS. Need ${cosmetic[0].priceCs} CS`);
-          }
-
-          await tx.update(users)
-            .set({ csBalance: sql`${users.csBalance} - ${cosmetic[0].priceCs}` })
-            .where(eq(users.id, userId));
-
-          await tx.insert(userStatistics)
-            .values({
-              userId: user[0].telegramId,
-              totalCsSpent: cosmetic[0].priceCs,
-            })
-            .onConflictDoUpdate({
-              target: userStatistics.userId,
-              set: {
-                totalCsSpent: sql`${userStatistics.totalCsSpent} + ${cosmetic[0].priceCs}`,
-                updatedAt: sql`NOW()`,
-              },
-            });
-        } else if (currency === "CHST" && cosmetic[0].priceChst) {
-          if (user[0].chstBalance < cosmetic[0].priceChst) {
-            throw new Error(`Insufficient CHST. Need ${cosmetic[0].priceChst} CHST`);
-          }
-
-          await tx.update(users)
-            .set({ chstBalance: sql`${users.chstBalance} - ${cosmetic[0].priceChst}` })
-            .where(eq(users.id, userId));
-        } else if (currency === "TON" && cosmetic[0].priceTon) {
-          // Verify TON transaction
-          if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
-            throw new Error("TON payment verification required");
-          }
-
-          const gameWallet = getGameWalletAddress();
-          const verification = await verifyTONTransaction(
-            tonTransactionHash,
-            tonAmount,
-            gameWallet,
-            userWalletAddress
-          );
-
-          if (!verification.verified) {
-            throw new Error(verification.error || "Payment verification failed");
-          }
-
-          await tx.insert(userStatistics)
-            .values({
-              userId: user[0].telegramId,
-              totalTonSpent: cosmetic[0].priceTon,
-            })
-            .onConflictDoUpdate({
-              target: userStatistics.userId,
-              set: {
-                totalTonSpent: sql`${userStatistics.totalTonSpent} + ${cosmetic[0].priceTon}`,
-                updatedAt: sql`NOW()`,
-              },
-            });
-        } else {
-          throw new Error("Invalid currency or price not set");
-        }
-
-        // Add to user's cosmetics
-        await tx.insert(userCosmetics).values({
-          userId: user[0].telegramId,
-          cosmeticId,
-          isEquipped: false,
-        });
-
-        return {
-          success: true,
-          cosmetic: cosmetic[0],
-          message: `Purchased ${cosmetic[0].name}!`,
-        };
-      });
-
-      res.json(result);
-    } catch (error: any) {
-      console.error("Purchase cosmetic error:", error);
-      res.status(400).json({ error: error.message || "Failed to purchase cosmetic" });
-    }
-  });
-
-  // ==========================================
-  // STREAKS ROUTES
-  // ==========================================
-
-  // Get user's login streak
-  app.get("/api/user/:userId/streak", validateTelegramAuth, verifyUserAccess, async (req, res) => {
-    const { userId } = req.params;
-
-    try {
-      const { userStreaks } = await import("@shared/schema");
-
-      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-      if (!user[0]) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      const streak = await db.select().from(userStreaks)
-        .where(eq(userStreaks.userId, user[0].telegramId))
-        .limit(1);
-
-      if (!streak[0]) {
-        return res.json({
-          currentStreak: 0,
-          longestStreak: 0,
-          lastLoginDate: null,
-        });
-      }
-
-      res.json(streak[0]);
-    } catch (error: any) {
-      console.error("Get streak error:", error);
-      res.status(500).json({ error: "Failed to get streak" });
-    }
-  });
-
-  // Update daily login streak
-  app.post("/api/user/:userId/streak/checkin", validateTelegramAuth, verifyUserAccess, async (req, res) => {
-    const { userId } = req.params;
-
-    try {
-      const { userStreaks } = await import("@shared/schema");
-
-      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-      if (!user[0]) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      const today = new Date().toISOString().split('T')[0];
-
-      // Check if already checked in today
-      const todayClaim = await db.select().from(userStreaks)
-        .where(eq(userStreaks.userId, user[0].telegramId))
-        .limit(1);
-
-      if (todayClaim[0]) {
-        return res.json({
-          currentStreak: todayClaim[0].currentStreak,
-          longestStreak: todayClaim[0].longestStreak,
-          message: "Already checked in today",
-          reward: 0,
-        });
-      }
-
-      // Get current streak to determine next reward
-      const streak = await db.select().from(userStreaks)
-        .where(eq(userStreaks.userId, user[0].telegramId))
-        .limit(1);
-
-      const currentStreak = streak[0]?.currentStreak || 0;
-      const nextReward = calculateDailyLoginReward(currentStreak + 1);
-
-      res.json({
-        currentStreak: currentStreak + 1,
-        longestStreak: currentStreak + 1,
-        message: "Day 1 streak! Earned 1000 CS",
-        reward: nextReward.cs,
-      });
-    } catch (error: any) {
-      console.error("Check-in streak error:", error);
-      res.status(500).json({ error: "Failed to check-in" });
-    }
-  });
-
-  // ==========================================
-  // DAILY LOGIN REWARDS ROUTES
-  // ==========================================
-
-  // Get daily login reward status
-  app.get("/api/user/:userId/daily-login/status", validateTelegramAuth, verifyUserAccess, async (req, res) => {
-    const { userId } = req.params;
-
-    try {
-      const { dailyLoginRewards, userStreaks } = await import("@shared/schema");
-
-      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-      if (!user[0]) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      const today = new Date().toISOString().split('T')[0];
-
-      // Check if already claimed today
-      const todayClaim = await db.select().from(dailyLoginRewards)
-        .where(and(
-          eq(dailyLoginRewards.userId, user[0].telegramId),
-          eq(dailyLoginRewards.loginDate, today)
-        ))
-        .limit(1);
-
-      if (todayClaim[0]) {
-        return res.json({
-          alreadyClaimed: true,
-          claimedAt: todayClaim[0].claimedAt,
-          streakDay: todayClaim[0].streakDay,
-          reward: {
-            cs: todayClaim[0].rewardCs,
-            chst: todayClaim[0].rewardChst,
-            item: todayClaim[0].rewardItem,
-          },
-        });
-      }
-
-      // Get current streak to determine next reward
-      const streak = await db.select().from(userStreaks)
-        .where(eq(userStreaks.userId, user[0].telegramId))
-        .limit(1);
-
-      const currentStreak = streak[0]?.currentStreak || 0;
-      const nextReward = calculateDailyLoginReward(currentStreak + 1);
-
-      res.json({
-        alreadyClaimed: false,
-        nextStreakDay: currentStreak + 1,
-        nextReward,
-      });
-    } catch (error: any) {
-      console.error("Get daily login status error:", error);
-      res.status(500).json({ error: "Failed to get daily login status" });
-    }
-  });
-
-  // Claim daily login reward
-  app.post("/api/user/:userId/daily-login/claim", validateTelegramAuth, verifyUserAccess, async (req, res) => {
-    const { userId } = req.params;
-
-    try {
-      const { dailyLoginRewards, userStreaks } = await import("@shared/schema");
-
-      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-      if (!user[0]) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      const today = new Date().toISOString().split('T')[0];
-
-      // Check if already claimed today
-      const todayClaim = await db.select().from(dailyLoginRewards)
-        .where(and(
-          eq(dailyLoginRewards.userId, user[0].telegramId),
-          eq(dailyLoginRewards.loginDate, today)
-        ))
-        .limit(1);
-
-      if (todayClaim[0]) {
-        return res.status(400).json({ error: "Already claimed today's reward" });
-      }
-
-      // Get or create streak
-      const streak = await db.select().from(userStreaks)
-        .where(eq(userStreaks.userId, user[0].telegramId))
-        .limit(1);
-
-      let currentStreakDay = 1;
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
-
-      if (streak[0]) {
-        if (streak[0].lastLoginDate === yesterdayStr) {
-          // Streak continues
-          currentStreakDay = streak[0].currentStreak + 1;
-        } else if (streak[0].lastLoginDate === today) {
-          // Already logged in today
-          currentStreakDay = streak[0].currentStreak;
-        } else {
-          // Streak broke, reset to 1
-          currentStreakDay = 1;
-        }
-
-        // Update streak
-        const newLongest = Math.max(currentStreakDay, streak[0].longestStreak);
-        await db.update(userStreaks)
-          .set({
-            currentStreak: currentStreakDay,
-            longestStreak: newLongest,
-            lastLoginDate: today,
-            updatedAt: sql`NOW()`,
-          })
-          .where(eq(userStreaks.userId, user[0].telegramId));
-      } else {
-        // Create new streak
-        await db.insert(userStreaks).values({
-          userId: user[0].telegramId,
-          currentStreak: 1,
-          longestStreak: 1,
-          lastLoginDate: today,
-        });
-      }
-
-      // Calculate reward
-      const reward = calculateDailyLoginReward(currentStreakDay);
-
-      // Award rewards
-      await db.update(users)
-        .set({
-          csBalance: sql`${users.csBalance} + ${reward.cs}`,
-          chstBalance: sql`${users.chstBalance} + ${reward.chst}`,
-        })
-        .where(eq(users.id, userId));
-
-      // Record in daily login rewards
-      await db.insert(dailyLoginRewards).values({
-        userId: user[0].telegramId,
-        loginDate: today,
-        streakDay: currentStreakDay,
-        rewardCs: reward.cs,
-        rewardChst: reward.chst,
-        rewardItem: reward.item,
-      });
-
-      res.json({
-        success: true,
-        streakDay: currentStreakDay,
-        reward,
-        message: `Day ${currentStreakDay} reward claimed!`,
-      });
-    } catch (error: any) {
-      console.error("Claim daily login error:", error);
-      res.status(500).json({ error: "Failed to claim daily login reward" });
-    }
-  });
-
-  // ==========================================
-  // HOURLY BONUS ROUTES
-  // ==========================================
-
-  // Check if hourly bonus is available
-  app.get("/api/user/:userId/hourly-bonus/status", validateTelegramAuth, verifyUserAccess, async (req, res) => {
-    const { userId } = req.params;
-
-    try {
-      const { userHourlyBonuses } = await import("@shared/schema");
-
-      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-      if (!user[0]) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      // Get last claim time
-      const lastClaim = await db.select().from(userHourlyBonuses)
-        .where(eq(userHourlyBonuses.userId, user[0].telegramId))
-        .orderBy(sql`${userHourlyBonuses.claimedAt} DESC`)
-        .limit(1);
-
-      if (!lastClaim[0]) {
-        return res.json({
-          available: true,
-          nextAvailableAt: null,
-          minutesRemaining: 0,
-        });
-      }
-
-      const lastClaimTime = new Date(lastClaim[0].claimedAt).getTime();
-      const now = Date.now();
-      const hourInMs = 60 * 60 * 1000;
-      const timeSinceLastClaim = now - lastClaimTime;
-
-      if (timeSinceLastClaim >= hourInMs) {
-        return res.json({
-          available: true,
-          nextAvailableAt: null,
-          minutesRemaining: 0,
-        });
-      }
-
-      const nextAvailable = lastClaimTime + hourInMs;
-      const minutesRemaining = Math.ceil((nextAvailable - now) / 1000 / 60);
-
-      res.json({
-        available: false,
-        nextAvailableAt: new Date(nextAvailable).toISOString(),
-        minutesRemaining,
-      });
-    } catch (error: any) {
-      console.error("Get hourly bonus status error:", error);
-      res.status(500).json({ error: "Failed to get bonus status" });
-    }
-  });
-
-  // Claim hourly bonus
-  app.post("/api/user/:userId/hourly-bonus/claim", validateTelegramAuth, verifyUserAccess, async (req, res) => {
-    const { userId } = req.params;
-
-    try {
-      const { userHourlyBonuses, userStatistics } = await import("@shared/schema");
-
-      const result = await db.transaction(async (tx: any) => {
-        const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
-        if (!user[0]) throw new Error("User not found");
-
-        // Check last claim
-        const lastClaim = await tx.select().from(userHourlyBonuses)
-          .where(eq(userHourlyBonuses.userId, user[0].telegramId))
-          .orderBy(sql`${userHourlyBonuses.claimedAt} DESC`)
-          .limit(1);
-
-        if (lastClaim[0]) {
-          const lastClaimTime = new Date(lastClaim[0].claimedAt).getTime();
-          const now = Date.now();
-          const hourInMs = 60 * 60 * 1000;
-
-          if (now - lastClaimTime < hourInMs) {
-            throw new Error("Must wait 1 hour between claims");
-          }
-        }
-
-        // Random reward between 500-2000 CS
-        const reward = Math.floor(Math.random() * 1500) + 500;
-
-        // Give reward
-        await tx.update(users)
-          .set({ csBalance: sql`${users.csBalance} + ${reward}` })
-          .where(eq(users.id, userId));
-
-        // Record claim
-        await tx.insert(userHourlyBonuses).values({
-          userId: user[0].telegramId,
-          rewardAmount: reward,
-        });
-
-        // Update statistics
-        await tx.insert(userStatistics)
-          .values({
-            userId: user[0].telegramId,
-            totalCsEarned: reward,
-          })
-          .onConflictDoUpdate({
-            target: userStatistics.userId,
-            set: {
-              totalCsEarned: sql`${userStatistics.totalCsEarned} + ${reward}`,
-              updatedAt: sql`NOW()`,
-            },
-          });
-
-        return {
-          success: true,
-          reward,
-          message: `Claimed ${reward} CS!`,
-        };
-      });
-
-      res.json(result);
-    } catch (error: any) {
-      console.error("Claim hourly bonus error:", error);
-      res.status(400).json({ error: error.message || "Failed to claim bonus" });
-    }
-  });
-
-  // ==========================================
-  // SPIN THE WHEEL ROUTES
-  // ==========================================
-
-  // Get spin status for today
-  app.get("/api/user/:userId/spin/status", validateTelegramAuth, verifyUserAccess, async (req, res) => {
-    const { userId } = req.params;
-
-    try {
-      const { userSpins } = await import("@shared/schema");
-
-      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-      if (!user[0]) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      const today = new Date().toISOString().split('T')[0];
-
-      const todaySpins = await db.select().from(userSpins)
-        .where(and(
-          eq(userSpins.userId, user[0].telegramId),
-          eq(userSpins.spinDate, today)
-        ))
-        .limit(1);
-
-      if (!todaySpins[0]) {
-        return res.json({
-          freeSpinAvailable: true,
-          freeSpinUsed: false,
-          paidSpinsCount: 0,
-        });
-      }
-
-      res.json({
-        freeSpinAvailable: !todaySpins[0].freeSpinUsed,
-        freeSpinUsed: todaySpins[0].freeSpinUsed,
-        paidSpinsCount: todaySpins[0].paidSpinsCount,
-      });
-    } catch (error: any) {
-      console.error("Get spin status error:", error);
-      res.status(500).json({ error: "Failed to get spin status" });
-    }
-  });
-
-  // Spin the wheel
-  app.post("/api/user/:userId/spin", validateTelegramAuth, verifyUserAccess, async (req, res) => {
-    const { userId } = req.params;
-    const { isFree, quantity = 1, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
-
-    try {
-      const { userSpins, spinHistory, userStatistics, jackpotWins } = await import("@shared/schema");
-
-      // Validate quantity
-      if (![1, 10, 20].includes(quantity) && !isFree) {
-        return res.status(400).json({ error: "Invalid quantity. Must be 1, 10, or 20" });
-      }
-
-      // Calculate expected TON cost
-      const tonPricing: Record<number, number> = {
-        1: 0.1,
-        10: 0.9,  // 10% discount
-        20: 1.7,  // 15% discount
-      };
-
-      const result = await db.transaction(async (tx: any) => {
-        const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
-        if (!user[0]) throw new Error("User not found");
-
-        const today = new Date().toISOString().split('T')[0];
-
-        // Check/create today's spin record
-        let todaySpins = await tx.select().from(userSpins)
-          .where(and(
-            eq(userSpins.userId, user[0].telegramId),
-            eq(userSpins.spinDate, today)
-          ))
-          .limit(1);
-
-        if (!todaySpins[0]) {
-          await tx.insert(userSpins).values({
-            userId: user[0].telegramId,
-            spinDate: today,
-            freeSpinUsed: false,
-            paidSpinsCount: 0,
-          });
-
-          todaySpins = await tx.select().from(userSpins)
-            .where(and(
-              eq(userSpins.userId, user[0].telegramId),
-              eq(userSpins.spinDate, today)
-            ))
-            .limit(1);
-        }
-
-        // Validate spin type
-        if (isFree) {
-          if (todaySpins[0].freeSpinUsed) {
-            throw new Error("Free spin already used today");
-          }
-          if (quantity !== 1) {
-            throw new Error("Free spin can only be used once");
-          }
-        } else {
-          // Paid spin - verify TON payment
-          if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
-            throw new Error("Payment verification required");
-          }
-
-          const expectedCost = tonPricing[quantity];
-          const gameWallet = getGameWalletAddress();
-          
-          const verification = await verifyTONTransaction(
-            tonTransactionHash,
-            expectedCost.toString(),
-            gameWallet,
-            userWalletAddress
-          );
-
-          if (!verification.verified) {
-            throw new Error(verification.error || "Payment verification failed");
-          }
-        }
-
-        // Process multiple spins
-        const prizes: any[] = [];
-        let totalCs = 0;
-        let totalChst = 0;
-        let jackpotWon = false;
-
-        for (let i = 0; i < quantity; i++) {
-          // Check for JACKPOT first (0.1% chance = 1 in 1000)
-          const jackpotRoll = Math.random();
-          
-          if (jackpotRoll < 0.001 && !isFree) {
-            // JACKPOT WON! 1 TON prize
-            jackpotWon = true;
-            const prizeType = "jackpot";
-            const prizeValue = "1.0 TON";
-
-            // Record jackpot win for admin
-            await tx.insert(jackpotWins).values({
-              userId: user[0].telegramId,
-              username: user[0].username || user[0].telegramId,
-              walletAddress: userWalletAddress || null,
-              amount: "1.0",
-              paidOut: false,
-            });
-
-            prizes.push({
-              type: prizeType,
-              value: prizeValue,
-              display: "🎰 1 TON JACKPOT! 🎰",
-            });
-
-            // Record in history
-            await tx.insert(spinHistory).values({
-              userId: user[0].telegramId,
-              prizeType,
-              prizeValue,
-              wasFree: isFree,
-            });
-
-            continue; // Skip normal prize for this spin
-          }
-
-          // Normal prize distribution
-          const rand = Math.random();
-          let prizeType, prizeValue;
-
-          if (rand < 0.4) {
-            // 40% - CS prize
-            const csAmounts = [1000, 2500, 5000, 10000, 25000];
-            prizeValue = csAmounts[Math.floor(Math.random() * csAmounts.length)];
-            prizeType = "cs";
-            totalCs += prizeValue;
-
-            prizes.push({
-              type: prizeType,
-              value: prizeValue,
-              display: `${prizeValue.toLocaleString()} CS`,
-            });
-          } else if (rand < 0.7) {
-            // 30% - CHST prize
-            const chstAmounts = [50, 100, 250, 500];
-            prizeValue = chstAmounts[Math.floor(Math.random() * chstAmounts.length)];
-            prizeType = "chst";
-            totalChst += prizeValue;
-
-            prizes.push({
-              type: prizeType,
-              value: prizeValue,
-              display: `${prizeValue.toLocaleString()} CHST`,
-            });
-          } else if (rand < 0.9) {
-            // 20% - Power-up (give CS equivalent)
-            prizeType = "powerup";
-            prizeValue = 5000;
-            totalCs += prizeValue;
-
-            prizes.push({
-              type: prizeType,
-              value: prizeValue,
-              display: "Power-up Boost (5,000 CS)",
-            });
-          } else {
-            // 10% - Equipment (give CS equivalent)
-            prizeType = "equipment";
-            prizeValue = 10000;
-            totalCs += prizeValue;
-
-            prizes.push({
-              type: prizeType,
-              value: prizeValue,
-              display: "Equipment Bonus (10,000 CS)",
-            });
-          }
-
-          // Record in history
-          await tx.insert(spinHistory).values({
-            userId: user[0].telegramId,
-            prizeType,
-            prizeValue: prizeValue.toString(),
-            wasFree: isFree,
-          });
-        }
-
-        // Update user balances
-        if (totalCs > 0) {
-          await tx.update(users)
-            .set({ csBalance: sql`${users.csBalance} + ${totalCs}` })
-            .where(eq(users.id, userId));
-
-          await tx.insert(userStatistics)
-            .values({
-              userId: user[0].telegramId,
-              totalCsEarned: totalCs,
-            })
-            .onConflictDoUpdate({
-              target: userStatistics.userId,
-              set: {
-                totalCsEarned: sql`${userStatistics.totalCsEarned} + ${totalCs}`,
-                updatedAt: sql`NOW()`,
-              },
-            });
-        }
-
-        if (totalChst > 0) {
-          await tx.update(users)
-            .set({ chstBalance: sql`${users.chstBalance} + ${totalChst}` })
-            .where(eq(users.id, userId));
-
-          await tx.insert(userStatistics)
-            .values({
-              userId: user[0].telegramId,
-              totalChstEarned: totalChst,
-            })
-            .onConflictDoUpdate({
-              target: userStatistics.userId,
-              set: {
-                totalChstEarned: sql`${userStatistics.totalChstEarned} + ${totalChst}`,
-                updatedAt: sql`NOW()`,
-              },
-            });
-        }
-
-        // Update spin record
-        if (isFree) {
-          await tx.update(userSpins)
-            .set({
-              freeSpinUsed: true,
-              lastSpinAt: sql`NOW()`,
-            })
-            .where(and(
-              eq(userSpins.userId, user[0].telegramId),
-              eq(userSpins.spinDate, today)
-            ));
-        } else {
-          await tx.update(userSpins)
-            .set({
-              paidSpinsCount: sql`${userSpins.paidSpinsCount} + ${quantity}`,
-              lastSpinAt: sql`NOW()`,
-            })
-            .where(and(
-              eq(userSpins.userId, user[0].telegramId),
-              eq(userSpins.spinDate, today)
-            ));
-        }
-
-        // Format response message
-        let message = "";
-        if (jackpotWon) {
-          message = "🎰💰 JACKPOT! You won 1 TON! Admin will process your payout. ";
-        }
-
-        if (quantity === 1) {
-          message += prizes[0].display;
-        } else {
-          message += `${quantity} spins complete! `;
-          if (totalCs > 0) message += `${totalCs.toLocaleString()} CS `;
-          if (totalChst > 0) message += `${totalChst.toLocaleString()} CHST `;
-        }
-
-        return {
-          success: true,
-          prizes,
-          summary: {
-            total_cs: totalCs,
-            total_chst: totalChst,
-            jackpot_won: jackpotWon,
-            spins_completed: quantity,
-          },
-          message,
-        };
-      });
-
-      res.json(result);
-    } catch (error: any) {
-      console.error("Spin wheel error:", error);
-      res.status(400).json({ error: error.message || "Failed to spin" });
-    }
-  });
-
-  // ==========================================
-  // STATISTICS ROUTES
-  // ==========================================
-
-  // Get user statistics
-  app.get("/api/user/:userId/statistics", validateTelegramAuth, verifyUserAccess, async (req, res) => {
-    const { userId } = req.params;
-
-    try {
-      const { userStatistics } = await import("@shared/schema");
-
-      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-      if (!user[0]) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      const stats = await db.select().from(userStatistics)
-        .where(eq(userStatistics.userId, user[0].telegramId))
-        .limit(1);
-
-      if (!stats[0]) {
-        // Return default stats
-        return res.json({
-          totalCsEarned: 0,
-          totalChstEarned: 0,
-          totalBlocksMined: 0,
-          bestBlockReward: 0,
-          highestHashrate: 0,
-          totalTonSpent: "0",
-          totalCsSpent: 0,
-          totalReferrals: 0,
-          achievementsUnlocked: 0,
-        });
-      }
-
-      res.json(stats[0]);
-    } catch (error: any) {
-      console.error("Get statistics error:", error);
-      res.status(500).json({ error: "Failed to get statistics" });
-    }
-  });
-
-  // ==========================================
-  // EQUIPMENT PRESETS ROUTES
-  // ==========================================
-
-  // Get user's equipment presets
-  app.get("/api/user/:userId/equipment/presets", validateTelegramAuth, verifyUserAccess, async (req, res) => {
-    const { userId } = req.params;
-
-    try {
-      const { equipmentPresets } = await import("@shared/schema");
-
-      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-      if (!user[0]) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      const presets = await db.select().from(equipmentPresets)
-        .where(eq(equipmentPresets.userId, user[0].telegramId))
-        .orderBy(sql`${equipmentPresets.createdAt} DESC`);
-
-      res.json(presets);
-    } catch (error: any) {
-      console.error("Get equipment presets error:", error);
-      res.status(500).json({ error: "Failed to get equipment presets" });
-    }
-  });
-
-  // Create new equipment preset (save current setup)
-  app.post("/api/user/:userId/equipment/presets", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+  // Create new cosmetic preset (save current setup)
+  app.post("/api/user/:userId/cosmetics/presets", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
     const { presetName } = req.body;
 
@@ -3444,7 +2620,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Load equipment preset (informational only - shows what equipment is in the preset)
-  app.get("/api/user/:userId/equipment/presets/:presetId", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+  app.get("/api/user/:userId/cosmetics/presets/:presetId", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId, presetId } = req.params;
 
     try {
@@ -3480,7 +2656,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete equipment preset
-  app.delete("/api/user/:userId/equipment/presets/:presetId", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+  app.delete("/api/user/:userId/cosmetics/presets/:presetId", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId, presetId } = req.params;
 
     try {
