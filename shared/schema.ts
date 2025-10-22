@@ -604,6 +604,12 @@ export type InsertUserSpin = z.infer<typeof insertUserSpinSchema>;
 export type SpinHistory = typeof spinHistory.$inferSelect;
 export type InsertSpinHistory = z.infer<typeof insertSpinHistorySchema>;
 
+// Jackpot wins schemas and types
+export const insertJackpotWinSchema = createInsertSchema(jackpotWins).omit({ id: true, wonAt: true });
+
+export type JackpotWin = typeof jackpotWins.$inferSelect;
+export type InsertJackpotWin = z.infer<typeof insertJackpotWinSchema>;
+
 // Equipment Preset schemas and types
 export const insertEquipmentPresetSchema = createInsertSchema(equipmentPresets).omit({ id: true, createdAt: true, updatedAt: true });
 
