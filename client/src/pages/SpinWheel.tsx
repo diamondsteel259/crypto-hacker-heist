@@ -135,10 +135,17 @@ export default function SpinWheel() {
       );
       
       if (txHash) {
+        // Get user's wallet address from TON Connect
+        const userWallet = tonConnectUI.wallet?.account?.address || tonConnectUI.account?.address;
+        
         spinMutation.mutate({
           isFree: false,
           quantity,
-          tonData: { txHash, amount: cost },
+          tonData: { 
+            txHash, 
+            amount: cost, 
+            userWallet: userWallet 
+          },
         });
       } else {
         throw new Error("Transaction cancelled");
