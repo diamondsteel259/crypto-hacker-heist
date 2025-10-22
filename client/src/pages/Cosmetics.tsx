@@ -55,6 +55,7 @@ export default function Cosmetics() {
     queryKey: ['/api/user', userId, 'cosmetics'],
     enabled: !!userId,
   });
+  const isTimedOut = useLoadingTimeout({ isLoading: cosmeticsLoading || ownedLoading, timeoutMs: 5000 });
 
   const purchaseMutation = useMutation({
     mutationFn: async ({ cosmeticId, currency, tonData }: any) => {
