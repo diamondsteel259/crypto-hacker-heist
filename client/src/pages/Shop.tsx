@@ -208,6 +208,7 @@ export default function Shop() {
     staleTime: 0,
     gcTime: 0,
   });
+  const isTimedOut = useLoadingTimeout({ isLoading: isLoadingTypes, timeoutMs: 5000 });
 
   const { data: ownedEquipment = [] } = useQuery<UserEquipment[]>({
     queryKey: ["/api/user", userId, "equipment"],
