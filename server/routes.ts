@@ -142,7 +142,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalBonus: sql<number>`(SELECT COALESCE(SUM(${referrals.bonusEarned}), 0) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId})`,
       })
         .from(users)
-        .orderBy(sql`referral_count DESC`)
+        .orderBy(sql`(SELECT COUNT(*) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId}) DESC`)
         .limit(Math.min(limit, 100));
 
       res.json(topReferrers);
