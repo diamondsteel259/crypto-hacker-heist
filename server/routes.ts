@@ -50,6 +50,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   if (botWebhook) {
     app.post(botWebhook.path, botWebhook.handler);
     console.log(`🤖 Telegram webhook registered at ${botWebhook.path}`);
+  // Register equipment routes module
+  registerEquipmentRoutes(app);
+
   }
   
   // Auth and user routes
