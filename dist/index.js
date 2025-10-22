@@ -1372,7 +1372,7 @@ async function registerRoutes(app2) {
         photoUrl: users.photoUrl,
         referralCount: sql4`(SELECT COUNT(*) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId})`,
         totalBonus: sql4`(SELECT COALESCE(SUM(${referrals.bonusEarned}), 0) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId})`
-      }).from(users).orderBy(sql4`referral_count DESC`).limit(Math.min(limit, 100));
+      }).from(users).orderBy(sql4`(SELECT COUNT(*) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId}) DESC`).limit(Math.min(limit, 100));
       res.json(topReferrers);
     } catch (error) {
       console.error("Referral leaderboard error:", error);
