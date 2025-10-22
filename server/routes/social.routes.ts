@@ -5,66 +5,67 @@ import { users, referrals } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 
 export function registerSocialRoutes(app: Express) {
-  // Leaderboard: Top miners by hashrate
+  // Get hashrate leaderboard
   app.get("/api/leaderboard/hashrate", validateTelegramAuth, async (req, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 10;
-      const topMiners = await db.select({
-        id: users.id,
+      const limit = Math.min(parseInt(req.query.limit as string) || 10, 100);
+      
+      const topUsers = await db.select({
+        id: users.telegramId,
         username: users.username,
         totalHashrate: users.totalHashrate,
         csBalance: users.csBalance,
         photoUrl: users.photoUrl,
       })
-        .from(users)
-        .orderBy(sql`${users.totalHashrate} DESC`)
-        .limit(Math.min(limit, 100)); // Max 100 results
+      .from(users)
+      .orderBy(sql`${users.totalHashrate} DESC`)
+      .limit(limit);
 
-      res.json(topMiners);
+      res.json(topUsers);
     } catch (error: any) {
-      console.error("Leaderboard hashrate error:", error);
+      console.error("Hashrate leaderboard error:", error);
       res.status(500).json({ error: "Failed to fetch leaderboard" });
     }
   });
 
-  // Leaderboard: Top users by CS balance
+  // Get balance leaderboard
   app.get("/api/leaderboard/balance", validateTelegramAuth, async (req, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 10;
-      const topBalances = await db.select({
-        id: users.id,
+      const limit = Math.min(parseInt(req.query.limit as string) || 10, 100);
+      
+      const topUsers = await db.select({
+        id: users.telegramId,
         username: users.username,
         csBalance: users.csBalance,
         totalHashrate: users.totalHashrate,
         photoUrl: users.photoUrl,
       })
-        .from(users)
-        .orderBy(sql`${users.csBalance} DESC`)
-        .limit(Math.min(limit, 100)); // Max 100 results
+      .from(users)
+      .orderBy(sql`${users.csBalance} DESC`)
+      .limit(limit);
 
-      res.json(topBalances);
+      res.json(topUsers);
     } catch (error: any) {
-      console.error("Leaderboard balance error:", error);
+      console.error("Balance leaderboard error:", error);
       res.status(500).json({ error: "Failed to fetch leaderboard" });
     }
   });
 
-  // Leaderboard: Top referrers by referral count
+  // Get referral leaderboard
   app.get("/api/leaderboard/referrals", validateTelegramAuth, async (req, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 10;
-      
-      // Get users with referral counts
+      const limit = Math.min(parseInt(req.query.limit as string) || 10, 100);
+
       const topReferrers = await db.select({
-        id: users.id,
+        id: users.telegramId,
         username: users.username,
         photoUrl: users.photoUrl,
         referralCount: sql<number>`(SELECT COUNT(*) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId})`,
-        totalBonus: sql<number>`(SELECT COALESCE(SUM(${referrals.bonusEarned}), 0) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId})`,
+        totalBonus: sql<number>`COALESCE((SELECT SUM(${referrals.bonusCs}) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId}), 0)`,
       })
-        .from(users)
-        .orderBy(sql`(SELECT COUNT(*) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId}) DESC`)
-        .limit(Math.min(limit, 100));
+      .from(users)
+      .orderBy(sql`(SELECT COUNT(*) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId}) DESC`)
+      .limit(limit);
 
       res.json(topReferrers);
     } catch (error: any) {
@@ -75,8 +76,8 @@ export function registerSocialRoutes(app: Express) {
 
   // Get user's referrals
   app.get("/api/user/:userId/referrals", validateTelegramAuth, verifyUserAccess, async (req, res) => {
-    const referrals = await storage.getUserReferrals(req.params.userId);
-    res.json(referrals);
+    const referralList = await storage.getUserReferrals(req.params.userId);
+    res.json(referralList);
   });
 
   // Apply referral code
@@ -90,50 +91,47 @@ export function registerSocialRoutes(app: Express) {
 
     try {
       const result = await db.transaction(async (tx: any) => {
-        const user = await tx.select().from(users)
-          .where(eq(users.id, userId))
-          .for('update');
-        if (!user[0]) throw new Error("User not found");
+        const referee = await tx.select().from(users).where(eq(users.id, userId)).for('update');
+        if (!referee[0]) throw new Error("User not found");
 
-        if (user[0].referredBy) {
+        if (referee[0].referralCode === referralCode) {
+          throw new Error("You cannot use your own referral code");
+        }
+
+        const existingReferral = await tx.select().from(referrals)
+          .where(eq(referrals.refereeId, userId))
+          .limit(1);
+
+        if (existingReferral.length > 0) {
           throw new Error("You have already used a referral code");
         }
 
         const referrer = await tx.select().from(users)
           .where(eq(users.referralCode, referralCode))
           .for('update');
-        if (!referrer[0]) throw new Error("Invalid referral code");
 
-        if (referrer[0].id === userId) {
-          throw new Error("You cannot use your own referral code");
+        if (!referrer[0]) {
+          throw new Error("Invalid referral code");
         }
 
-        const bonusAmount = 1000;
+        await tx.insert(referrals).values({
+          referrerId: referrer[0].id,
+          refereeId: userId,
+          bonusCs: 2000,
+        });
 
         await tx.update(users)
-          .set({ 
-            referredBy: referrer[0].id,
-            csBalance: sql`${users.csBalance} + ${bonusAmount}`
-          })
+          .set({ csBalance: sql`${users.csBalance} + 1000` })
           .where(eq(users.id, userId));
 
         await tx.update(users)
-          .set({
-            csBalance: sql`${users.csBalance} + ${bonusAmount * 2}`
-          })
+          .set({ csBalance: sql`${users.csBalance} + 2000` })
           .where(eq(users.id, referrer[0].id));
-
-        const [referral] = await tx.insert(referrals).values({
-          referrerId: referrer[0].id,
-          refereeId: userId,
-          bonusEarned: bonusAmount * 2
-        }).returning();
 
         return {
           success: true,
-          referral,
-          userBonus: bonusAmount,
-          referrerBonus: bonusAmount * 2
+          message: "Referral code applied! You received 1,000 CS",
+          referrerBonus: 2000,
         };
       });
 
