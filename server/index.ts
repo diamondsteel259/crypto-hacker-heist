@@ -7,6 +7,7 @@ import { seedDatabase } from "./seedDatabase";
 import { seedGameContent } from "./seedGameContent";
 import { initializeBot } from "./bot";
 import { applyPerformanceIndexes } from "./applyIndexes";
+import { initializeDatabase, checkDatabaseHealth } from "./db";
 import rateLimit from "express-rate-limit";
 
 const app = express();
@@ -22,7 +23,7 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => {
     // Don't rate limit health checks or static assets
-    return req.path === '/healthz' || !req.path.startsWith('/api/');
+    return req.path === '/healthz' || req.path === '/api/health' || !req.path.startsWith('/api/');
   }
 });
 
@@ -70,6 +71,32 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check endpoints (before other routes)
+app.get('/api/health', async (_req: Request, res: Response) => {
+  try {
+    const isDatabaseHealthy = await checkDatabaseHealth();
+    
+    if (isDatabaseHealthy) {
+      res.status(200).json({ 
+        status: 'healthy', 
+        database: 'connected' 
+      });
+    } else {
+      res.status(503).json({ 
+        status: 'degraded', 
+        database: 'disconnected', 
+        message: 'Database connection failed' 
+      });
+    }
+  } catch (error) {
+    res.status(503).json({ 
+      status: 'degraded', 
+      database: 'error', 
+      message: 'Health check failed' 
+    });
+  }
+});
+
 (async () => {
   const server = await registerRoutes(app);
 
@@ -78,7 +105,7 @@ app.use((req, res, next) => {
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
+    console.error('[ERROR]', err);
   });
 
   // importantly only setup vite in development and after
@@ -101,6 +128,11 @@ app.use((req, res, next) => {
     reusePort: true,
   }, async () => {
     log(`serving on port ${port}`);
+    
+    // Initialize database (non-fatal)
+    initializeDatabase().catch(err => {
+      console.error("⚠️  Database initialization failed (non-fatal):", err.message || err);
+    });
     
     // Seed database on startup (non-fatal - don't crash if it fails)
     seedDatabase().catch(err => {
