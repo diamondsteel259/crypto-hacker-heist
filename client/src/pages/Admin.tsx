@@ -505,6 +505,24 @@ export default function Admin() {
         {/* Payment Logs */}
         {selectedUserForPayments && <PaymentLogsSection userId={selectedUserForPayments} onClose={() => setSelectedUserForPayments(null)} />}
 
+        {/* Balance Editor */}
+        {selectedUserForBalanceEdit && (
+          <BalanceEditorSection 
+            userId={selectedUserForBalanceEdit} 
+            user={users?.find(u => u.id === selectedUserForBalanceEdit)}
+            editCs={editCs}
+            editChst={editChst}
+            setEditCs={setEditCs}
+            setEditChst={setEditChst}
+            updateBalanceMutation={updateBalanceMutation}
+            onClose={() => {
+              setSelectedUserForBalanceEdit(null);
+              setEditCs("");
+              setEditChst("");
+            }} 
+          />
+        )}
+
         {/* Game Content Overview */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
