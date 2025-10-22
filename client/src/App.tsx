@@ -24,14 +24,10 @@ import Admin from "@/pages/Admin";
 import Packs from "@/pages/Packs";
 import Subscription from "@/pages/Subscription";
 import NotFound from "@/pages/not-found";
-<<<<<<< HEAD
-import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { showBackButton, hideBackButton, canGoBack } from "@/lib/telegram";
-=======
 import { initializeUser } from "@/lib/user";
 import { apiRequest } from "@/lib/queryClient";
->>>>>>> 574bb078c4abf9ca9f6566013602916b5811b630
 
 function Router() {
   return (
