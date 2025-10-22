@@ -1377,6 +1377,21 @@ function registerEquipmentRoutes(app2) {
 }
 
 // server/routes.ts
+function calculateDailyLoginReward(streakDay) {
+  const baseCs = 500;
+  const baseChst = 10;
+  const cs = baseCs * streakDay;
+  const chst = baseChst * streakDay;
+  let item = null;
+  if (streakDay % 30 === 0) {
+    item = "epic_power_boost";
+  } else if (streakDay % 14 === 0) {
+    item = "rare_power_boost";
+  } else if (streakDay % 7 === 0) {
+    item = "common_power_boost";
+  }
+  return { cs, chst, item };
+}
 async function registerRoutes(app2) {
   app2.get("/healthz", async (_req, res) => {
     res.status(200).json({ ok: true });
@@ -1385,8 +1400,8 @@ async function registerRoutes(app2) {
   if (botWebhook) {
     app2.post(botWebhook.path, botWebhook.handler);
     console.log(`\u{1F916} Telegram webhook registered at ${botWebhook.path}`);
-    registerEquipmentRoutes(app2);
   }
+  registerEquipmentRoutes(app2);
   app2.post("/api/auth/telegram", validateTelegramAuth, async (req, res) => {
     if (!req.telegramUser) {
       return res.status(401).json({ error: "Authentication required" });
@@ -2704,8 +2719,8 @@ async function registerRoutes(app2) {
     if (!isValidTONAddress(userWalletAddress)) {
       return res.status(400).json({ error: "Invalid user wallet address format" });
     }
-    const gameWallet2 = getGameWalletAddress();
-    if (!isValidTONAddress(gameWallet2)) {
+    const gameWallet = getGameWalletAddress();
+    if (!isValidTONAddress(gameWallet)) {
       return res.status(500).json({ error: "Game wallet not configured correctly" });
     }
     try {
@@ -2722,7 +2737,7 @@ async function registerRoutes(app2) {
         const verification = await verifyTONTransaction(
           tonTransactionHash,
           tonAmount,
-          gameWallet2,
+          gameWallet,
           userWalletAddress
         );
         if (!verification.verified) {
@@ -2771,7 +2786,7 @@ async function registerRoutes(app2) {
           powerUpType,
           reward: { cs: rewardCs, chst: rewardChst },
           boost_active: true,
-          boost_percentage,
+          boost_percentage: boostPercentage,
           activated_at: now.toISOString(),
           expires_at: expiresAt.toISOString(),
           new_balance: {
@@ -2871,14 +2886,14 @@ async function registerRoutes(app2) {
           if (parseFloat(tonAmount) < boxConfig.tonCost) {
             throw new Error(`Insufficient TON amount. Required: ${boxConfig.tonCost} TON`);
           }
+          const gameWallet = getGameWalletAddress();
           const existingPurchase = await tx.select().from(lootBoxPurchases).where(eq5(lootBoxPurchases.tonTransactionHash, tonTransactionHash)).limit(1);
           if (existingPurchase[0]) {
             throw new Error("This transaction has already been used");
           }
           const isValid = await verifyTONTransaction(
             tonTransactionHash,
-            "0.1",
-            // 0.1 TON per paid spin
+            tonAmount,
             gameWallet,
             userWalletAddress
           );
@@ -2988,7 +3003,6 @@ async function registerRoutes(app2) {
         const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
         const existing = await tx.select().from(userDailyChallenges2).where(and4(
           eq5(userDailyChallenges2.userId, user[0].telegramId),
-          eq5(userDailyChallenges2.challengeId, challengeId),
           eq5(userDailyChallenges2.completedDate, today)
         )).limit(1);
         if (existing[0]) {
@@ -3344,7 +3358,7 @@ async function registerRoutes(app2) {
       });
       res.json({
         success: true,
-        message: `Alert set for ${equipment[0].name}`,
+        message: "Alert set for " + equipment[0].name,
         alert: result
       });
     } catch (error) {
@@ -3943,6 +3957,104 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Cancel subscription error:", error);
       res.status(500).json({ error: error.message || "Failed to cancel subscription" });
+    }
+  });
+  app2.get("/api/user/:userId/daily-login/status", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const streakData = await db.select().from(userStreaks).where(eq5(userStreaks.userId, user.telegramId)).limit(1);
+      const currentStreak = streakData.length > 0 ? streakData[0].currentStreak : 0;
+      const today = /* @__PURE__ */ new Date();
+      today.setHours(0, 0, 0, 0);
+      const todaysClaim = await db.select().from(dailyLoginRewards).where(and4(
+        eq5(dailyLoginRewards.userId, user.telegramId),
+        sql5`DATE(${dailyLoginRewards.claimedAt}) = DATE(${today})`
+      )).limit(1);
+      const canClaim = todaysClaim.length === 0;
+      const nextStreakDay = canClaim ? currentStreak + 1 : currentStreak;
+      const nextReward = calculateDailyLoginReward(nextStreakDay);
+      res.json({
+        canClaim,
+        currentStreak,
+        nextReward,
+        lastClaimDate: todaysClaim.length > 0 ? todaysClaim[0].claimedAt : null
+      });
+    } catch (error) {
+      console.error("Daily login status error:", error);
+      res.status(500).json({ error: "Failed to get daily login status" });
+    }
+  });
+  app2.post("/api/user/:userId/daily-login/claim", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const today = /* @__PURE__ */ new Date();
+      today.setHours(0, 0, 0, 0);
+      const todaysClaim = await db.select().from(dailyLoginRewards).where(and4(
+        eq5(dailyLoginRewards.userId, user.telegramId),
+        sql5`DATE(${dailyLoginRewards.claimedAt}) = DATE(${today})`
+      )).limit(1);
+      if (todaysClaim.length > 0) {
+        return res.status(400).json({ error: "Daily reward already claimed today" });
+      }
+      const streakData = await db.select().from(userStreaks).where(eq5(userStreaks.userId, user.telegramId)).limit(1);
+      let currentStreak = 0;
+      if (streakData.length > 0) {
+        const lastCheckin = new Date(streakData[0].lastCheckinDate);
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (lastCheckin >= yesterday && lastCheckin < today) {
+          currentStreak = streakData[0].currentStreak + 1;
+        } else {
+          currentStreak = 1;
+        }
+      } else {
+        currentStreak = 1;
+      }
+      const rewards = calculateDailyLoginReward(currentStreak);
+      await db.transaction(async (tx) => {
+        await tx.insert(dailyLoginRewards).values({
+          userId: user.telegramId,
+          streakDay: currentStreak,
+          csRewarded: rewards.cs,
+          chstRewarded: rewards.chst,
+          specialItem: rewards.item
+        });
+        await tx.update(users).set({
+          csBalance: sql5`${users.csBalance} + ${rewards.cs}`,
+          chstBalance: sql5`${users.chstBalance} + ${rewards.chst}`
+        }).where(eq5(users.telegramId, user.telegramId));
+        if (streakData.length > 0) {
+          await tx.update(userStreaks).set({
+            currentStreak,
+            longestStreak: sql5`GREATEST(${userStreaks.longestStreak}, ${currentStreak})`,
+            lastCheckinDate: /* @__PURE__ */ new Date()
+          }).where(eq5(userStreaks.userId, user.telegramId));
+        } else {
+          await tx.insert(userStreaks).values({
+            userId: user.telegramId,
+            currentStreak,
+            longestStreak: currentStreak,
+            lastCheckinDate: /* @__PURE__ */ new Date()
+          });
+        }
+      });
+      res.json({
+        success: true,
+        rewards,
+        newStreak: currentStreak,
+        message: `Day ${currentStreak} reward claimed!`
+      });
+    } catch (error) {
+      console.error("Daily login claim error:", error);
+      res.status(500).json({ error: "Failed to claim daily reward" });
     }
   });
   const httpServer = createServer(app2);
