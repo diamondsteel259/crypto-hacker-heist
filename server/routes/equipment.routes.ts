@@ -54,21 +54,21 @@ export function registerEquipmentRoutes(app: Express) {
         if (!isFirstBasicLaptop || !isFirstPurchase) {
           const balanceField = et.currency === 'CS' ? 'csBalance' : 'chstBalance';
           if (user[0][balanceField] < et.basePrice) {
-            throw new Error(\`Insufficient \${et.currency} balance\`);
+            throw new Error(`Insufficient \${et.currency} balance`);
           }
         }
 
         const owned = userEquipment.find((e: any) => e.equipmentTypeId === parsed.data.equipmentTypeId);
         if (owned && owned.quantity >= et.maxOwned) {
-          throw new Error(\`Maximum owned limit reached (\${et.maxOwned})\`);
+          throw new Error(`Maximum owned limit reached (\${et.maxOwned})`);
         }
 
         let equipment;
         if (owned) {
           const updated = await tx.update(ownedEquipment)
             .set({
-              quantity: sql\`\${ownedEquipment.quantity} + 1\`,
-              currentHashrate: sql\`\${ownedEquipment.currentHashrate} + \${et.baseHashrate}\`
+              quantity: sql`\${ownedEquipment.quantity} + 1`,
+              currentHashrate: sql`\${ownedEquipment.currentHashrate} + \${et.baseHashrate}`
             })
             .where(eq(ownedEquipment.id, owned.id))
             .returning();
@@ -86,13 +86,13 @@ export function registerEquipmentRoutes(app: Express) {
           const balanceField = et.currency === 'CS' ? 'csBalance' : 'chstBalance';
           await tx.update(users)
             .set({
-              [balanceField]: sql\`\${balanceField === 'csBalance' ? users.csBalance : users.chstBalance} - \${et.basePrice}\`,
-              totalHashrate: sql\`\${users.totalHashrate} + \${et.baseHashrate}\`
+              [balanceField]: sql`\${balanceField === 'csBalance' ? users.csBalance : users.chstBalance} - \${et.basePrice}`,
+              totalHashrate: sql`\${users.totalHashrate} + \${et.baseHashrate}`
             })
             .where(eq(users.id, userId));
         } else {
           await tx.update(users)
-            .set({ totalHashrate: sql\`\${users.totalHashrate} + \${et.baseHashrate}\` })
+            .set({ totalHashrate: sql`\${users.totalHashrate} + \${et.baseHashrate}` })
             .where(eq(users.id, userId));
         }
 
