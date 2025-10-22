@@ -8,6 +8,7 @@ import { validateTelegramAuth, requireAdmin, verifyUserAccess, type AuthRequest 
 import { verifyTONTransaction, getGameWalletAddress, isValidTONAddress } from "./tonVerification";
 import { miningService } from "./mining";
 import { getBotWebhookHandler } from "./bot";
+import { queryClient } from "./queryClient";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health endpoint for Render
@@ -185,10 +186,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/user/:userId/equipment/:equipmentId/components/upgrade", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId, equipmentId } = req.params;
-    const { componentType, currency = "CS" } = req.body;
+    const { componentType, currency = "CS", tonTransactionHash, userWalletAddress, tonAmount } = req.body;
 
     if (!componentType || !["RAM", "CPU", "Storage", "GPU"].includes(componentType)) {
       return res.status(400).json({ message: "Invalid component type" });
+    }
+
+    if (!["CS", "CHST", "TON"].includes(currency)) {
+      return res.status(400).json({ message: "Invalid currency. Must be CS, CHST, or TON" });
     }
 
     try {
@@ -239,25 +244,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "GPU": 1.5
         }[componentType] || 1;
 
-        const upgradeCost = Math.floor(baseCost * componentMultiplier * Math.pow(1.15, currentLevel));
-
-        // Check user balance
-        const user = await tx.select().from(users).where(eq(users.id, userId));
-        const balanceField = currency === "CS" ? "csBalance" : "chstBalance";
-        const currentBalance = user[0][balanceField];
-
-        if (currentBalance < upgradeCost) {
-          throw new Error(`Insufficient ${currency} balance. Need ${upgradeCost} ${currency}`);
+        const upgradeCostCS = Math.floor(baseCost * componentMultiplier * Math.pow(1.15, currentLevel));
+        
+        // Calculate cost in different currencies
+        let upgradeCost = upgradeCostCS;
+        if (currency === "TON") {
+          upgradeCost = parseFloat((upgradeCostCS / 10000).toFixed(3)); // CS to TON conversion
         }
 
-        // Deduct balance and upgrade component
-        const newLevel = currentLevel + 1;
-        await tx.update(users)
-          .set({
-            [balanceField]: sql`${balanceField === "csBalance" ? users.csBalance : users.chstBalance} - ${upgradeCost}`
-          })
-          .where(eq(users.id, userId));
+        // Handle TON payment
+        if (currency === "TON") {
+          if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
+            throw new Error("TON transaction details required");
+          }
 
+          // Verify TON amount matches upgrade cost
+          if (parseFloat(tonAmount) < upgradeCost) {
+            throw new Error(`Insufficient TON amount. Required: ${upgradeCost} TON`);
+          }
+
+          // Verify TON transaction
+          const isValid = await verifyTONTransaction(
+            tonTransactionHash,
+            userWalletAddress,
+            tonAmount
+          );
+
+          if (!isValid) {
+            throw new Error("TON transaction verification failed");
+          }
+        } else {
+          // Handle CS/CHST payment
+          const user = await tx.select().from(users).where(eq(users.id, userId));
+          const balanceField = currency === "CS" ? "csBalance" : "chstBalance";
+          const currentBalance = user[0][balanceField];
+
+          if (currentBalance < upgradeCost) {
+            throw new Error(`Insufficient ${currency} balance. Need ${upgradeCost} ${currency}`);
+          }
+
+          // Deduct balance
+          await tx.update(users)
+            .set({
+              [balanceField]: sql`${balanceField === "csBalance" ? users.csBalance : users.chstBalance} - ${upgradeCost}`
+            })
+            .where(eq(users.id, userId));
+        }
+
+        // Upgrade component
+        const newLevel = currentLevel + 1;
         await tx.update(componentUpgrades)
           .set({
             currentLevel: newLevel,
@@ -287,6 +322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           componentType,
           newLevel,
           upgradeCost,
+          currency,
           hashrateIncrease,
           message: `${componentType} upgraded to level ${newLevel}! +${hashrateIncrease.toFixed(2)} GH/s`
         };
@@ -1688,7 +1724,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Update user balance
         await tx.update(users)
           .set({
-            csBalance: sql`${users.csBalance} + ${csReward}`,
+            csBalance: sql`${users.csBalance} + ${rewards.cs}`,
             ...(rewards.chst && { chstBalance: sql`${users.chstBalance} + ${rewards.chst}` }),
           })
           .where(eq(users.id, userId));
@@ -3556,7 +3592,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Purchase pack with TON
   app.post("/api/user/:userId/packs/purchase", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
-    const { packType, tonTransactionHash, tonAmount } = req.body;
+    const { packType, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
 
     if (!packType || !tonTransactionHash || !tonAmount) {
       return res.status(400).json({ error: "Missing required fields" });
