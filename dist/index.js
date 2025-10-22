@@ -4007,10 +4007,10 @@ async function registerRoutes(app2) {
       const streakData = await db.select().from(userStreaks).where(eq5(userStreaks.userId, user.telegramId)).limit(1);
       let currentStreak = 0;
       if (streakData.length > 0) {
-        const lastCheckin = new Date(streakData[0].lastCheckinDate);
+        const lastLoginDate = new Date(streakData[0].lastLoginDate);
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
-        if (lastCheckin >= yesterday && lastCheckin < today) {
+        if (lastLoginDate >= yesterday && lastLoginDate < today) {
           currentStreak = streakData[0].currentStreak + 1;
         } else {
           currentStreak = 1;
@@ -4019,13 +4019,15 @@ async function registerRoutes(app2) {
         currentStreak = 1;
       }
       const rewards = calculateDailyLoginReward(currentStreak);
+      const loginDateStr = today.toISOString().split("T")[0];
       await db.transaction(async (tx) => {
         await tx.insert(dailyLoginRewards).values({
           userId: user.telegramId,
+          loginDate: loginDateStr,
           streakDay: currentStreak,
-          csRewarded: rewards.cs,
-          chstRewarded: rewards.chst,
-          specialItem: rewards.item
+          rewardCs: rewards.cs,
+          rewardChst: rewards.chst,
+          rewardItem: rewards.item
         });
         await tx.update(users).set({
           csBalance: sql5`${users.csBalance} + ${rewards.cs}`,
@@ -4035,14 +4037,14 @@ async function registerRoutes(app2) {
           await tx.update(userStreaks).set({
             currentStreak,
             longestStreak: sql5`GREATEST(${userStreaks.longestStreak}, ${currentStreak})`,
-            lastCheckinDate: /* @__PURE__ */ new Date()
+            lastLoginDate: loginDateStr
           }).where(eq5(userStreaks.userId, user.telegramId));
         } else {
           await tx.insert(userStreaks).values({
             userId: user.telegramId,
             currentStreak,
             longestStreak: currentStreak,
-            lastCheckinDate: /* @__PURE__ */ new Date()
+            lastLoginDate: loginDateStr
           });
         }
       });
