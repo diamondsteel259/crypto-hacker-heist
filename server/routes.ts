@@ -3791,12 +3791,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let currentStreak = 0;
       
       if (streakData.length > 0) {
-        const lastCheckin = new Date(streakData[0].lastCheckinDate);
+        const lastLoginDate = new Date(streakData[0].lastLoginDate);
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
         
         // Check if streak continues (claimed yesterday)
-        if (lastCheckin >= yesterday && lastCheckin < today) {
+        if (lastLoginDate >= yesterday && lastLoginDate < today) {
           currentStreak = streakData[0].currentStreak + 1;
         } else {
           // Streak broken, reset to 1
@@ -3809,16 +3809,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Calculate rewards
       const rewards = calculateDailyLoginReward(currentStreak);
+      
+      // Format today's date as YYYY-MM-DD
+      const loginDateStr = today.toISOString().split('T')[0];
 
       // Update user balances and streak in a transaction
       await db.transaction(async (tx: any) => {
         // Record the claim
         await tx.insert(dailyLoginRewards).values({
           userId: user.telegramId,
+          loginDate: loginDateStr,
           streakDay: currentStreak,
-          csRewarded: rewards.cs,
-          chstRewarded: rewards.chst,
-          specialItem: rewards.item,
+          rewardCs: rewards.cs,
+          rewardChst: rewards.chst,
+          rewardItem: rewards.item,
         });
 
         // Update user balances
@@ -3835,7 +3839,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .set({
               currentStreak,
               longestStreak: sql`GREATEST(${userStreaks.longestStreak}, ${currentStreak})`,
-              lastCheckinDate: new Date(),
+              lastLoginDate: loginDateStr,
             })
             .where(eq(userStreaks.userId, user.telegramId));
         } else {
@@ -3843,7 +3847,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             userId: user.telegramId,
             currentStreak,
             longestStreak: currentStreak,
-            lastCheckinDate: new Date(),
+            lastLoginDate: loginDateStr,
           });
         }
       });
