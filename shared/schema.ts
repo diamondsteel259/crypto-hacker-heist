@@ -605,6 +605,12 @@ export const insertUserStreakSchema = createInsertSchema(userStreaks).omit({ id:
 export type UserStreak = typeof userStreaks.$inferSelect;
 export type InsertUserStreak = z.infer<typeof insertUserStreakSchema>;
 
+// Daily Login Rewards schemas and types
+export const insertDailyLoginRewardSchema = createInsertSchema(dailyLoginRewards).omit({ id: true, claimedAt: true });
+
+export type DailyLoginReward = typeof dailyLoginRewards.$inferSelect;
+export type InsertDailyLoginReward = z.infer<typeof insertDailyLoginRewardSchema>;
+
 // Hourly bonus schemas and types
 export const insertUserHourlyBonusSchema = createInsertSchema(userHourlyBonuses).omit({ id: true, claimedAt: true });
 
