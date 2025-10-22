@@ -9,14 +9,8 @@ import {
   MoreHorizontal,
   Crown,
   Gift,
-  Target,
   Trophy,
-  Palette,
-  Disc3,
-  Blocks,
   Users,
-  BarChart3,
-  Box,
   Shield,
   X,
   Settings
@@ -24,6 +18,7 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getCurrentUserId } from "@/lib/user";
+import { isFeatureNew, markFeatureAsSeen } from "@/lib/featureBadges";
 import type { User } from "@shared/schema";
 
 // Primary navigation items (always visible)
@@ -41,12 +36,24 @@ const getSecondaryNavItems = (user: User | null | undefined) => {
   
   // Premium Packs - only show if user doesn't have premium
   if (!user?.hasPremium) {
-    items.push({ title: "Premium Packs", url: "/packs", icon: Gift, badge: "NEW" });
+    items.push({ 
+      title: "Premium Packs", 
+      url: "/packs", 
+      icon: Gift, 
+      badge: isFeatureNew("premiumPacks") ? "NEW" : undefined,
+      featureName: "premiumPacks"
+    });
   }
   
   // Subscription - only show if user doesn't have active subscription
   if (!user?.hasActiveSubscription) {
-    items.push({ title: "Subscription", url: "/subscription", icon: Crown, badge: "NEW" });
+    items.push({ 
+      title: "Subscription", 
+      url: "/subscription", 
+      icon: Crown, 
+      badge: isFeatureNew("subscription") ? "NEW" : undefined,
+      featureName: "subscription"
+    });
   }
   
   // Always show these essential items
@@ -190,7 +197,13 @@ export default function BottomNav() {
                     <Link
                       key={item.url}
                       href={item.url}
-                      onClick={() => setMoreMenuOpen(false)}
+                      onClick={() => {
+                        // Mark feature as seen when clicked
+                        if (item.featureName) {
+                          markFeatureAsSeen(item.featureName);
+                        }
+                        setMoreMenuOpen(false);
+                      }}
                     >
                       <button
                         className={`w-full flex flex-col items-center justify-center gap-2 p-4 rounded-lg border transition-all relative group ${
