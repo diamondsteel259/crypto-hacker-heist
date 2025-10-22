@@ -97,6 +97,24 @@ app.get('/api/health', async (_req: Request, res: Response) => {
   }
 });
 
+app.get('/api/health/mining', async (_req: Request, res: Response) => {
+  try {
+    const { getMiningHealth } = await import('./mining');
+    const miningHealth = getMiningHealth();
+    
+    if (miningHealth.status === 'healthy') {
+      res.status(200).json(miningHealth);
+    } else {
+      res.status(503).json(miningHealth);
+    }
+  } catch (error) {
+    res.status(503).json({
+      status: 'degraded',
+      message: 'Unable to check mining health'
+    });
+  }
+});
+
 (async () => {
   const server = await registerRoutes(app);
 
