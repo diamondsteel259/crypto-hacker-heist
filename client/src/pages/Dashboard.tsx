@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import { Terminal, Gem, Package, TrendingUp, Zap, Shield, Sparkles, Flame, Clock
 import { initializeUser, getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { hapticSuccess } from "@/lib/telegram";
 import type { User } from "@shared/schema";
 
 interface ActivePowerUp {
@@ -49,6 +50,8 @@ interface HourlyBonusStatus {
 export default function Dashboard() {
   const { toast } = useToast();
   const [userId, setUserId] = useState<string | null>(null);
+  const lastBlockNumberRef = useRef<number | null>(null);
+  const lastBalanceRef = useRef<number | null>(null);
 
   useEffect(() => {
     initializeUser()
@@ -62,6 +65,49 @@ export default function Dashboard() {
     queryKey: ['/api/user', userId],
     enabled: !!userId,
   });
+
+  const { data: latestBlock } = useQuery<any>({
+    queryKey: ['/api/blocks/latest'],
+    enabled: !!userId,
+    refetchInterval: 5000, // Check every 5 seconds for new blocks
+  });
+
+  // Monitor for new blocks and show notification if user received reward
+  useEffect(() => {
+    if (!latestBlock || !user) return;
+
+    const currentBlockNumber = latestBlock.blockNumber;
+    const currentBalance = user.csBalance;
+
+    // Initialize refs on first load
+    if (lastBlockNumberRef.current === null) {
+      lastBlockNumberRef.current = currentBlockNumber;
+      lastBalanceRef.current = currentBalance;
+      return;
+    }
+
+    // Check if a new block was mined
+    if (currentBlockNumber > lastBlockNumberRef.current) {
+      // Check if user's balance increased (they received a reward)
+      if (lastBalanceRef.current !== null && currentBalance > lastBalanceRef.current) {
+        const reward = currentBalance - lastBalanceRef.current;
+        
+        // Show success notification
+        hapticSuccess();
+        toast({
+          title: "Block Mined! 🎉",
+          description: `You earned ${reward.toLocaleString()} CS from Block #${currentBlockNumber}`,
+          duration: 5000,
+        });
+      }
+
+      // Update refs
+      lastBlockNumberRef.current = currentBlockNumber;
+    }
+
+    // Always update balance ref
+    lastBalanceRef.current = currentBalance;
+  }, [latestBlock, user, toast]);
 
   const { data: equipment } = useQuery<any[]>({
     queryKey: ['/api/user', userId, 'equipment'],
