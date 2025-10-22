@@ -11,7 +11,7 @@ import MiningCalendar from "@/components/MiningCalendar";
 import PriceAlerts from "@/components/PriceAlerts";
 import ActiveSeason from "@/components/ActiveSeason";
 import PrestigeSystem from "@/components/PrestigeSystem";
-import { Terminal, Gem, Package, TrendingUp, Zap, Shield, Sparkles, Flame, Clock, Gift } from "lucide-react";
+import { Terminal, Gem, Package, TrendingUp, Zap, Shield, Sparkles, Flame, Clock, Gift, Cpu, Coins } from "lucide-react";
 import { initializeUser, getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
