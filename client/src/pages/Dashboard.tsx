@@ -519,7 +519,10 @@ export default function Dashboard() {
                 </div>
                 <Button
                   size="sm"
-                  onClick={() => claimHourlyMutation.mutate()}
+                  onClick={() => {
+                    hapticLight();
+                    claimHourlyMutation.mutate();
+                  }}
                   disabled={!hourlyBonusStatus.available || claimHourlyMutation.isPending}
                   className="bg-green-500 hover:bg-green-600"
                 >
