@@ -7,10 +7,10 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, Pause, Play, Users, Settings as SettingsIcon, DollarSign, RotateCcw, AlertTriangle, Edit, TrendingUp } from "lucide-react";
+import { Shield, Pause, Play, Users, Settings as SettingsIcon, DollarSign, RotateCcw, AlertTriangle, Edit, TrendingUp, ToggleLeft } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getTelegramInitData } from "@/lib/user";
-import type { User, GameSetting, EquipmentType } from "@shared/schema";
+import type { User, GameSetting, EquipmentType, FeatureFlag } from "@shared/schema";
 import SeasonsAdmin from "@/components/SeasonsAdmin";
 
 export default function Admin() {
