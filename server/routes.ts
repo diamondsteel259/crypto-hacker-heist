@@ -2605,10 +2605,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Spin the wheel
   app.post("/api/user/:userId/spin", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
-    const { isFree, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
+    const { isFree, quantity = 1, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
 
     try {
-      const { userSpins, spinHistory, userStatistics } = await import("@shared/schema");
+      const { userSpins, spinHistory, userStatistics, jackpotWins } = await import("@shared/schema");
+
+      // Validate quantity
+      if (![1, 10, 20].includes(quantity) && !isFree) {
+        return res.status(400).json({ error: "Invalid quantity. Must be 1, 10, or 20" });
+      }
+
+      // Calculate expected TON cost
+      const tonPricing: Record<number, number> = {
+        1: 0.1,
+        10: 0.9,  // 10% discount
+        20: 1.7,  // 15% discount
+      };
 
       const result = await db.transaction(async (tx: any) => {
         const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
@@ -2645,16 +2657,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (todaySpins[0].freeSpinUsed) {
             throw new Error("Free spin already used today");
           }
+          if (quantity !== 1) {
+            throw new Error("Free spin can only be used once");
+          }
         } else {
           // Paid spin - verify TON payment
           if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
             throw new Error("Payment verification required");
           }
 
+          const expectedCost = tonPricing[quantity];
           const gameWallet = getGameWalletAddress();
+          
           const verification = await verifyTONTransaction(
             tonTransactionHash,
-            "0.1", // 0.1 TON per paid spin
+            expectedCost.toString(),
             gameWallet,
             userWalletAddress
           );
@@ -2664,68 +2681,146 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        // Determine prize (random)
-        const rand = Math.random();
-        let prizeType, prizeValue, reward;
+        // Process multiple spins
+        const prizes: any[] = [];
+        let totalCs = 0;
+        let totalChst = 0;
+        let jackpotWon = false;
 
-        if (rand < 0.4) {
-          // 40% - CS prize
-          const csAmounts = [1000, 2500, 5000, 10000, 25000];
-          prizeValue = csAmounts[Math.floor(Math.random() * csAmounts.length)];
-          prizeType = "cs";
-          reward = { cs: prizeValue };
+        for (let i = 0; i < quantity; i++) {
+          // Check for JACKPOT first (0.1% chance = 1 in 1000)
+          const jackpotRoll = Math.random();
+          
+          if (jackpotRoll < 0.001 && !isFree) {
+            // JACKPOT WON! 1 TON prize
+            jackpotWon = true;
+            const prizeType = "jackpot";
+            const prizeValue = "1.0 TON";
 
+            // Record jackpot win for admin
+            await tx.insert(jackpotWins).values({
+              userId: user[0].telegramId,
+              username: user[0].username || user[0].telegramId,
+              walletAddress: userWalletAddress || null,
+              amount: "1.0",
+              paidOut: false,
+            });
+
+            prizes.push({
+              type: prizeType,
+              value: prizeValue,
+              display: "🎰 1 TON JACKPOT! 🎰",
+            });
+
+            // Record in history
+            await tx.insert(spinHistory).values({
+              userId: user[0].telegramId,
+              prizeType,
+              prizeValue,
+              wasFree: isFree,
+            });
+
+            continue; // Skip normal prize for this spin
+          }
+
+          // Normal prize distribution
+          const rand = Math.random();
+          let prizeType, prizeValue;
+
+          if (rand < 0.4) {
+            // 40% - CS prize
+            const csAmounts = [1000, 2500, 5000, 10000, 25000];
+            prizeValue = csAmounts[Math.floor(Math.random() * csAmounts.length)];
+            prizeType = "cs";
+            totalCs += prizeValue;
+
+            prizes.push({
+              type: prizeType,
+              value: prizeValue,
+              display: `${prizeValue.toLocaleString()} CS`,
+            });
+          } else if (rand < 0.7) {
+            // 30% - CHST prize
+            const chstAmounts = [50, 100, 250, 500];
+            prizeValue = chstAmounts[Math.floor(Math.random() * chstAmounts.length)];
+            prizeType = "chst";
+            totalChst += prizeValue;
+
+            prizes.push({
+              type: prizeType,
+              value: prizeValue,
+              display: `${prizeValue.toLocaleString()} CHST`,
+            });
+          } else if (rand < 0.9) {
+            // 20% - Power-up (give CS equivalent)
+            prizeType = "powerup";
+            prizeValue = 5000;
+            totalCs += prizeValue;
+
+            prizes.push({
+              type: prizeType,
+              value: prizeValue,
+              display: "Power-up Boost (5,000 CS)",
+            });
+          } else {
+            // 10% - Equipment (give CS equivalent)
+            prizeType = "equipment";
+            prizeValue = 10000;
+            totalCs += prizeValue;
+
+            prizes.push({
+              type: prizeType,
+              value: prizeValue,
+              display: "Equipment Bonus (10,000 CS)",
+            });
+          }
+
+          // Record in history
+          await tx.insert(spinHistory).values({
+            userId: user[0].telegramId,
+            prizeType,
+            prizeValue: prizeValue.toString(),
+            wasFree: isFree,
+          });
+        }
+
+        // Update user balances
+        if (totalCs > 0) {
           await tx.update(users)
-            .set({ csBalance: sql`${users.csBalance} + ${prizeValue}` })
+            .set({ csBalance: sql`${users.csBalance} + ${totalCs}` })
             .where(eq(users.id, userId));
 
           await tx.insert(userStatistics)
             .values({
               userId: user[0].telegramId,
-              totalCsEarned: prizeValue,
+              totalCsEarned: totalCs,
             })
             .onConflictDoUpdate({
               target: userStatistics.userId,
               set: {
-                totalCsEarned: sql`${userStatistics.totalCsEarned} + ${prizeValue}`,
+                totalCsEarned: sql`${userStatistics.totalCsEarned} + ${totalCs}`,
                 updatedAt: sql`NOW()`,
               },
             });
-        } else if (rand < 0.7) {
-          // 30% - CHST prize
-          const chstAmounts = [50, 100, 250, 500];
-          prizeValue = chstAmounts[Math.floor(Math.random() * chstAmounts.length)];
-          prizeType = "chst";
-          reward = { chst: prizeValue };
+        }
 
+        if (totalChst > 0) {
           await tx.update(users)
-            .set({ chstBalance: sql`${users.chstBalance} + ${prizeValue}` })
+            .set({ chstBalance: sql`${users.chstBalance} + ${totalChst}` })
             .where(eq(users.id, userId));
 
           await tx.insert(userStatistics)
             .values({
               userId: user[0].telegramId,
-              totalChstEarned: prizeValue,
+              totalChstEarned: totalChst,
             })
             .onConflictDoUpdate({
               target: userStatistics.userId,
               set: {
-                totalChstEarned: sql`${userStatistics.totalChstEarned} + ${prizeValue}`,
+                totalChstEarned: sql`${userStatistics.totalChstEarned} + ${totalChst}`,
                 updatedAt: sql`NOW()`,
               },
             });
-        } else if (rand < 0.9) {
-          // 20% - Power-up
-          prizeType = "powerup";
-          prizeValue = "luck-boost-24h";
-          reward = { powerup: "Luck Boost (24h)" };
-          // Note: Would need to activate power-up here
-        } else {
-          // 10% - Equipment (small item)
-          prizeType = "equipment";
-          prizeValue = "gaming-laptop";
-          reward = { equipment: "Gaming Laptop" };
-          // Note: Would need to grant equipment here
         }
 
         // Update spin record
@@ -2742,7 +2837,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else {
           await tx.update(userSpins)
             .set({
-              paidSpinsCount: sql`${userSpins.paidSpinsCount} + 1`,
+              paidSpinsCount: sql`${userSpins.paidSpinsCount} + ${quantity}`,
               lastSpinAt: sql`NOW()`,
             })
             .where(and(
@@ -2751,19 +2846,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ));
         }
 
-        // Record in history
-        await tx.insert(spinHistory).values({
-          userId: user[0].telegramId,
-          prizeType,
-          prizeValue: prizeValue.toString(),
-          wasFree: isFree,
-        });
+        // Format response message
+        let message = "";
+        if (jackpotWon) {
+          message = "🎰💰 JACKPOT! You won 1 TON! Admin will process your payout. ";
+        }
+
+        if (quantity === 1) {
+          message += prizes[0].display;
+        } else {
+          message += `${quantity} spins complete! `;
+          if (totalCs > 0) message += `${totalCs.toLocaleString()} CS `;
+          if (totalChst > 0) message += `${totalChst.toLocaleString()} CHST `;
+        }
 
         return {
           success: true,
-          prize: { type: prizeType, value: prizeValue },
-          reward,
-          message: `You won ${JSON.stringify(reward)}!`,
+          prizes,
+          summary: {
+            total_cs: totalCs,
+            total_chst: totalChst,
+            jackpot_won: jackpotWon,
+            spins_completed: quantity,
+          },
+          message,
         };
       });
 
