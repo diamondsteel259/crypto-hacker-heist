@@ -9,6 +9,7 @@ import { Tutorial } from "@/components/Tutorial";
 import { useToast } from "@/hooks/use-toast";
 import BottomNav from "@/components/BottomNav";
 import MobileHeader from "@/components/MobileHeader";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import Dashboard from "@/pages/Dashboard";
 import WalletPage from "@/pages/Wallet";
 import Rigs from "@/pages/Rigs";
@@ -107,7 +108,9 @@ function AppContent() {
       <div className="flex flex-col h-screen w-full bg-background">
         <MobileHeader />
         <main className="flex-1 overflow-auto pb-16">
-          <Router />
+          <ErrorBoundary>
+            <Router />
+          </ErrorBoundary>
         </main>
         <BottomNav />
       </div>
