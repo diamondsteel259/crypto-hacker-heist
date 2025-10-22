@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -17,10 +18,13 @@ import {
   BarChart3,
   Box,
   Shield,
-  X
+  X,
+  Settings
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { getCurrentUserId } from "@/lib/user";
+import type { User } from "@shared/schema";
 
 // Primary navigation items (always visible)
 const primaryNavItems = [
@@ -31,22 +35,47 @@ const primaryNavItems = [
 ];
 
 // Secondary navigation items (in "More" menu)
-const secondaryNavItems = [
-  { title: "Premium Packs", url: "/packs", icon: Gift, badge: "NEW" },
-  { title: "Subscription", url: "/subscription", icon: Crown, badge: "NEW" },
-  { title: "Challenges", url: "/challenges", icon: Target },
-  { title: "Achievements", url: "/achievements", icon: Trophy },
-  { title: "Spin Wheel", url: "/spin", icon: Disc3 },
-  { title: "Cosmetics", url: "/cosmetics", icon: Palette },
-  { title: "Block Explorer", url: "/blocks", icon: Blocks },
-  { title: "Referrals", url: "/referrals", icon: Users },
-  { title: "Statistics", url: "/statistics", icon: BarChart3 },
-  { title: "Admin Panel", url: "/admin", icon: Shield },
-];
+// Items are filtered based on user role and state
+const getSecondaryNavItems = (user: User | null | undefined) => {
+  const items = [];
+  
+  // Premium Packs - only show if user doesn't have premium
+  if (!user?.hasPremium) {
+    items.push({ title: "Premium Packs", url: "/packs", icon: Gift, badge: "NEW" });
+  }
+  
+  // Subscription - only show if user doesn't have active subscription
+  if (!user?.hasActiveSubscription) {
+    items.push({ title: "Subscription", url: "/subscription", icon: Crown, badge: "NEW" });
+  }
+  
+  // Always show these essential items
+  items.push(
+    { title: "Referrals", url: "/referrals", icon: Users },
+    { title: "Achievements", url: "/achievements", icon: Trophy },
+    { title: "Settings", url: "/settings", icon: Settings }
+  );
+  
+  // Admin Panel - only show if user is admin or moderator
+  if (user?.role === 'admin' || user?.role === 'moderator') {
+    items.push({ title: "Admin Panel", url: "/admin", icon: Shield });
+  }
+  
+  return items;
+};
 
 export default function BottomNav() {
   const [location] = useLocation();
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const userId = getCurrentUserId();
+
+  // Fetch user data to determine which menu items to show
+  const { data: user } = useQuery<User>({
+    queryKey: ["/api/user", userId],
+    enabled: !!userId,
+  });
+
+  const secondaryNavItems = getSecondaryNavItems(user);
 
   // Check if current location is in secondary nav
   const isSecondaryActive = secondaryNavItems.some(item => location === item.url);
