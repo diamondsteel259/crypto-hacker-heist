@@ -280,6 +280,34 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background terminal-scanline">
       <div className="max-w-7xl mx-auto p-3 md:p-4 space-y-4 md:space-y-6">
+        {/* Loading Help Message */}
+        {showLoadingHelp && userLoading && (
+          <Card className="p-4 bg-yellow-500/10 border-yellow-500/30">
+            <div className="flex items-center gap-3">
+              <Clock className="w-5 h-5 text-yellow-500" />
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-yellow-500 mb-1">Taking longer than usual to load...</h3>
+                <p className="text-xs text-muted-foreground">
+                  This may be due to a slow connection. Try:
+                </p>
+                <ul className="text-xs text-muted-foreground list-disc list-inside mt-1">
+                  <li>Check your internet connection</li>
+                  <li>Wait a few more seconds</li>
+                  <li>Try refreshing the page</li>
+                </ul>
+              </div>
+              <Button 
+                onClick={() => window.location.reload()} 
+                size="sm"
+                variant="outline"
+                className="border-yellow-500/50"
+              >
+                Refresh Now
+              </Button>
+            </div>
+          </Card>
+        )}
+
         {/* Welcome Header */}
         <Card className="p-4 md:p-6 bg-gradient-to-r from-matrix-green/10 to-cyber-blue/10 border-matrix-green/20">
           <div className="flex items-center justify-between">
