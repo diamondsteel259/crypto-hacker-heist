@@ -21,6 +21,9 @@ import Admin from "@/pages/Admin";
 import Packs from "@/pages/Packs";
 import Subscription from "@/pages/Subscription";
 import NotFound from "@/pages/not-found";
+import { useEffect } from "react";
+import { useLocation } from "wouter";
+import { showBackButton, hideBackButton, canGoBack } from "@/lib/telegram";
 
 function Router() {
   return (
@@ -45,11 +48,31 @@ function Router() {
 }
 
 export default function App() {
+  const [location, navigate] = useLocation();
+
   // Initialize Telegram WebApp
   if (window.Telegram?.WebApp) {
     window.Telegram.WebApp.ready();
     window.Telegram.WebApp.expand();
   }
+
+  // Handle Telegram back button
+  useEffect(() => {
+    if (location === '/' || location === '') {
+      // Hide back button on dashboard
+      hideBackButton();
+    } else if (canGoBack()) {
+      // Show back button on other pages
+      showBackButton(() => {
+        navigate('/');
+      });
+    }
+
+    // Cleanup on unmount
+    return () => {
+      hideBackButton();
+    };
+  }, [location, navigate]);
 
   return (
     <TonConnectUIProvider manifestUrl="https://crypto-hacker-heist.onrender.com/tonconnect-manifest.json">
