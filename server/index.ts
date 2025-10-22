@@ -12,6 +12,9 @@ import { initializeDatabase, checkDatabaseHealth } from "./db";
 import rateLimit from "express-rate-limit";
 
 const app = express();
+// Trust proxy for Render deployment (needed for rate limiting to work correctly)
+app.set('trust proxy', 1);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
