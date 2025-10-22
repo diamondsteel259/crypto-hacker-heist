@@ -21,6 +21,7 @@ const tierColors = {
   Professional: "bg-chart-2/20 text-chart-2 border-chart-2/30",
   Enterprise: "bg-chart-3/20 text-chart-3 border-chart-3/30",
   Specialized: "bg-chart-4/20 text-chart-4 border-chart-4/30",
+  Server: "bg-purple-500/20 text-purple-400 border-purple-500/30",
   ASIC: "bg-neon-orange/20 text-neon-orange border-neon-orange/30",
   "Data Center": "bg-chart-5/20 text-chart-5 border-chart-5/30",
 };
