@@ -87,6 +87,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(user);
   });
 
+  // Leaderboard endpoints
+  app.get("/api/leaderboard/hashrate", validateTelegramAuth, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      const topMiners = await db.select({
+        id: users.id,
+        username: users.username,
+        totalHashrate: users.totalHashrate,
+        csBalance: users.csBalance,
+        photoUrl: users.photoUrl,
+      })
+        .from(users)
+        .orderBy(sql`${users.totalHashrate} DESC`)
+        .limit(Math.min(limit, 100)); // Max 100 results
+
+      res.json(topMiners);
+    } catch (error: any) {
+      console.error("Leaderboard hashrate error:", error);
+      res.status(500).json({ error: "Failed to fetch leaderboard" });
+    }
+  });
+
+  app.get("/api/leaderboard/balance", validateTelegramAuth, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      const topBalances = await db.select({
+        id: users.id,
+        username: users.username,
+        csBalance: users.csBalance,
+        totalHashrate: users.totalHashrate,
+        photoUrl: users.photoUrl,
+      })
+        .from(users)
+        .orderBy(sql`${users.csBalance} DESC`)
+        .limit(Math.min(limit, 100)); // Max 100 results
+
+      res.json(topBalances);
+    } catch (error: any) {
+      console.error("Leaderboard balance error:", error);
+      res.status(500).json({ error: "Failed to fetch leaderboard" });
+    }
+  });
+
+  app.get("/api/user/:userId/rank", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      // Get hashrate rank
+      const hashrateRank = await db.select({ count: sql`COUNT(*)` })
+        .from(users)
+        .where(sql`${users.totalHashrate} > ${user.totalHashrate}`);
+
+      // Get balance rank
+      const balanceRank = await db.select({ count: sql`COUNT(*)` })
+        .from(users)
+        .where(sql`${users.csBalance} > ${user.csBalance}`);
+
+      // Get total users
+      const totalUsers = await db.select({ count: sql`COUNT(*)` })
+        .from(users);
+
+      res.json({
+        userId,
+        hashrateRank: (hashrateRank[0]?.count || 0) + 1,
+        balanceRank: (balanceRank[0]?.count || 0) + 1,
+        totalUsers: totalUsers[0]?.count || 0,
+      });
+    } catch (error: any) {
+      console.error("User rank error:", error);
+      res.status(500).json({ error: "Failed to fetch user rank" });
+    }
+  });
+
   // Complete tutorial
   app.post("/api/user/:userId/tutorial/complete", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
@@ -3461,7 +3536,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(priceAlerts.userId, user.telegramId))
         .orderBy(priceAlerts.createdAt);
 
-      const alertsWithStatus = alerts.map(row => ({
+      const alertsWithStatus = alerts.map((row) => ({
         ...row.price_alerts,
         equipment: row.equipment_types,
         canAfford: user.csBalance >= (row.equipment_types?.basePrice || 0),
@@ -3645,7 +3720,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(autoUpgradeSettings.userId, user.telegramId))
         .orderBy(autoUpgradeSettings.createdAt);
 
-      const settingsWithDetails = settings.map(row => ({
+      const settingsWithDetails = settings.map((row) => ({
         ...row.auto_upgrade_settings,
         equipment: row.owned_equipment,
         equipmentType: row.equipment_types,
