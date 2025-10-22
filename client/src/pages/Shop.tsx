@@ -806,7 +806,6 @@ export default function Shop() {
       </div>
     );
   }
-  }
 
   const { data: activePowerUps } = useQuery<ActivePowerUpsResponse>({
     queryKey: ['/api/user', userId, 'powerups', 'active'],
