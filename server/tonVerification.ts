@@ -224,3 +224,92 @@ export function isValidTONAddress(address: string): boolean {
   
   return false;
 }
+
+/**
+ * Poll for transaction confirmation with timeout
+ * Checks every 10 seconds for up to 3 minutes
+ * Perfect for TON blockchain's fast confirmation times
+ * 
+ * @param txHash - Transaction hash to verify
+ * @param expectedAmount - Expected payment amount in TON
+ * @param recipientAddress - Game wallet address
+ * @param senderAddress - User's wallet address (optional)
+ * @param timeoutMs - Max time to wait (default: 180000ms = 3 minutes)
+ * @param intervalMs - Check interval (default: 10000ms = 10 seconds)
+ * @returns VerificationResult
+ */
+export async function pollForTransaction(
+  txHash: string,
+  expectedAmount: number,
+  recipientAddress: string,
+  senderAddress?: string,
+  timeoutMs: number = 180000, // 3 minutes
+  intervalMs: number = 10000 // 10 seconds
+): Promise<VerificationResult> {
+  const startTime = Date.now();
+  const endTime = startTime + timeoutMs;
+  let attempts = 0;
+  const maxAttempts = Math.ceil(timeoutMs / intervalMs);
+
+  console.log(`🔍 Polling for TON transaction ${txHash.substring(0, 12)}... (${maxAttempts} attempts over ${timeoutMs / 1000}s)`);
+
+  while (Date.now() < endTime) {
+    attempts++;
+    console.log(`🔄 Verification attempt ${attempts}/${maxAttempts}...`);
+
+    const result = await verifyTONTransaction(
+      txHash,
+      expectedAmount,
+      recipientAddress,
+      senderAddress
+    );
+
+    if (result.verified) {
+      console.log(`✅ Transaction verified on attempt ${attempts} (took ${Math.floor((Date.now() - startTime) / 1000)}s)`);
+      return result;
+    }
+
+    // If error is not about transaction not found, return immediately
+    if (result.error && !result.error.includes('not found') && !result.error.includes('processing')) {
+      console.log(`❌ Transaction verification failed with error: ${result.error}`);
+      return result;
+    }
+
+    // If we've exhausted all attempts, return failure
+    if (attempts >= maxAttempts) {
+      console.log(`⏱️ Transaction not confirmed after ${attempts} attempts (${Math.floor((Date.now() - startTime) / 1000)}s)`);
+      return {
+        verified: false,
+        error: `Transaction not confirmed within ${timeoutMs / 1000} seconds. Please ensure the transaction was sent and wait a moment before trying again.`,
+      };
+    }
+
+    // Wait before next attempt
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+
+  return {
+    verified: false,
+    error: 'Transaction verification timeout',
+  };
+}
+
+/**
+ * Quick verification with fast timeout (30 seconds)
+ * Use for real-time UI feedback
+ */
+export async function quickVerifyTransaction(
+  txHash: string,
+  expectedAmount: number,
+  recipientAddress: string,
+  senderAddress?: string
+): Promise<VerificationResult> {
+  return pollForTransaction(
+    txHash,
+    expectedAmount,
+    recipientAddress,
+    senderAddress,
+    30000, // 30 seconds
+    5000   // Check every 5 seconds
+  );
+}
