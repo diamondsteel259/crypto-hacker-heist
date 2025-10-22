@@ -206,7 +206,7 @@ function AppContent() {
   return (
     <>
       <div className="flex flex-col h-screen w-full bg-background">
-        <MobileHeader />
+        <MobileHeader user={userProfile} />
         <main className="flex-1 overflow-auto pb-16">
           <ErrorBoundary>
             <Router />
