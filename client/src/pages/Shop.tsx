@@ -153,9 +153,6 @@ export default function Shop() {
   const { tonConnectUI, isConnected, userFriendlyAddress } = useTonConnect();
   const userId = getCurrentUserId();
   
-  // Initialize TON Connect
-  const { isConnected, userFriendlyAddress, tonConnectUI } = useTonConnect();
-
   console.log("Shop component rendering...");
 
   // Fetch TON balance when wallet is connected
