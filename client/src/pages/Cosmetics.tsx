@@ -175,11 +175,28 @@ export default function Cosmetics() {
       <div className="min-h-screen bg-background p-3">
         <div className="max-w-6xl mx-auto">
           <Card className="p-6">
-            <p className="text-muted-foreground">Loading cosmetics shop...</p>
+            <div className="flex flex-col items-center text-center gap-4">
+              <Palette className="w-12 h-12 animate-pulse text-primary" />
+              <p className="text-lg font-semibold">
+                {isTimedOut ? "Still loading cosmetics..." : "Loading cosmetics shop..."}
+              </p>
+              {isTimedOut && (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    This is taking longer than expected. Check your connection.
+                  </p>
+                  <Button onClick={() => refetchCosmetics()} variant="outline" className="min-h-11">
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Retry
+                  </Button>
+                </>
+              )}
+            </div>
           </Card>
         </div>
       </div>
     );
+  }
   }
 
   const categories = [
