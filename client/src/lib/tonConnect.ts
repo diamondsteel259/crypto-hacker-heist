@@ -32,15 +32,19 @@ export async function sendTonTransaction(
     throw new Error('Wallet not connected');
   }
 
+  const message: any = {
+    address: to,
+    amount: (parseFloat(amount) * 1000000000).toString(), // Convert TON to nanoTON
+  };
+
+  // Only add payload if comment is provided
+  if (comment) {
+    message.payload = btoa(comment);
+  }
+
   const transaction = {
     validUntil: Math.floor(Date.now() / 1000) + 600, // 10 minutes
-    messages: [
-      {
-        address: to,
-        amount: (parseFloat(amount) * 1000000000).toString(), // Convert TON to nanoTON
-        payload: comment ? btoa(comment) : undefined, // Optional comment
-      },
-    ],
+    messages: [message],
   };
 
   try {
