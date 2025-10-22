@@ -5,7 +5,6 @@ import { QueryClientProvider, useQuery, useMutation } from "@tanstack/react-quer
 import { TonConnectUIProvider } from '@tonconnect/ui-react';
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Tutorial } from "@/components/Tutorial";
 import { useToast } from "@/hooks/use-toast";
 import BottomNav from "@/components/BottomNav";
 import MobileHeader from "@/components/MobileHeader";
@@ -24,10 +23,17 @@ import Admin from "@/pages/Admin";
 import Packs from "@/pages/Packs";
 import Subscription from "@/pages/Subscription";
 import NotFound from "@/pages/not-found";
-import { useLocation } from "wouter";
-import { showBackButton, hideBackButton, canGoBack } from "@/lib/telegram";
 import { initializeUser } from "@/lib/user";
 import { apiRequest } from "@/lib/queryClient";
+
+// Check if Tutorial component exists, import conditionally
+let Tutorial: any = null;
+try {
+  const tutorialModule = await import("@/components/Tutorial");
+  Tutorial = tutorialModule.Tutorial;
+} catch (e) {
+  console.log("Tutorial component not found, skipping");
+}
 
 function Router() {
   return (
@@ -67,10 +73,9 @@ function AppContent() {
     enabled: !!userId,
   });
 
-  // Show tutorial if user hasn't completed it
+  // Show tutorial if user hasn't completed it and Tutorial component exists
   useEffect(() => {
-    if (userProfile && !userProfile.tutorialCompleted && !tutorialOpen) {
-      // Delay showing tutorial by 1 second to let the app load
+    if (Tutorial && userProfile && !userProfile.tutorialCompleted && !tutorialOpen) {
       const timer = setTimeout(() => {
         setTutorialOpen(true);
       }, 1000);
@@ -102,31 +107,26 @@ function AppContent() {
   };
 
   const handleTutorialSkip = () => {
-    // Still mark as completed but user chose to skip
     completeTutorialMutation.mutate();
   };
 
   return (
     <>
       <div className="flex flex-col h-screen w-full bg-background">
-        {/* Mobile Header */}
         <MobileHeader />
-        
-        {/* Main Content - with bottom padding for nav */}
         <main className="flex-1 overflow-auto pb-16">
           <Router />
         </main>
-        
-        {/* Mobile Bottom Navigation */}
         <BottomNav />
       </div>
       
-      {/* Tutorial Modal */}
-      <Tutorial
-        open={tutorialOpen}
-        onComplete={handleTutorialComplete}
-        onSkip={handleTutorialSkip}
-      />
+      {Tutorial && (
+        <Tutorial
+          open={tutorialOpen}
+          onComplete={handleTutorialComplete}
+          onSkip={handleTutorialSkip}
+        />
+      )}
       
       <Toaster />
     </>
@@ -134,31 +134,13 @@ function AppContent() {
 }
 
 export default function App() {
-  const [location, navigate] = useLocation();
-
   // Initialize Telegram WebApp
-  if (window.Telegram?.WebApp) {
-    window.Telegram.WebApp.ready();
-    window.Telegram.WebApp.expand();
-  }
-
-  // Handle Telegram back button
   useEffect(() => {
-    if (location === '/' || location === '') {
-      // Hide back button on dashboard
-      hideBackButton();
-    } else if (canGoBack()) {
-      // Show back button on other pages
-      showBackButton(() => {
-        navigate('/');
-      });
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.ready();
+      window.Telegram.WebApp.expand();
     }
-
-    // Cleanup on unmount
-    return () => {
-      hideBackButton();
-    };
-  }, [location, navigate]);
+  }, []);
 
   return (
     <TonConnectUIProvider manifestUrl="https://crypto-hacker-heist.onrender.com/tonconnect-manifest.json">
