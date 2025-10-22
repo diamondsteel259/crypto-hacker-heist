@@ -548,7 +548,6 @@ export default function Dashboard() {
           {/* Left Column */}
           <div className="lg:col-span-2 space-y-4 md:space-y-6">
             <BlockTimer 
-              onBlockMined={() => console.log('Block mined!')} 
               userHashrate={user?.totalHashrate || 0}
             />
             <HashrateChart />
