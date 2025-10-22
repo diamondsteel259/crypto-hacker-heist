@@ -16,6 +16,7 @@ export const users = pgTable("users", {
   referralCode: text("referral_code").notNull().unique(),
   referredBy: text("referred_by"),
   isAdmin: boolean("is_admin").notNull().default(false),
+  tutorialCompleted: boolean("tutorial_completed").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
   referralCodeIdx: index("users_referral_code_idx").on(table.referralCode),
