@@ -2091,6 +2091,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             throw new Error(`Insufficient TON amount. Required: ${boxConfig.tonCost} TON`);
           }
 
+          // Get game wallet address
+          const gameWallet = getGameWalletAddress();
+
           // Check if transaction was already used
           const existingPurchase = await tx.select().from(lootBoxPurchases)
             .where(eq(lootBoxPurchases.tonTransactionHash, tonTransactionHash))
@@ -2103,7 +2106,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Verify TON transaction
           const isValid = await verifyTONTransaction(
             tonTransactionHash,
-            "0.1", // 0.1 TON per paid spin
+            tonAmount,
             gameWallet,
             userWalletAddress
           );
@@ -2268,7 +2271,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const existing = await tx.select().from(userDailyChallenges)
           .where(and(
             eq(userDailyChallenges.userId, user[0].telegramId),
-            eq(userDailyChallenges.challengeId, challengeId),
             eq(userDailyChallenges.completedDate, today)
           ))
           .limit(1);
