@@ -130,6 +130,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/leaderboard/referrals", validateTelegramAuth, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      
+      // Get users with referral counts
+      const topReferrers = await db.select({
+        id: users.id,
+        username: users.username,
+        photoUrl: users.photoUrl,
+        referralCount: sql<number>`(SELECT COUNT(*) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId})`,
+        totalBonus: sql<number>`(SELECT COALESCE(SUM(${referrals.bonusEarned}), 0) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId})`,
+      })
+        .from(users)
+        .orderBy(sql`referral_count DESC`)
+        .limit(Math.min(limit, 100));
+
+      res.json(topReferrers);
+    } catch (error: any) {
+      console.error("Referral leaderboard error:", error);
+      res.status(500).json({ error: "Failed to fetch referral leaderboard" });
+    }
+  });
+
   app.get("/api/user/:userId/rank", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     try {
       const { userId } = req.params;
