@@ -8,7 +8,6 @@ import { validateTelegramAuth, requireAdmin, verifyUserAccess, type AuthRequest 
 import { verifyTONTransaction, getGameWalletAddress, isValidTONAddress } from "./tonVerification";
 import { miningService } from "./mining";
 import { getBotWebhookHandler } from "./bot";
-import { queryClient } from "./queryClient";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health endpoint for Render
@@ -1578,7 +1577,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           boost_percentage: powerUp.boostPercentage,
           activated_at: powerUp.activatedAt.toISOString(),
           expires_at: powerUp.expiresAt.toISOString(),
-          time_remaining_seconds: Math.floor(timeRemaining / 1000),
+          time_remaining_seconds: Math.floor(timeRemaining / 1000 / 60),
         };
       });
 
@@ -1692,7 +1691,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             csBalance: sql`${users.csBalance} + ${csReward}`,
             ...(rewards.chst && { chstBalance: sql`${users.chstBalance} + ${rewards.chst}` }),
           })
-          .where(eq(users.telegramId, user[0].telegramId));
+          .where(eq(users.id, userId));
 
         // Record purchase if TON was paid
         if (boxConfig.tonCost > 0) {
@@ -1708,7 +1707,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Get updated user balance
         const updatedUser = await tx.select().from(users)
-          .where(eq(users.telegramId, user[0].telegramId))
+          .where(eq(users.id, userId))
           .limit(1);
 
         return {
