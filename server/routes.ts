@@ -905,6 +905,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all jackpot wins (admin only)
+  app.get("/api/admin/jackpots", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const { jackpotWins } = await import("@shared/schema");
+      
+      const allJackpots = await db.select().from(jackpotWins)
+        .orderBy(sql`${jackpotWins.wonAt} DESC`);
+
+      const unpaidCount = allJackpots.filter(j => !j.paidOut).length;
+      const totalPaidOut = allJackpots.filter(j => j.paidOut).length;
+
+      res.json({
+        success: true,
+        jackpots: allJackpots,
+        summary: {
+          total_wins: allJackpots.length,
+          unpaid: unpaidCount,
+          paid: totalPaidOut,
+        },
+      });
+    } catch (error: any) {
+      console.error("Get jackpots error:", error);
+      res.status(500).json({
+        error: "Failed to fetch jackpots",
+        details: error.message,
+      });
+    }
+  });
+
+  // Mark jackpot as paid (admin only)
+  app.post("/api/admin/jackpots/:jackpotId/mark-paid", validateTelegramAuth, requireAdmin, async (req, res) => {
+    const { jackpotId } = req.params;
+    const { notes } = req.body;
+    
+    try {
+      const { jackpotWins } = await import("@shared/schema");
+      const adminUser = req.user; // From auth middleware
+
+      const result = await db.transaction(async (tx: any) => {
+        // Get jackpot
+        const jackpot = await tx.select().from(jackpotWins)
+          .where(eq(jackpotWins.id, parseInt(jackpotId)))
+          .limit(1);
+
+        if (!jackpot[0]) {
+          throw new Error("Jackpot not found");
+        }
+
+        if (jackpot[0].paidOut) {
+          throw new Error("Jackpot already marked as paid");
+        }
+
+        // Mark as paid
+        await tx.update(jackpotWins)
+          .set({
+            paidOut: true,
+            paidAt: new Date(),
+            paidByAdmin: adminUser?.telegramId || 'unknown',
+            notes: notes || null,
+          })
+          .where(eq(jackpotWins.id, parseInt(jackpotId)));
+
+        const updated = await tx.select().from(jackpotWins)
+          .where(eq(jackpotWins.id, parseInt(jackpotId)))
+          .limit(1);
+
+        return updated[0];
+      });
+
+      console.log(`Jackpot ${jackpotId} marked as paid by admin ${req.user?.telegramId}`);
+      res.json({
+        success: true,
+        jackpot: result,
+        message: "Jackpot marked as paid successfully",
+      });
+    } catch (error: any) {
+      console.error("Mark jackpot paid error:", error);
+      res.status(400).json({
+        error: error.message || "Failed to mark jackpot as paid",
+      });
+    }
+  });
+
   // Equipment price management endpoints
   app.post("/api/admin/equipment/:equipmentId/update", validateTelegramAuth, requireAdmin, async (req, res) => {
     const { equipmentId } = req.params;
@@ -3119,44 +3202,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
+      const { equipmentTypes, userCosmetics, userStatistics } = await import("@shared/schema");
 
-      // Get equipment details
-      const equipment = await db.select().from(equipmentTypes)
-        .where(eq(equipmentTypes.id, equipmentTypeId))
-        .limit(1);
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
+        if (!user[0]) throw new Error("User not found");
 
-      if (!equipment[0]) {
-        return res.status(404).json({ error: "Equipment not found" });
-      }
+        // Check if alert already exists
+        const existingAlert = await tx.select().from(priceAlerts)
+          .where(and(
+            eq(priceAlerts.userId, user[0].telegramId),
+            eq(priceAlerts.equipmentTypeId, equipmentTypeId)
+          ))
+          .limit(1);
 
-      // Check if alert already exists
-      const existingAlert = await db.select().from(priceAlerts)
-        .where(and(
-          eq(priceAlerts.userId, user.telegramId),
-          eq(priceAlerts.equipmentTypeId, equipmentTypeId)
-        ))
-        .limit(1);
+        if (existingAlert.length > 0) {
+          throw new Error("Alert already exists for this equipment");
+        }
 
-      if (existingAlert.length > 0) {
-        return res.status(400).json({ error: "Alert already exists for this equipment" });
-      }
+        // Get equipment details
+        const equipment = await tx.select().from(equipmentTypes)
+          .where(and(
+            eq(equipmentTypes.id, equipmentTypeId),
+            eq(equipmentTypes.isActive, true)
+          ))
+          .limit(1);
 
-      // Create alert
-      const newAlert = await db.insert(priceAlerts).values({
-        userId: user.telegramId,
-        equipmentTypeId,
-        targetPrice: equipment[0].basePrice,
-        triggered: false,
-      }).returning();
+        if (!equipment[0]) {
+          throw new Error("Equipment not found");
+        }
+
+        // Create alert
+        const newAlert = await tx.insert(priceAlerts).values({
+          userId: user[0].telegramId,
+          equipmentTypeId,
+          targetPrice: equipment[0].basePrice,
+          triggered: false,
+        }).returning();
+
+        return newAlert[0];
+      });
 
       res.json({
         success: true,
         message: `Alert set for ${equipment[0].name}`,
-        alert: newAlert[0],
+        alert: result,
       });
     } catch (error: any) {
       console.error("Create price alert error:", error);
@@ -3169,8 +3259,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { userId, alertId } = req.params;
 
     try {
-      const user = await storage.getUser(userId);
-      if (!user) {
+      const { equipmentTypes, userCosmetics, userStatistics } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
         return res.status(404).json({ error: "User not found" });
       }
 
@@ -3178,7 +3270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const alert = await db.select().from(priceAlerts)
         .where(and(
           eq(priceAlerts.id, parseInt(alertId)),
-          eq(priceAlerts.userId, user.telegramId)
+          eq(priceAlerts.userId, user[0].telegramId)
         ))
         .limit(1);
 
