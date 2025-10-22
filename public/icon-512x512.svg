@@ -1,0 +1,84 @@
+<svg width="512" height="512" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#000000;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0a0a0a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="greenGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2dd76f;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00ff41;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="blueGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3bb6fc;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00d4ff;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" fill="url(#bgGradient)"/>
+
+  <!-- Circuit board pattern -->
+  <g opacity="0.15" stroke="url(#greenGlow)" stroke-width="2" fill="none">
+    <line x1="0" y1="128" x2="512" y2="128"/>
+    <line x1="0" y1="256" x2="512" y2="256"/>
+    <line x1="0" y1="384" x2="512" y2="384"/>
+    <line x1="128" y1="0" x2="128" y2="512"/>
+    <line x1="256" y1="0" x2="256" y2="512"/>
+    <line x1="384" y1="0" x2="384" y2="512"/>
+    <circle cx="128" cy="128" r="4"/>
+    <circle cx="256" cy="128" r="4"/>
+    <circle cx="384" cy="128" r="4"/>
+    <circle cx="128" cy="256" r="4"/>
+    <circle cx="384" cy="256" r="4"/>
+    <circle cx="128" cy="384" r="4"/>
+    <circle cx="256" cy="384" r="4"/>
+    <circle cx="384" cy="384" r="4"/>
+  </g>
+
+  <!-- Main crypto symbol - stylized C with circuit -->
+  <g filter="url(#glow)">
+    <!-- Outer C shape -->
+    <path d="M 180 140 Q 140 140 140 180 L 140 332 Q 140 372 180 372 L 280 372"
+          stroke="url(#greenGlow)" stroke-width="24" fill="none" stroke-linecap="round"/>
+
+    <!-- Inner circuit lines -->
+    <path d="M 200 200 L 350 200" stroke="url(#blueGlow)" stroke-width="8" fill="none" stroke-linecap="round"/>
+    <path d="M 200 256 L 370 256" stroke="url(#greenGlow)" stroke-width="8" fill="none" stroke-linecap="round"/>
+    <path d="M 200 312 L 350 312" stroke="url(#blueGlow)" stroke-width="8" fill="none" stroke-linecap="round"/>
+
+    <!-- Circuit nodes -->
+    <circle cx="350" cy="200" r="8" fill="url(#blueGlow)"/>
+    <circle cx="370" cy="256" r="8" fill="url(#greenGlow)"/>
+    <circle cx="350" cy="312" r="8" fill="url(#blueGlow)"/>
+
+    <!-- Hacker bracket symbol -->
+    <path d="M 300 160 L 280 160 L 260 180 L 260 332 L 280 352 L 300 352"
+          stroke="url(#greenGlow)" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <path d="M 320 160 L 340 160 L 360 180 L 360 332 L 340 352 L 320 352"
+          stroke="url(#blueGlow)" stroke-width="6" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <!-- Corner accent brackets (cyberpunk style) -->
+  <g stroke="url(#greenGlow)" stroke-width="3" fill="none" opacity="0.6">
+    <!-- Top-left -->
+    <path d="M 30 80 L 30 30 L 80 30"/>
+    <!-- Top-right -->
+    <path d="M 432 30 L 482 30 L 482 80"/>
+    <!-- Bottom-left -->
+    <path d="M 30 432 L 30 482 L 80 482"/>
+    <!-- Bottom-right -->
+    <path d="M 482 432 L 482 482 L 432 482"/>
+  </g>
+
+  <!-- Scanline effect -->
+  <rect width="512" height="2" y="0" fill="url(#greenGlow)" opacity="0.1">
+    <animate attributeName="y" from="0" to="512" dur="3s" repeatCount="indefinite"/>
+  </rect>
+</svg>
