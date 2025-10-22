@@ -188,7 +188,8 @@ function AppContent() {
               <button
                 onClick={() => {
                   if (window.Telegram?.WebApp?.openTelegramLink) {
-                    window.Telegram.WebApp.openTelegramLink('https://t.me/cryptohackerheist_bot');
+                    const botUsername = import.meta.env.VITE_BOT_USERNAME || 'cryptohackerheist_bot';
+                    window.Telegram.WebApp.openTelegramLink(`https://t.me/${botUsername}`);
                   }
                 }}
                 className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
