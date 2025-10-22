@@ -179,7 +179,6 @@ export default function Shop() {
   const [rewardModalOpen, setRewardModalOpen] = useState(false);
   const [rewardModalData, setRewardModalData] = useState<any>(null);
   
-  console.log("Shop component rendering...");
 
   // Fetch TON balance when wallet is connected
   useEffect(() => {
@@ -263,17 +262,13 @@ export default function Shop() {
 
   const purchaseMutation = useMutation({
     mutationFn: async (equipmentTypeId: string) => {
-      console.log("Attempting to purchase equipment:", equipmentTypeId);
       const response = await apiRequest("POST", `/api/user/${userId}/equipment/purchase`, {
         equipmentTypeId
       });
-      console.log("Purchase response:", response);
       const data = await response.json();
-      console.log("Purchase response data:", data);
       return data;
     },
     onSuccess: (data) => {
-      console.log("Purchase successful:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "equipment"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
       toast({ 
@@ -293,7 +288,6 @@ export default function Shop() {
 
   const tonPurchaseMutation = useMutation({
     mutationFn: async ({ equipmentTypeId, price }: { equipmentTypeId: string; price: number }) => {
-      console.log("Attempting TON purchase:", { equipmentTypeId, price });
       
       // Confirmation dialog for TON purchases
       const confirmed = window.confirm(
@@ -314,7 +308,6 @@ export default function Shop() {
         throw new Error(`Insufficient TON balance. You have ${tonBalance} TON but need ${price} TON`);
       }
 
-      console.log("Sending TON payment for equipment:", {
         to: TON_PAYMENT_ADDRESS,
         amount: price,
       });
@@ -326,7 +319,6 @@ export default function Shop() {
           `Equipment purchase: ${equipmentTypeId}`
         );
 
-        console.log("TON transaction result:", result);
 
         // After successful TON payment, purchase the equipment
         const response = await apiRequest("POST", `/api/user/${userId}/equipment/purchase`, {
@@ -351,7 +343,6 @@ export default function Shop() {
       }
     },
     onSuccess: (data) => {
-      console.log("TON purchase successful:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "equipment"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
       // Refresh TON balance after successful purchase
@@ -395,7 +386,6 @@ export default function Shop() {
 
   const taskClaimMutation = useMutation({
     mutationFn: async (taskId: string) => {
-      console.log("Claiming task:", taskId);
       const response = await apiRequest("POST", `/api/user/${userId}/tasks/claim`, {
         taskId
       });
@@ -403,7 +393,6 @@ export default function Shop() {
       return data;
     },
     onSuccess: (data) => {
-      console.log("Task claimed successfully:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
       toast({ 
         title: "Task completed!",
@@ -422,7 +411,6 @@ export default function Shop() {
 
   const powerUpClaimMutation = useMutation({
     mutationFn: async (claimType: string) => {
-      console.log("Claiming daily power-up:", claimType);
       
       // Get user's timezone offset in minutes
       const timezoneOffset = new Date().getTimezoneOffset();
@@ -441,7 +429,6 @@ export default function Shop() {
       return data;
     },
     onSuccess: (data) => {
-      console.log("Daily claim successful:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
       toast({ 
         title: "Daily claim successful!",
@@ -460,7 +447,6 @@ export default function Shop() {
 
   const premiumPowerUpMutation = useMutation({
     mutationFn: async ({ powerUpType, tonAmount }: { powerUpType: string; tonAmount: number }) => {
-      console.log("Purchasing premium power-up:", { powerUpType, tonAmount });
       
       // Confirmation dialog for TON power-up purchases
       const powerUpName = powerUpType === 'hashrate-boost' ? 'Hashrate Boost (+50%)' : 'Luck Boost (+25%)';
@@ -491,7 +477,6 @@ export default function Shop() {
         throw new Error("Wallet not properly connected. Please reconnect your wallet.");
       }
 
-      console.log("Sending TON transaction:", {
         to: TON_PAYMENT_ADDRESS,
         amount: tonAmount,
         from: userAddress,
@@ -508,7 +493,6 @@ export default function Shop() {
           validUntil: Math.floor(Date.now() / 1000) + 600,
         });
         
-        console.log("TON transaction sent successfully:", result);
 
         // Call backend to verify and grant power-up
         const response = await apiRequest("POST", `/api/user/${userId}/powerups/purchase`, {
@@ -537,7 +521,6 @@ export default function Shop() {
       }
     },
     onSuccess: (data) => {
-      console.log("Premium power-up purchased:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
       // Refresh TON balance
       if (isConnected) {
@@ -560,7 +543,6 @@ export default function Shop() {
 
   const lootBoxOpenMutation = useMutation({
     mutationFn: async ({ boxType, cost }: { boxType: string; cost?: number }) => {
-      console.log("Opening loot box:", { boxType, cost });
       
       let txHash = undefined;
       let userAddress = undefined;
@@ -594,7 +576,6 @@ export default function Shop() {
           throw new Error("Wallet not properly connected. Please reconnect your wallet.");
         }
 
-        console.log("Sending TON transaction for loot box:", {
           to: TON_PAYMENT_ADDRESS,
           amount: cost,
           from: userAddress,
@@ -610,7 +591,6 @@ export default function Shop() {
             ],
             validUntil: Math.floor(Date.now() / 1000) + 600,
           });
-          console.log("TON transaction sent successfully:", result);
           txHash = result.boc;
         } catch (txError: any) {
           console.error("TON transaction error:", txError);
@@ -637,7 +617,6 @@ export default function Shop() {
       return data;
     },
     onSuccess: (data) => {
-      console.log("Loot box opened successfully:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
       // Refresh TON balance
       if (isConnected) {
@@ -739,7 +718,6 @@ export default function Shop() {
   const csBalance = user?.csBalance || 0;
   const userHashrate = user?.totalHashrate || 0;
 
-  console.log("Shop Debug:", {
     allEquipment: allEquipment.length,
     allEquipmentData: allEquipment.slice(0, 3),
     isLoadingTypes,
