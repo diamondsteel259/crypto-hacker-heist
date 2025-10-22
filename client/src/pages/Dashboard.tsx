@@ -211,6 +211,7 @@ export default function Dashboard() {
       queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'daily-login'] });
       queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'streak'] });
       queryClient.invalidateQueries({ queryKey: ['/api/user', userId] });
+      hapticSuccess();
       toast({
         title: "Daily Reward Claimed! 🎁",
         description: `Day ${data.streakDay}: +${data.reward.cs} CS, +${data.reward.chst} CHST${data.reward.item ? ` + ${data.reward.item}` : ''}`,
@@ -218,6 +219,7 @@ export default function Dashboard() {
       });
     },
     onError: (error: any) => {
+      hapticError();
       toast({
         title: "Claim Failed",
         description: error.message || "Already claimed today or failed to claim",
