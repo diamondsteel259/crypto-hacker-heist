@@ -197,7 +197,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl md:text-2xl lg:text-3xl font-bold mb-1">
-                Welcome back, {userProfile?.username || 'Hacker'}!
+                Welcome back, {user?.username || 'Hacker'}!
               </h1>
               <p className="text-sm md:text-base text-muted-foreground">
                 Your crypto mining empire at a glance
@@ -217,7 +217,7 @@ export default function Dashboard() {
               <p className="text-xs md:text-sm font-medium text-muted-foreground uppercase tracking-wider">CS Balance</p>
             </div>
             <p className="text-2xl md:text-3xl font-bold font-mono text-matrix-green">
-              {userProfile?.csBalance?.toLocaleString() || 0}
+              {user?.csBalance?.toLocaleString() || 0}
             </p>
           </Card>
 
