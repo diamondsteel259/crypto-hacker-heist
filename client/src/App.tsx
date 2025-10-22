@@ -56,11 +56,22 @@ function AppContent() {
   const { toast } = useToast();
   const [userId, setUserId] = useState<string | null>(null);
   const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [userInitLoading, setUserInitLoading] = useState(true);
+  const [userInitError, setUserInitError] = useState<string | null>(null);
 
   useEffect(() => {
+    setUserInitLoading(true);
     initializeUser()
-      .then(setUserId)
-      .catch(err => console.error('Failed to initialize user:', err));
+      .then((id) => {
+        setUserId(id);
+        setUserInitLoading(false);
+        setUserInitError(null);
+      })
+      .catch((err) => {
+        console.error('Failed to initialize user:', err);
+        setUserInitError(err.message || "Failed to initialize. Please try again.");
+        setUserInitLoading(false);
+      });
   }, []);
 
   const { data: userProfile } = useQuery({
@@ -104,6 +115,71 @@ function AppContent() {
   const handleTutorialSkip = () => {
     completeTutorialMutation.mutate();
   };
+
+  // Loading UI
+  if (userInitLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-sm text-muted-foreground">Initializing...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error UI
+  if (userInitError) {
+    const isNotInTelegram = userInitError.includes("Please open this app in Telegram");
+    
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background p-4">
+        <div className="text-center max-w-md">
+          <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center text-white text-2xl mx-auto mb-4">
+            !
+          </div>
+          <h1 className="text-xl font-bold mb-2">Initialization Failed</h1>
+          <p className="text-sm text-muted-foreground mb-4">{userInitError}</p>
+          <div className="space-y-2">
+            {!isNotInTelegram && (
+              <button
+                onClick={() => {
+                  setUserInitError(null);
+                  setUserInitLoading(true);
+                  initializeUser()
+                    .then((id) => {
+                      setUserId(id);
+                      setUserInitLoading(false);
+                      setUserInitError(null);
+                    })
+                    .catch((err) => {
+                      console.error('Failed to initialize user:', err);
+                      setUserInitError(err.message || "Failed to initialize. Please try again.");
+                      setUserInitLoading(false);
+                    });
+                }}
+                className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+              >
+                Retry
+              </button>
+            )}
+            {isNotInTelegram && window.Telegram?.WebApp && (
+              <button
+                onClick={() => {
+                  if (window.Telegram?.WebApp?.openTelegramLink) {
+                    window.Telegram.WebApp.openTelegramLink('https://t.me/cryptohackerheist_bot');
+                  }
+                }}
+                className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+              >
+                Open in Telegram
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
