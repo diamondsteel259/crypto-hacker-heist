@@ -3125,8 +3125,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Invalidate cache
       if (result.upgrades.length > 0) {
-        queryClient.invalidateQueries({ queryKey: ['/api/user', userId] });
-        queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'equipment'] });
       }
     } catch (error: any) {
       console.error("Execute auto-upgrade error:", error);
@@ -3432,8 +3430,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return { purchase: purchase[0], rewards };
       });
 
-      queryClient.invalidateQueries({ queryKey: ['/api/user', userId] });
-      queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'equipment'] });
 
       res.json({
         success: true,
@@ -3569,9 +3565,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return { newPrestigeLevel: currentPrestige.prestigeLevel + 1 };
       });
 
-      queryClient.invalidateQueries({ queryKey: ['/api/user', userId] });
-      queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'equipment'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'prestige'] });
 
       res.json({
         success: true,
@@ -3684,7 +3677,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
 
-      queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'subscription'] });
 
       res.json({
         success: true,
@@ -3711,7 +3703,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .set({ isActive: false, autoRenew: false })
         .where(eq(userSubscriptions.userId, user.telegramId));
 
-      queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'subscription'] });
 
       res.json({
         success: true,
