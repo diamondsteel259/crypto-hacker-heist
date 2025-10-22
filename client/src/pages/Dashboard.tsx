@@ -16,6 +16,7 @@ import { Terminal, Gem, Package, TrendingUp, Zap, Shield, Sparkles, Flame, Clock
 import { initializeUser, getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useLoadingTimeout } from "@/hooks/use-loading-timeout";
 // import { hapticSuccess } from "@/lib/telegram";
 import type { User } from "@shared/schema";
 
@@ -90,6 +91,9 @@ export default function Dashboard() {
     queryKey: ['/api/user', userId],
     enabled: !!userId,
   });
+
+  // Show loading help message if taking too long
+  const showLoadingHelp = useLoadingTimeout({ isLoading: userLoading, timeoutMs: 5000 });
 
   const { data: latestBlock } = useQuery<any>({
     queryKey: ['/api/blocks/latest'],
