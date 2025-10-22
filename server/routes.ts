@@ -8,6 +8,7 @@ import { validateTelegramAuth, requireAdmin, verifyUserAccess, type AuthRequest 
 import { verifyTONTransaction, getGameWalletAddress, isValidTONAddress } from "./tonVerification";
 import { miningService } from "./mining";
 import { getBotWebhookHandler } from "./bot";
+import { queryClient } from "./queryClient";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health endpoint for Render
@@ -770,6 +771,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: true });
   });
 
+  // Get payment history for a specific user - admin only
+  app.get("/api/admin/users/:userId/payment-history", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+
+      // Query all three payment tables
+      const [powerUps, lootBoxes, packs] = await Promise.all([
+        db.select().from(powerUpPurchases).where(eq(powerUpPurchases.userId, userId)),
+        db.select().from(lootBoxPurchases).where(eq(lootBoxPurchases.userId, userId)),
+        db.select().from(packPurchases).where(eq(packPurchases.userId, userId)),
+      ]);
+
+      // Transform power-up purchases
+      const powerUpPayments = powerUps.map((p) => ({
+        id: `powerup-${p.id}`,
+        type: "Power-Up" as const,
+        itemName: p.powerUpType,
+        tonAmount: p.tonAmount,
+        transactionHash: p.tonTransactionHash,
+        verified: p.tonTransactionVerified,
+        rewards: {
+          cs: p.rewardCs || 0,
+          chst: p.rewardChst || 0,
+        },
+        purchasedAt: p.purchasedAt,
+      }));
+
+      // Transform loot box purchases
+      const lootBoxPayments = lootBoxes.map((l) => {
+        let rewards = { cs: 0, chst: 0, items: [] as string[] };
+        try {
+          const parsed = JSON.parse(l.rewardsJson);
+          rewards = {
+            cs: parsed.cs || 0,
+            chst: parsed.chst || 0,
+            items: parsed.items || [],
+          };
+        } catch (e) {
+          console.error("Failed to parse loot box rewards:", e);
+        }
+
+        return {
+          id: `lootbox-${l.id}`,
+          type: "Loot Box" as const,
+          itemName: l.boxType,
+          tonAmount: l.tonAmount,
+          transactionHash: l.tonTransactionHash,
+          verified: l.tonTransactionVerified,
+          rewards,
+          purchasedAt: l.purchasedAt,
+        };
+      });
+
+      // Transform pack purchases
+      const packPayments = packs.map((p) => {
+        let rewards = { cs: 0, chst: 0, items: [] as string[] };
+        try {
+          const parsed = JSON.parse(p.rewardsJson);
+          rewards = {
+            cs: parsed.cs || 0,
+            chst: parsed.chst || 0,
+            items: parsed.items || [],
+          };
+        } catch (e) {
+          console.error("Failed to parse pack rewards:", e);
+        }
+
+        return {
+          id: `pack-${p.id}`,
+          type: "Pack" as const,
+          itemName: p.packType,
+          tonAmount: p.tonAmount,
+          transactionHash: p.tonTransactionHash,
+          verified: p.tonTransactionVerified,
+          rewards,
+          purchasedAt: p.purchasedAt,
+        };
+      });
+
+      // Combine and sort by date (newest first)
+      const allPayments = [...powerUpPayments, ...lootBoxPayments, ...packPayments].sort(
+        (a, b) => new Date(b.purchasedAt).getTime() - new Date(a.purchasedAt).getTime()
+      );
+
+      // Calculate total TON spent
+      const totalTonSpent = allPayments.reduce((sum, p) => sum + parseFloat(p.tonAmount), 0);
+
+      res.json({
+        userId,
+        totalPayments: allPayments.length,
+        totalTonSpent: totalTonSpent.toFixed(4),
+        payments: allPayments,
+      });
+    } catch (error: any) {
+      console.error("Payment history error:", error);
+      res.status(500).json({ error: "Failed to fetch payment history" });
+    }
+  });
+
   app.post("/api/admin/mining/pause", validateTelegramAuth, requireAdmin, async (req, res) => {
     await storage.setGameSetting('mining_paused', 'true');
     res.json({ success: true, paused: true });
@@ -1088,14 +1188,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get all completed tasks
-      const completedTasks = await db.select().from(userTasks)
+      const completed = await db.select().from(userTasks)
         .where(eq(userTasks.userId, user[0].telegramId));
 
-      const completedTaskIds = completedTasks.map(t => t.taskId);
+      const completedTaskIds = completed.map(t => t.taskId);
 
       res.json({
         completed_task_ids: completedTaskIds,
-        completed_count: completedTasks.length,
+        completed_count: completed.length,
       });
     } catch (error: any) {
       console.error("Get task status error:", error);
