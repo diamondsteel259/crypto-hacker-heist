@@ -5,6 +5,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { miningService } from "./mining";
 import { seedDatabase } from "./seedDatabase";
 import { seedGameContent } from "./seedGameContent";
+import { seedFeatureFlags } from "./seedFeatureFlags";
 import { initializeBot } from "./bot";
 import { applyPerformanceIndexes } from "./applyIndexes";
 import { initializeDatabase, checkDatabaseHealth } from "./db";
