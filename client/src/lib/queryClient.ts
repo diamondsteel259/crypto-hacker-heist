@@ -63,13 +63,31 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
-      refetchInterval: false,
-      refetchOnWindowFocus: false,
+      refetchInterval: 60000, // 1 minute for stale data
+      refetchOnWindowFocus: 'always', // Important for Telegram mini apps that are often backgrounded
       staleTime: Infinity,
-      retry: false,
+      retry: (failureCount, error: any) => {
+        // Don't retry on 401, 403, 404 (auth/permission/not found errors)
+        if (error?.message?.includes('401') || 
+            error?.message?.includes('403') || 
+            error?.message?.includes('404')) {
+          return false;
+        }
+        
+        // Always retry network errors (even after 3 attempts)
+        if (error?.message?.toLowerCase().includes('network') || 
+            error?.message?.toLowerCase().includes('fetch')) {
+          return failureCount < 5;
+        }
+        
+        // Retry other errors up to 3 times
+        return failureCount < 3;
+      },
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // 1s, 2s, 4s, ..., max 30s
+      retryOnMount: true, // Retry failed queries when component remounts
     },
     mutations: {
-      retry: false,
+      retry: false, // Mutations should not auto-retry
     },
   },
 });
