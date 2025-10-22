@@ -322,7 +322,7 @@ export default function Shop() {
       try {
         // Send TON payment using the utility function
         const result = await sendTonTransaction(tonConnectUI, TON_PAYMENT_ADDRESS,
-          price,
+          price.toString(),
           `Equipment purchase: ${equipmentTypeId}`
         );
 
