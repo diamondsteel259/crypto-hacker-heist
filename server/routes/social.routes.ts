@@ -17,7 +17,7 @@ export function registerSocialRoutes(app: Express) {
         photoUrl: users.photoUrl,
       })
         .from(users)
-        .orderBy(sql\`\${users.totalHashrate} DESC\`)
+        .orderBy(sql`${users.totalHashrate} DESC`)
         .limit(Math.min(limit, 100)); // Max 100 results
 
       res.json(topMiners);
@@ -39,7 +39,7 @@ export function registerSocialRoutes(app: Express) {
         photoUrl: users.photoUrl,
       })
         .from(users)
-        .orderBy(sql\`\${users.csBalance} DESC\`)
+        .orderBy(sql`${users.csBalance} DESC`)
         .limit(Math.min(limit, 100)); // Max 100 results
 
       res.json(topBalances);
@@ -59,11 +59,11 @@ export function registerSocialRoutes(app: Express) {
         id: users.id,
         username: users.username,
         photoUrl: users.photoUrl,
-        referralCount: sql<number>\`(SELECT COUNT(*) FROM \${referrals} WHERE \${referrals.referrerId} = \${users.telegramId})\`,
-        totalBonus: sql<number>\`(SELECT COALESCE(SUM(\${referrals.bonusEarned}), 0) FROM \${referrals} WHERE \${referrals.referrerId} = \${users.telegramId})\`,
+        referralCount: sql<number>`(SELECT COUNT(*) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId})`,
+        totalBonus: sql<number>`(SELECT COALESCE(SUM(${referrals.bonusEarned}), 0) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId})`,
       })
         .from(users)
-        .orderBy(sql\`(SELECT COUNT(*) FROM \${referrals} WHERE \${referrals.referrerId} = \${users.telegramId}) DESC\`)
+        .orderBy(sql`(SELECT COUNT(*) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId}) DESC`)
         .limit(Math.min(limit, 100));
 
       res.json(topReferrers);
@@ -113,13 +113,13 @@ export function registerSocialRoutes(app: Express) {
         await tx.update(users)
           .set({ 
             referredBy: referrer[0].id,
-            csBalance: sql\`\${users.csBalance} + \${bonusAmount}\`
+            csBalance: sql`${users.csBalance} + ${bonusAmount}`
           })
           .where(eq(users.id, userId));
 
         await tx.update(users)
           .set({
-            csBalance: sql\`\${users.csBalance} + \${bonusAmount * 2}\`
+            csBalance: sql`${users.csBalance} + ${bonusAmount * 2}`
           })
           .where(eq(users.id, referrer[0].id));
 
