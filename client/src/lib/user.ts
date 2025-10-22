@@ -67,6 +67,14 @@ export async function authenticateWithTelegram(): Promise<string> {
 }
 
 export async function initializeUser(): Promise<string> {
+  // Development mode: Allow testing without Telegram
+  if (import.meta.env.DEV && import.meta.env.VITE_DEV_MODE_BYPASS === 'true' && !getTelegramInitData()) {
+    console.warn('[DEV MODE] Running without Telegram, using mock user');
+    const mockUserId = 'dev_user_' + Math.random().toString(36).substr(2, 9);
+    setCurrentUserId(mockUserId);
+    return mockUserId;
+  }
+
   let userId = getCurrentUserId();
   
   if (userId) {
