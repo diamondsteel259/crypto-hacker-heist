@@ -169,6 +169,11 @@ app.get('/api/health/mining', async (_req: Request, res: Response) => {
       console.error("⚠️  Game content seeding failed (non-fatal):", err.message || err);
     });
     
+    // Seed feature flags for admin dashboard
+    seedFeatureFlags().catch(err => {
+      console.error("⚠️  Feature flags seeding failed (non-fatal):", err.message || err);
+    });
+    
     // Start mining service (also non-fatal)
     miningService.start().catch(err => {
       console.error("⚠️  Mining service failed to start (non-fatal):", err.message || err);
