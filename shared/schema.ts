@@ -272,6 +272,21 @@ export const userStreaks = pgTable("user_streaks", {
   userStreakIdx: index("user_streaks_user_idx").on(table.userId),
 }));
 
+// Daily Login Rewards
+export const dailyLoginRewards = pgTable("daily_login_rewards", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  loginDate: text("login_date").notNull(), // YYYY-MM-DD format
+  streakDay: integer("streak_day").notNull(), // Which day of the streak (1-7+)
+  rewardCs: integer("reward_cs").notNull().default(0),
+  rewardChst: integer("reward_chst").notNull().default(0),
+  rewardItem: text("reward_item"), // Special item on day 7
+  claimedAt: timestamp("claimed_at").notNull().defaultNow(),
+}, (table) => ({
+  userDateUnique: unique().on(table.userId, table.loginDate),
+  userLoginRewardIdx: index("daily_login_rewards_user_idx").on(table.userId, table.loginDate),
+}));
+
 // Hourly Bonuses
 export const userHourlyBonuses = pgTable("user_hourly_bonuses", {
   id: serial("id").primaryKey(),
