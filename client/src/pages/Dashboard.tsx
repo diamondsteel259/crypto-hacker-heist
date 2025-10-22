@@ -476,7 +476,10 @@ export default function Dashboard() {
                 </div>
                 <Button
                   size="sm"
-                  onClick={() => claimDailyLoginMutation.mutate()}
+                  onClick={() => {
+                    hapticLight();
+                    claimDailyLoginMutation.mutate();
+                  }}
                   disabled={dailyLoginStatus.alreadyClaimed || claimDailyLoginMutation.isPending}
                   className="bg-orange-500 hover:bg-orange-600"
                 >
