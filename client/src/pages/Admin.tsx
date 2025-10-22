@@ -368,6 +368,64 @@ export default function Admin() {
           </div>
         </Card>
 
+        {/* Feature Flags Management */}
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <ToggleLeft className="w-5 h-5 text-purple-500" />
+            Feature Flags - Enable/Disable Pages
+          </h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Control which features and pages are visible to users in navigation
+          </p>
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {flagsLoading ? (
+              <p className="text-sm text-muted-foreground">Loading feature flags...</p>
+            ) : featureFlags && featureFlags.length > 0 ? (
+              featureFlags.map((flag) => (
+                <div
+                  key={flag.id}
+                  className="flex items-center justify-between p-4 bg-muted/30 rounded-md"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-semibold">{flag.featureName}</p>
+                      {flag.isEnabled ? (
+                        <Badge className="text-xs bg-matrix-green text-black">Enabled</Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-xs">Disabled</Badge>
+                      )}
+                    </div>
+                    {flag.description && (
+                      <p className="text-xs text-muted-foreground">{flag.description}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground/70 mt-1">
+                      Key: {flag.featureKey}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={flag.isEnabled}
+                    onCheckedChange={(checked) =>
+                      toggleFeatureFlagMutation.mutate({
+                        featureKey: flag.featureKey,
+                        isEnabled: checked,
+                      })
+                    }
+                    disabled={toggleFeatureFlagMutation.isPending}
+                  />
+                </div>
+              ))
+            ) : (
+              <div className="p-8 text-center">
+                <ToggleLeft className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+                <p className="text-muted-foreground">No feature flags configured</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Feature flags will be seeded automatically on first deploy
+                </p>
+              </div>
+            )}
+          </div>
+        </Card>
+
         {/* Equipment Price Management */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
