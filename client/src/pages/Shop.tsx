@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Monitor, Cpu, Server, Boxes, Zap, Rocket, Shield, ShoppingBag, CheckCircle2, Gem, Star, Crown, Sparkles, Gift, ChevronDown, ChevronUp, Bell } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { RewardModal } from "@/components/RewardModal";
 import { getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useTonConnect, sendTonTransaction, getTonBalance } from "@/lib/tonConnect";
@@ -170,6 +171,8 @@ export default function Shop() {
   const { toast } = useToast();
   const { tonConnectUI, isConnected, userFriendlyAddress } = useTonConnect();
   const userId = getCurrentUserId();
+  const [rewardModalOpen, setRewardModalOpen] = useState(false);
+  const [rewardModalData, setRewardModalData] = useState<any>(null);
   
   console.log("Shop component rendering...");
 
@@ -635,23 +638,19 @@ export default function Shop() {
         getTonBalance(userFriendlyAddress).then(setTonBalance).catch(console.error);
       }
 
-      // Format rewards message
-      const rewards = [];
-      if (data.rewards?.cs) rewards.push(`${data.rewards.cs.toLocaleString()} CS`);
-      if (data.rewards?.chst) rewards.push(`${data.rewards.chst.toLocaleString()} CHST`);
-      if (data.rewards?.freeSpins) rewards.push(`${data.rewards.freeSpins} Free Spin${data.rewards.freeSpins > 1 ? 's' : ''}`);
-
-      toast({ 
-        title: "🎉 You Won!",
-        description: rewards.length > 0 ? `You received: ${rewards.join(', ')}` : "You received rewards!"
+      // Show reward modal instead of toast
+      setRewardModalData({
+        rewards: data.rewards,
+        boxType: data.boxType || 'mystery',
       });
+      setRewardModalOpen(true);
     },
     onError: (error: any) => {
-      console.error("Loot box opening failed:", error);
-      toast({ 
-        title: "Loot box failed", 
-        description: error.message || "Failed to open loot box. Please try again.",
-        variant: "destructive" 
+      console.error("Loot box open failed:", error);
+      toast({
+        title: "Failed to open loot box",
+        description: error.message || "Something went wrong",
+        variant: "destructive",
       });
     },
   });
@@ -1381,6 +1380,17 @@ export default function Shop() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Reward Modal */}
+        <RewardModal
+          open={rewardModalOpen}
+          onClose={() => {
+            setRewardModalOpen(false);
+            setRewardModalData(null);
+          }}
+          rewards={rewardModalData?.rewards || {}}
+          boxType={rewardModalData?.boxType}
+        />
       </div>
     </div>
   );
