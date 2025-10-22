@@ -1867,7 +1867,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
 
-      res.json(result);
+      res.json({
+        success: true,
+        reward: result.reward,
+        currency: result.currency,
+        remaining_claims: result.remaining_claims,
+        next_reset: result.next_reset,
+        new_balance: result.new_balance,
+      });
     } catch (error: any) {
       console.error("Daily claim error:", error);
       
@@ -3894,8 +3901,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: true,
-        rewards,
-        newStreak: currentStreak,
+        reward: rewards,
+        streakDay: currentStreak,
         message: `Day ${currentStreak} reward claimed!`,
       });
     } catch (error: any) {
