@@ -1728,11 +1728,43 @@ async function registerRoutes(app2) {
   app2.delete("/api/admin/reset-all-users", validateTelegramAuth, requireAdmin, async (req, res) => {
     try {
       const result = await db.transaction(async (tx) => {
+        const {
+          userDailyChallenges: userDailyChallenges2,
+          userAchievements: userAchievements2,
+          userCosmetics: userCosmetics2,
+          userStreaks: userStreaks2,
+          userHourlyBonuses: userHourlyBonuses2,
+          userSpins: userSpins2,
+          spinHistory: spinHistory2,
+          equipmentPresets: equipmentPresets2,
+          priceAlerts: priceAlerts2,
+          autoUpgradeSettings: autoUpgradeSettings2,
+          packPurchases: packPurchases2,
+          userPrestige: userPrestige2,
+          prestigeHistory: prestigeHistory2,
+          userSubscriptions: userSubscriptions2,
+          userStatistics: userStatistics3
+        } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+        const deletedSpinHistory = await tx.delete(spinHistory2);
+        const deletedUserSpins = await tx.delete(userSpins2);
+        const deletedUserHourlyBonuses = await tx.delete(userHourlyBonuses2);
+        const deletedUserStreaks = await tx.delete(userStreaks2);
         const deletedActivePowerUps = await tx.delete(activePowerUps);
         const deletedPowerUpPurchases = await tx.delete(powerUpPurchases);
         const deletedLootBoxPurchases = await tx.delete(lootBoxPurchases);
         const deletedDailyClaims = await tx.delete(dailyClaims);
         const deletedUserTasks = await tx.delete(userTasks);
+        const deletedUserDailyChallenges = await tx.delete(userDailyChallenges2);
+        const deletedUserAchievements = await tx.delete(userAchievements2);
+        const deletedUserCosmetics = await tx.delete(userCosmetics2);
+        const deletedEquipmentPresets = await tx.delete(equipmentPresets2);
+        const deletedPriceAlerts = await tx.delete(priceAlerts2);
+        const deletedAutoUpgradeSettings = await tx.delete(autoUpgradeSettings2);
+        const deletedPackPurchases = await tx.delete(packPurchases2);
+        const deletedPrestigeHistory = await tx.delete(prestigeHistory2);
+        const deletedUserPrestige = await tx.delete(userPrestige2);
+        const deletedUserSubscriptions = await tx.delete(userSubscriptions2);
+        const deletedUserStatistics = await tx.delete(userStatistics3);
         const deletedBlockRewards = await tx.delete(blockRewards);
         const deletedBlocks = await tx.delete(blocks);
         const deletedComponentUpgrades = await tx.delete(componentUpgrades);
@@ -1749,11 +1781,26 @@ async function registerRoutes(app2) {
           success: true,
           users_reset: userCount,
           records_deleted: {
+            spin_history: deletedSpinHistory.length || 0,
+            user_spins: deletedUserSpins.length || 0,
+            user_hourly_bonuses: deletedUserHourlyBonuses.length || 0,
+            user_streaks: deletedUserStreaks.length || 0,
             active_power_ups: deletedActivePowerUps.length || 0,
             power_up_purchases: deletedPowerUpPurchases.length || 0,
             loot_box_purchases: deletedLootBoxPurchases.length || 0,
             daily_claims: deletedDailyClaims.length || 0,
             user_tasks: deletedUserTasks.length || 0,
+            user_daily_challenges: deletedUserDailyChallenges.length || 0,
+            user_achievements: deletedUserAchievements.length || 0,
+            user_cosmetics: deletedUserCosmetics.length || 0,
+            equipment_presets: deletedEquipmentPresets.length || 0,
+            price_alerts: deletedPriceAlerts.length || 0,
+            auto_upgrade_settings: deletedAutoUpgradeSettings.length || 0,
+            pack_purchases: deletedPackPurchases.length || 0,
+            prestige_history: deletedPrestigeHistory.length || 0,
+            user_prestige: deletedUserPrestige.length || 0,
+            user_subscriptions: deletedUserSubscriptions.length || 0,
+            user_statistics: deletedUserStatistics.length || 0,
             block_rewards: deletedBlockRewards.length || 0,
             blocks: deletedBlocks.length || 0,
             component_upgrades: deletedComponentUpgrades.length || 0,
@@ -2206,8 +2253,8 @@ async function registerRoutes(app2) {
     if (!isValidTONAddress(userWalletAddress)) {
       return res.status(400).json({ error: "Invalid user wallet address format" });
     }
-    const gameWallet = getGameWalletAddress();
-    if (!isValidTONAddress(gameWallet)) {
+    const gameWallet2 = getGameWalletAddress();
+    if (!isValidTONAddress(gameWallet2)) {
       return res.status(500).json({ error: "Game wallet not configured correctly" });
     }
     try {
@@ -2224,7 +2271,7 @@ async function registerRoutes(app2) {
         const verification = await verifyTONTransaction(
           tonTransactionHash,
           tonAmount,
-          gameWallet,
+          gameWallet2,
           userWalletAddress
         );
         if (!verification.verified) {
@@ -2327,7 +2374,7 @@ async function registerRoutes(app2) {
           boost_percentage: powerUp.boostPercentage,
           activated_at: powerUp.activatedAt.toISOString(),
           expires_at: powerUp.expiresAt.toISOString(),
-          time_remaining_seconds: Math.floor(timeRemaining / 1e3)
+          time_remaining_seconds: Math.floor(timeRemaining / 1e3 / 60)
         };
       });
       res.json({
@@ -2340,6 +2387,99 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Get active power-ups error:", error);
       res.status(500).json({ error: "Failed to get active power-ups" });
+    }
+  });
+  app2.post("/api/user/:userId/lootbox/open", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { boxType, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
+    if (!boxType) {
+      return res.status(400).json({ error: "Box type is required" });
+    }
+    try {
+      const result = await db.transaction(async (tx) => {
+        const user = await tx.select().from(users).where(eq4(users.id, userId)).for("update");
+        if (!user[0]) throw new Error("User not found");
+        const boxRewards = {
+          "basic": { tonCost: 0.5, minCS: 5e4, maxCS: 55e3 },
+          // 100-110% RTP
+          "premium": { tonCost: 2, minCS: 2e5, maxCS: 22e4 },
+          "epic": { tonCost: 5, minCS: 5e5, maxCS: 55e4 },
+          "daily-task": { tonCost: 0, minCS: 5e3, maxCS: 1e4 },
+          // Free box
+          "invite-friend": { tonCost: 0, minCS: 1e4, maxCS: 15e3 }
+          // Free box
+        };
+        const boxConfig = boxRewards[boxType];
+        if (!boxConfig) {
+          throw new Error("Invalid box type");
+        }
+        if (boxConfig.tonCost > 0) {
+          if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
+            throw new Error("TON transaction details required for paid boxes");
+          }
+          if (parseFloat(tonAmount) < boxConfig.tonCost) {
+            throw new Error(`Insufficient TON amount. Required: ${boxConfig.tonCost} TON`);
+          }
+          const existingPurchase = await tx.select().from(lootBoxPurchases).where(eq4(lootBoxPurchases.tonTransactionHash, tonTransactionHash)).limit(1);
+          if (existingPurchase[0]) {
+            throw new Error("This transaction has already been used");
+          }
+          const isValid = await verifyTONTransaction(
+            tonTransactionHash,
+            "0.1",
+            // 0.1 TON per paid spin
+            gameWallet,
+            userWalletAddress
+          );
+          if (!isValid) {
+            throw new Error("TON transaction verification failed");
+          }
+        }
+        const csReward = Math.floor(
+          boxConfig.minCS + Math.random() * (boxConfig.maxCS - boxConfig.minCS)
+        );
+        const bonusChance = boxType === "epic" ? 0.2 : boxType === "premium" ? 0.1 : 0;
+        const getBonus = Math.random() < bonusChance;
+        const rewards = {
+          cs: csReward
+        };
+        if (getBonus) {
+          const bonusType = Math.random();
+          if (bonusType < 0.5) {
+            rewards.chst = Math.floor(csReward * 0.1);
+          } else {
+            rewards.freeSpins = boxType === "epic" ? 3 : 1;
+          }
+        }
+        await tx.update(users).set({
+          csBalance: sql4`${users.csBalance} + ${csReward}`,
+          ...rewards.chst && { chstBalance: sql4`${users.chstBalance} + ${rewards.chst}` }
+        }).where(eq4(users.id, userId));
+        if (boxConfig.tonCost > 0) {
+          await tx.insert(lootBoxPurchases).values({
+            userId: user[0].telegramId,
+            boxType,
+            tonAmount: tonAmount.toString(),
+            tonTransactionHash,
+            tonTransactionVerified: true,
+            rewardsJson: JSON.stringify(rewards)
+          });
+        }
+        const updatedUser = await tx.select().from(users).where(eq4(users.id, userId)).limit(1);
+        return {
+          success: true,
+          rewards,
+          newBalance: {
+            cs: updatedUser[0].csBalance,
+            chst: updatedUser[0].chstBalance
+          }
+        };
+      });
+      console.log(`Loot box opened: ${boxType} for user ${userId}, rewards:`, result.rewards);
+      res.json(result);
+    } catch (error) {
+      console.error("Loot box open error:", error);
+      res.status(400).json({ error: error.message || "Failed to open loot box" });
     }
   });
   app2.get("/api/challenges", async (req, res) => {
@@ -2383,7 +2523,7 @@ async function registerRoutes(app2) {
   app2.post("/api/user/:userId/challenges/:challengeId/complete", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId, challengeId } = req.params;
     try {
-      const { userDailyChallenges: userDailyChallenges2, dailyChallenges: dailyChallengesTable, userStatistics: userStatistics2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const { userDailyChallenges: userDailyChallenges2, dailyChallenges: dailyChallengesTable, userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
       const result = await db.transaction(async (tx) => {
         const user = await tx.select().from(users).where(eq4(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
@@ -2411,26 +2551,26 @@ async function registerRoutes(app2) {
         });
         if (challenge[0].rewardCs > 0) {
           await tx.update(users).set({ csBalance: sql4`${users.csBalance} + ${challenge[0].rewardCs}` }).where(eq4(users.id, userId));
-          await tx.insert(userStatistics2).values({
+          await tx.insert(userStatistics3).values({
             userId: user[0].telegramId,
             totalCsEarned: challenge[0].rewardCs
           }).onConflictDoUpdate({
-            target: userStatistics2.userId,
+            target: userStatistics3.userId,
             set: {
-              totalCsEarned: sql4`${userStatistics2.totalCsEarned} + ${challenge[0].rewardCs}`,
+              totalCsEarned: sql4`${userStatistics3.totalCsEarned} + ${challenge[0].rewardCs}`,
               updatedAt: sql4`NOW()`
             }
           });
         }
         if (challenge[0].rewardChst && challenge[0].rewardChst > 0) {
           await tx.update(users).set({ chstBalance: sql4`${users.chstBalance} + ${challenge[0].rewardChst}` }).where(eq4(users.id, userId));
-          await tx.insert(userStatistics2).values({
+          await tx.insert(userStatistics3).values({
             userId: user[0].telegramId,
             totalChstEarned: challenge[0].rewardChst
           }).onConflictDoUpdate({
-            target: userStatistics2.userId,
+            target: userStatistics3.userId,
             set: {
-              totalChstEarned: sql4`${userStatistics2.totalChstEarned} + ${challenge[0].rewardChst}`,
+              totalChstEarned: sql4`${userStatistics3.totalChstEarned} + ${challenge[0].rewardChst}`,
               updatedAt: sql4`NOW()`
             }
           });
@@ -2485,12 +2625,12 @@ async function registerRoutes(app2) {
   app2.post("/api/user/:userId/achievements/check", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
     try {
-      const { achievements: achievementsTable, userAchievements: userAchievements2, userStatistics: userStatistics2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const { achievements: achievementsTable, userAchievements: userAchievements2, userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
       const user = await db.select().from(users).where(eq4(users.id, userId)).limit(1);
       if (!user[0]) {
         return res.status(404).json({ error: "User not found" });
       }
-      const stats = await db.select().from(userStatistics2).where(eq4(userStatistics2.userId, user[0].telegramId)).limit(1);
+      const stats = await db.select().from(userStatistics3).where(eq4(userStatistics3.userId, user[0].telegramId)).limit(1);
       const equipment = await db.select().from(ownedEquipment).where(eq4(ownedEquipment.userId, userId));
       const uniqueEquipment = new Set(equipment.map((e) => e.equipmentTypeId)).size;
       const refCount = await db.select({ count: sql4`COUNT(*)` }).from(referrals).where(eq4(referrals.referrerId, userId));
@@ -2548,7 +2688,7 @@ async function registerRoutes(app2) {
   app2.post("/api/user/:userId/achievements/:achievementId/claim", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId, achievementId } = req.params;
     try {
-      const { achievements: achievementsTable, userAchievements: userAchievements2, userStatistics: userStatistics2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const { achievements: achievementsTable, userAchievements: userAchievements2, userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
       const result = await db.transaction(async (tx) => {
         const user = await tx.select().from(users).where(eq4(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
@@ -2568,13 +2708,13 @@ async function registerRoutes(app2) {
         }
         if (achievement[0].rewardCs && achievement[0].rewardCs > 0) {
           await tx.update(users).set({ csBalance: sql4`${users.csBalance} + ${achievement[0].rewardCs}` }).where(eq4(users.id, userId));
-          await tx.insert(userStatistics2).values({
+          await tx.insert(userStatistics3).values({
             userId: user[0].telegramId,
             totalCsEarned: achievement[0].rewardCs
           }).onConflictDoUpdate({
-            target: userStatistics2.userId,
+            target: userStatistics3.userId,
             set: {
-              totalCsEarned: sql4`${userStatistics2.totalCsEarned} + ${achievement[0].rewardCs}`,
+              totalCsEarned: sql4`${userStatistics3.totalCsEarned} + ${achievement[0].rewardCs}`,
               updatedAt: sql4`NOW()`
             }
           });
@@ -2624,7 +2764,7 @@ async function registerRoutes(app2) {
     const { userId, cosmeticId } = req.params;
     const { currency, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
     try {
-      const { cosmeticItems: cosmeticItems2, userCosmetics: userCosmetics2, userStatistics: userStatistics2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const { cosmeticItems: cosmeticItems2, userCosmetics: userCosmetics2, userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
       const result = await db.transaction(async (tx) => {
         const user = await tx.select().from(users).where(eq4(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
@@ -2647,13 +2787,13 @@ async function registerRoutes(app2) {
             throw new Error(`Insufficient CS. Need ${cosmetic[0].priceCs} CS`);
           }
           await tx.update(users).set({ csBalance: sql4`${users.csBalance} - ${cosmetic[0].priceCs}` }).where(eq4(users.id, userId));
-          await tx.insert(userStatistics2).values({
+          await tx.insert(userStatistics3).values({
             userId: user[0].telegramId,
             totalCsSpent: cosmetic[0].priceCs
           }).onConflictDoUpdate({
-            target: userStatistics2.userId,
+            target: userStatistics3.userId,
             set: {
-              totalCsSpent: sql4`${userStatistics2.totalCsSpent} + ${cosmetic[0].priceCs}`,
+              totalCsSpent: sql4`${userStatistics3.totalCsSpent} + ${cosmetic[0].priceCs}`,
               updatedAt: sql4`NOW()`
             }
           });
@@ -2666,23 +2806,23 @@ async function registerRoutes(app2) {
           if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
             throw new Error("TON payment verification required");
           }
-          const gameWallet = getGameWalletAddress();
+          const gameWallet2 = getGameWalletAddress();
           const verification = await verifyTONTransaction(
             tonTransactionHash,
             tonAmount,
-            gameWallet,
+            gameWallet2,
             userWalletAddress
           );
           if (!verification.verified) {
             throw new Error(verification.error || "Payment verification failed");
           }
-          await tx.insert(userStatistics2).values({
+          await tx.insert(userStatistics3).values({
             userId: user[0].telegramId,
             totalTonSpent: cosmetic[0].priceTon
           }).onConflictDoUpdate({
-            target: userStatistics2.userId,
+            target: userStatistics3.userId,
             set: {
-              totalTonSpent: sql4`${userStatistics2.totalTonSpent} + ${cosmetic[0].priceTon}`,
+              totalTonSpent: sql4`${userStatistics3.totalTonSpent} + ${cosmetic[0].priceTon}`,
               updatedAt: sql4`NOW()`
             }
           });
@@ -2829,7 +2969,7 @@ async function registerRoutes(app2) {
   app2.post("/api/user/:userId/hourly-bonus/claim", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
     try {
-      const { userHourlyBonuses: userHourlyBonuses2, userStatistics: userStatistics2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const { userHourlyBonuses: userHourlyBonuses2, userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
       const result = await db.transaction(async (tx) => {
         const user = await tx.select().from(users).where(eq4(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
@@ -2848,13 +2988,13 @@ async function registerRoutes(app2) {
           userId: user[0].telegramId,
           rewardAmount: reward
         });
-        await tx.insert(userStatistics2).values({
+        await tx.insert(userStatistics3).values({
           userId: user[0].telegramId,
           totalCsEarned: reward
         }).onConflictDoUpdate({
-          target: userStatistics2.userId,
+          target: userStatistics3.userId,
           set: {
-            totalCsEarned: sql4`${userStatistics2.totalCsEarned} + ${reward}`,
+            totalCsEarned: sql4`${userStatistics3.totalCsEarned} + ${reward}`,
             updatedAt: sql4`NOW()`
           }
         });
@@ -2904,7 +3044,7 @@ async function registerRoutes(app2) {
     const { userId } = req.params;
     const { isFree, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
     try {
-      const { userSpins: userSpins2, spinHistory: spinHistory2, userStatistics: userStatistics2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const { userSpins: userSpins2, spinHistory: spinHistory2, userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
       const result = await db.transaction(async (tx) => {
         const user = await tx.select().from(users).where(eq4(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
@@ -2933,12 +3073,12 @@ async function registerRoutes(app2) {
           if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
             throw new Error("Payment verification required");
           }
-          const gameWallet = getGameWalletAddress();
+          const gameWallet2 = getGameWalletAddress();
           const verification = await verifyTONTransaction(
             tonTransactionHash,
             "0.1",
             // 0.1 TON per paid spin
-            gameWallet,
+            gameWallet2,
             userWalletAddress
           );
           if (!verification.verified) {
@@ -2953,13 +3093,13 @@ async function registerRoutes(app2) {
           prizeType = "cs";
           reward = { cs: prizeValue };
           await tx.update(users).set({ csBalance: sql4`${users.csBalance} + ${prizeValue}` }).where(eq4(users.id, userId));
-          await tx.insert(userStatistics2).values({
+          await tx.insert(userStatistics3).values({
             userId: user[0].telegramId,
             totalCsEarned: prizeValue
           }).onConflictDoUpdate({
-            target: userStatistics2.userId,
+            target: userStatistics3.userId,
             set: {
-              totalCsEarned: sql4`${userStatistics2.totalCsEarned} + ${prizeValue}`,
+              totalCsEarned: sql4`${userStatistics3.totalCsEarned} + ${prizeValue}`,
               updatedAt: sql4`NOW()`
             }
           });
@@ -2969,13 +3109,13 @@ async function registerRoutes(app2) {
           prizeType = "chst";
           reward = { chst: prizeValue };
           await tx.update(users).set({ chstBalance: sql4`${users.chstBalance} + ${prizeValue}` }).where(eq4(users.id, userId));
-          await tx.insert(userStatistics2).values({
+          await tx.insert(userStatistics3).values({
             userId: user[0].telegramId,
             totalChstEarned: prizeValue
           }).onConflictDoUpdate({
-            target: userStatistics2.userId,
+            target: userStatistics3.userId,
             set: {
-              totalChstEarned: sql4`${userStatistics2.totalChstEarned} + ${prizeValue}`,
+              totalChstEarned: sql4`${userStatistics3.totalChstEarned} + ${prizeValue}`,
               updatedAt: sql4`NOW()`
             }
           });
@@ -3027,12 +3167,12 @@ async function registerRoutes(app2) {
   app2.get("/api/user/:userId/statistics", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
     try {
-      const { userStatistics: userStatistics2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const { userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
       const user = await db.select().from(users).where(eq4(users.id, userId)).limit(1);
       if (!user[0]) {
         return res.status(404).json({ error: "User not found" });
       }
-      const stats = await db.select().from(userStatistics2).where(eq4(userStatistics2.userId, user[0].telegramId)).limit(1);
+      const stats = await db.select().from(userStatistics3).where(eq4(userStatistics3.userId, user[0].telegramId)).limit(1);
       if (!stats[0]) {
         return res.json({
           totalCsEarned: 0,
