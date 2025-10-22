@@ -51,7 +51,9 @@ export default function BlockTimer({ onBlockMined, userHashrate = 0 }: BlockTime
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [latestBlock, onBlockMined]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // onBlockMined intentionally omitted to prevent interval recreation when callback changes
+  }, [latestBlock]);
 
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;
