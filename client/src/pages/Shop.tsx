@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Monitor, Cpu, Server, Boxes, Zap, Rocket, Shield, ShoppingBag, CheckCircle2, Gem, Star, Crown, Sparkles, Gift, ChevronDown, ChevronUp, Bell, Search, Filter, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useLoadingTimeout } from "@/hooks/use-loading-timeout";
 import { RewardModal } from "@/components/RewardModal";
 import { getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
