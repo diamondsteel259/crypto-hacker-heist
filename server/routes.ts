@@ -8,6 +8,7 @@ import { validateTelegramAuth, requireAdmin, verifyUserAccess, type AuthRequest 
 import { verifyTONTransaction, getGameWalletAddress, isValidTONAddress } from "./tonVerification";
 import { miningService } from "./mining";
 import { getBotWebhookHandler } from "./bot";
+import { registerEquipmentRoutes } from "./routes/equipment.routes";
 
 // Helper function to calculate daily login rewards based on streak day
 function calculateDailyLoginReward(streakDay: number): { cs: number; chst: number; item: string | null } {
