@@ -167,8 +167,10 @@ interface ActivePowerUpsResponse {
 
 export default function Shop() {
   const [activeTab, setActiveTab] = useState("equipment");
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({ "Basic Laptop": true }); // Auto-expand Basic Laptop
   const [tonBalance, setTonBalance] = useState<string>("0.0000");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currencyFilter, setCurrencyFilter] = useState<"all" | "CS" | "TON">("all");
   const { toast } = useToast();
   const { tonConnectUI, isConnected, userFriendlyAddress } = useTonConnect();
   const userId = getCurrentUserId();
