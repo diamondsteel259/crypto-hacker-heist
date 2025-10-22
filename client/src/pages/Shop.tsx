@@ -706,7 +706,23 @@ export default function Shop() {
   // Sort by orderIndex first to ensure correct display order
   const sortedEquipment = [...allEquipment].sort((a, b) => a.orderIndex - b.orderIndex);
   
-  const groupedEquipment = sortedEquipment.reduce((acc, eq) => {
+  // Filter equipment based on search query and currency filter
+  const filteredEquipment = useMemo(() => {
+    return sortedEquipment.filter(eq => {
+      // Search filter
+      const matchesSearch = searchQuery === "" || 
+        eq.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        eq.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        eq.tier.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      // Currency filter
+      const matchesCurrency = currencyFilter === "all" || eq.currency === currencyFilter;
+      
+      return matchesSearch && matchesCurrency;
+    });
+  }, [sortedEquipment, searchQuery, currencyFilter]);
+  
+  const groupedEquipment = filteredEquipment.reduce((acc, eq) => {
     if (!acc[eq.category]) {
       acc[eq.category] = {};
     }
@@ -718,6 +734,7 @@ export default function Shop() {
   }, {} as Record<string, Record<string, EquipmentType[]>>);
 
   const csBalance = user?.csBalance || 0;
+  const userHashrate = user?.totalHashrate || 0;
 
   console.log("Shop Debug:", {
     allEquipment: allEquipment.length,
