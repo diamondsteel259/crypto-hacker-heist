@@ -25,6 +25,8 @@ import Admin from "@/pages/Admin";
 import Packs from "@/pages/Packs";
 import Subscription from "@/pages/Subscription";
 import Leaderboard from "@/pages/Leaderboard";
+import Terms from "@/pages/Terms";
+import Privacy from "@/pages/Privacy";
 import NotFound from "@/pages/not-found";
 import { initializeUser } from "@/lib/user";
 import { apiRequest } from "@/lib/queryClient";
