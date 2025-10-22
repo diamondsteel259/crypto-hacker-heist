@@ -193,7 +193,7 @@ export async function verifyTONTransactionByHash(
  * Get the game's TON wallet address from environment
  */
 export function getGameWalletAddress(): string {
-  const address = process.env.GAME_TON_WALLET_ADDRESS;
+  const address = process.env.GAME_TON_WALLET_ADDRESS?.trim();
 
   if (!address) {
     console.warn('⚠️  GAME_TON_WALLET_ADDRESS not set in environment variables');
@@ -208,17 +208,23 @@ export function getGameWalletAddress(): string {
  * Validate TON address format
  */
 export function isValidTONAddress(address: string): boolean {
-  // TON addresses can be in different formats:
-  // - User-friendly: EQ... or kQ... (base64url)
-  // - Raw format: 0:hex...
+  if (!address) return false;
   
-  // User-friendly format (most common)
-  if (/^[Ek]Q[A-Za-z0-9_-]{46}$/.test(address)) {
+  // Trim whitespace
+  const trimmedAddress = address.trim();
+  
+  // TON addresses can be in different formats:
+  // - User-friendly bounceable: EQ... or kQ...
+  // - User-friendly non-bounceable: UQ... or 0Q...
+  // - Raw format: 0:hex... or -1:hex...
+  
+  // User-friendly format (bounceable and non-bounceable)
+  if (/^[EUk0]Q[A-Za-z0-9_-]{46}$/.test(trimmedAddress)) {
     return true;
   }
   
   // Raw format
-  if (/^-?\d+:[a-fA-F0-9]{64}$/.test(address)) {
+  if (/^-?\d+:[a-fA-F0-9]{64}$/.test(trimmedAddress)) {
     return true;
   }
   
