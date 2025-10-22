@@ -3718,6 +3718,146 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Daily Login Rewards - Get Status
+  app.get("/api/user/:userId/daily-login/status", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Get user's streak data
+      const streakData = await db.select().from(userStreaks).where(eq(userStreaks.userId, user.telegramId)).limit(1);
+      const currentStreak = streakData.length > 0 ? streakData[0].currentStreak : 0;
+
+      // Check if user has claimed today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const todaysClaim = await db.select().from(dailyLoginRewards)
+        .where(and(
+          eq(dailyLoginRewards.userId, user.telegramId),
+          sql`DATE(${dailyLoginRewards.claimedAt}) = DATE(${today})`
+        ))
+        .limit(1);
+
+      const canClaim = todaysClaim.length === 0;
+      const nextStreakDay = canClaim ? currentStreak + 1 : currentStreak;
+      const nextReward = calculateDailyLoginReward(nextStreakDay);
+
+      res.json({
+        canClaim,
+        currentStreak,
+        nextReward,
+        lastClaimDate: todaysClaim.length > 0 ? todaysClaim[0].claimedAt : null,
+      });
+    } catch (error: any) {
+      console.error("Daily login status error:", error);
+      res.status(500).json({ error: "Failed to get daily login status" });
+    }
+  });
+
+  // Daily Login Rewards - Claim
+  app.post("/api/user/:userId/daily-login/claim", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Check if already claimed today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const todaysClaim = await db.select().from(dailyLoginRewards)
+        .where(and(
+          eq(dailyLoginRewards.userId, user.telegramId),
+          sql`DATE(${dailyLoginRewards.claimedAt}) = DATE(${today})`
+        ))
+        .limit(1);
+
+      if (todaysClaim.length > 0) {
+        return res.status(400).json({ error: "Daily reward already claimed today" });
+      }
+
+      // Get or create streak data
+      const streakData = await db.select().from(userStreaks).where(eq(userStreaks.userId, user.telegramId)).limit(1);
+      let currentStreak = 0;
+      
+      if (streakData.length > 0) {
+        const lastCheckin = new Date(streakData[0].lastCheckinDate);
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        
+        // Check if streak continues (claimed yesterday)
+        if (lastCheckin >= yesterday && lastCheckin < today) {
+          currentStreak = streakData[0].currentStreak + 1;
+        } else {
+          // Streak broken, reset to 1
+          currentStreak = 1;
+        }
+      } else {
+        // First time claiming
+        currentStreak = 1;
+      }
+
+      // Calculate rewards
+      const rewards = calculateDailyLoginReward(currentStreak);
+
+      // Update user balances and streak in a transaction
+      await db.transaction(async (tx: any) => {
+        // Record the claim
+        await tx.insert(dailyLoginRewards).values({
+          userId: user.telegramId,
+          streakDay: currentStreak,
+          csRewarded: rewards.cs,
+          chstRewarded: rewards.chst,
+          specialItem: rewards.item,
+        });
+
+        // Update user balances
+        await tx.update(users)
+          .set({
+            csBalance: sql`${users.csBalance} + ${rewards.cs}`,
+            chstBalance: sql`${users.chstBalance} + ${rewards.chst}`,
+          })
+          .where(eq(users.telegramId, user.telegramId));
+
+        // Update or insert streak data
+        if (streakData.length > 0) {
+          await tx.update(userStreaks)
+            .set({
+              currentStreak,
+              longestStreak: sql`GREATEST(${userStreaks.longestStreak}, ${currentStreak})`,
+              lastCheckinDate: new Date(),
+            })
+            .where(eq(userStreaks.userId, user.telegramId));
+        } else {
+          await tx.insert(userStreaks).values({
+            userId: user.telegramId,
+            currentStreak,
+            longestStreak: currentStreak,
+            lastCheckinDate: new Date(),
+          });
+        }
+      });
+
+      res.json({
+        success: true,
+        rewards,
+        newStreak: currentStreak,
+        message: `Day ${currentStreak} reward claimed!`,
+      });
+    } catch (error: any) {
+      console.error("Daily login claim error:", error);
+      res.status(500).json({ error: "Failed to claim daily reward" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
