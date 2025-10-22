@@ -931,7 +931,51 @@ export default function Shop() {
                             
                             const baseCost = owned.equipmentType.basePrice * 0.1;
                             const currentLevel = getComponentLevel(owned.id, componentType);
-                            const upgradeCost = Math.floor(baseCost * componentMultiplier * Math.pow(1.15, currentLevel));
+                            const upgradeCostCS = Math.floor(baseCost * componentMultiplier * Math.pow(1.15, currentLevel));
+                            const upgradeCostTON = (upgradeCostCS / 10000).toFixed(3);
+                            
+                            const handleComponentUpgrade = async (currency: string) => {
+                              if (currentLevel >= 10) return;
+
+                              if (currency === "TON") {
+                                if (!isConnected) {
+                                  await tonConnectUI.openModal();
+                                  return;
+                                }
+
+                                try {
+                                  const txHash = await sendTonTransaction(
+                                    tonConnectUI,
+                                    "GAME_WALLET_ADDRESS_HERE",
+                                    upgradeCostTON,
+                                    `Component: ${componentType} Upgrade`
+                                  );
+
+                                  if (txHash) {
+                                    componentUpgradeMutation.mutate({
+                                      equipmentId: owned.id,
+                                      componentType,
+                                      currency,
+                                      tonTransactionHash: txHash,
+                                      userWalletAddress: userFriendlyAddress,
+                                      tonAmount: upgradeCostTON,
+                                    });
+                                  }
+                                } catch (error: any) {
+                                  toast({
+                                    title: "Transaction Failed",
+                                    description: error.message || "Failed to send TON transaction",
+                                    variant: "destructive",
+                                  });
+                                }
+                              } else {
+                                componentUpgradeMutation.mutate({
+                                  equipmentId: owned.id,
+                                  componentType,
+                                  currency
+                                });
+                              }
+                            };
                             
                             return (
                               <div key={componentType} className="p-3 border rounded-lg">
@@ -942,20 +986,42 @@ export default function Shop() {
                                 <p className="text-xs text-muted-foreground mb-2">
                                   +{(owned.equipmentType.baseHashrate * 0.05 * owned.quantity).toFixed(2)} GH/s
                                 </p>
-                                <Button 
-                                  size="sm" 
-                                  className="w-full text-xs bg-matrix-green hover:bg-matrix-green/90 text-black"
-                                  onClick={() => {
-                                    componentUpgradeMutation.mutate({
-                                      equipmentId: owned.id,
-                                      componentType,
-                                      currency: "CS"
-                                    });
-                                  }}
-                                  disabled={componentUpgradeMutation.isPending || currentLevel >= 10}
-                                >
-                                  {componentUpgradeMutation.isPending ? "Upgrading..." : currentLevel >= 10 ? "Max Level" : `Upgrade: ${upgradeCost.toLocaleString()} CS`}
-                                </Button>
+                                {currentLevel >= 10 ? (
+                                  <Button size="sm" className="w-full text-xs" disabled>
+                                    Max Level
+                                  </Button>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <Button 
+                                      size="sm" 
+                                      className="w-full text-xs bg-matrix-green hover:bg-matrix-green/90 text-black"
+                                      onClick={() => handleComponentUpgrade("CS")}
+                                      disabled={componentUpgradeMutation.isPending}
+                                    >
+                                      {componentUpgradeMutation.isPending ? "..." : `${upgradeCostCS.toLocaleString()} CS`}
+                                    </Button>
+                                    <div className="grid grid-cols-2 gap-1">
+                                      <Button 
+                                        size="sm" 
+                                        variant="outline"
+                                        className="text-xs"
+                                        onClick={() => handleComponentUpgrade("CHST")}
+                                        disabled={componentUpgradeMutation.isPending}
+                                      >
+                                        {componentUpgradeMutation.isPending ? "..." : `${upgradeCostCS.toLocaleString()} CHST`}
+                                      </Button>
+                                      <Button 
+                                        size="sm" 
+                                        variant="outline"
+                                        className="text-xs border-cyber-blue text-cyber-blue"
+                                        onClick={() => handleComponentUpgrade("TON")}
+                                        disabled={componentUpgradeMutation.isPending}
+                                      >
+                                        {componentUpgradeMutation.isPending ? "..." : `${upgradeCostTON} TON`}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
