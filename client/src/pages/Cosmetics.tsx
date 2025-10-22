@@ -197,7 +197,6 @@ export default function Cosmetics() {
       </div>
     );
   }
-  }
 
   const categories = [
     { id: 'background', name: 'Backgrounds', icon: '🎨' },
