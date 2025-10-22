@@ -45,7 +45,6 @@ export async function sendTonTransaction(
 
   try {
     const result = await tonConnectUI.sendTransaction(transaction);
-    console.log('Transaction sent:', result);
     return result.boc;
   } catch (error) {
     console.error('Transaction failed:', error);
@@ -60,20 +59,15 @@ export async function getTonBalance(address: string): Promise<string> {
   }
 
   try {
-    console.log('Fetching TON balance for address:', address);
-
     // Use TON Center API v2
     const response = await fetch(
       `https://toncenter.com/api/v2/getAddressBalance?address=${address}`
     );
     const data = await response.json();
 
-    console.log('TON balance API response:', data);
-
     if (data.ok && data.result) {
       // Convert from nanoTON to TON
       const balanceInTON = (parseInt(data.result) / 1000000000).toFixed(4);
-      console.log('TON balance:', balanceInTON);
       return balanceInTON;
     }
 
