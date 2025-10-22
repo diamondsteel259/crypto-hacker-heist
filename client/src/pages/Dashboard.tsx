@@ -132,7 +132,7 @@ export default function Dashboard() {
         const reward = currentBalance - lastBalanceRef.current;
         
         // Show success notification
-        // hapticSuccess();
+        hapticSuccess();
         toast({
           title: "Block Mined! 🎉",
           description: `You earned ${reward.toLocaleString()} CS from Block #${currentBlockNumber}`,
