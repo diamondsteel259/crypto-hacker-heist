@@ -6,6 +6,7 @@ import { seedDatabase } from "./seedDatabase";
 import { seedGameContent } from "./seedGameContent";
 import { initializeBot } from "./bot";
 import { applyPerformanceIndexes } from "./applyIndexes";
+import rateLimit from "express-rate-limit";
 
 // Crypto Hacker Heist - v1.0.1 (Deployment trigger)
 import express, { type Request, Response, NextFunction } from "express";
@@ -16,10 +17,38 @@ import { seedDatabase } from "./seedDatabase";
 import { seedGameContent } from "./seedGameContent";
 import { initializeBot } from "./bot";
 import { applyPerformanceIndexes } from "./applyIndexes";
+import rateLimit from "express-rate-limit";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Rate limiting - prevent API abuse
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200, // 200 requests per 15 minutes per IP
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    // Don't rate limit health checks or static assets
+    return req.path === '/healthz' || !req.path.startsWith('/api/');
+  }
+});
+
+// Stricter rate limit for expensive operations
+const strictLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 20, // 20 requests per 5 minutes
+  message: { error: 'Too many purchase attempts, please slow down' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/', apiLimiter);
+app.use('/api/user/:userId/equipment/purchase', strictLimiter);
+app.use('/api/user/:userId/powerups/purchase', strictLimiter);
+app.use('/api/user/:userId/packs/purchase', strictLimiter);
 
 app.use((req, res, next) => {
   const start = Date.now();
