@@ -305,6 +305,23 @@ export const spinHistory = pgTable("spin_history", {
   userSpinHistoryIdx: index("spin_history_user_idx").on(table.userId),
 }));
 
+// Jackpot Wins (Grand Prize from Spin Wheel)
+export const jackpotWins = pgTable("jackpot_wins", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  username: text("username").notNull(),
+  walletAddress: text("wallet_address"),
+  amount: text("amount").notNull().default("1.0"), // 1 TON jackpot
+  wonAt: timestamp("won_at").notNull().defaultNow(),
+  paidOut: boolean("paid_out").notNull().default(false),
+  paidAt: timestamp("paid_at"),
+  paidByAdmin: text("paid_by_admin"),
+  notes: text("notes"),
+}, (table) => ({
+  userJackpotIdx: index("jackpot_wins_user_idx").on(table.userId),
+  paidOutIdx: index("jackpot_wins_paid_out_idx").on(table.paidOut),
+}));
+
 // Equipment Presets
 export const equipmentPresets = pgTable("equipment_presets", {
   id: serial("id").primaryKey(),
