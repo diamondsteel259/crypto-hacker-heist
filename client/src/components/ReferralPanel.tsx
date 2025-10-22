@@ -7,9 +7,10 @@ import { Users, Gift, Copy } from "lucide-react";
 export default function ReferralPanel() {
   const referralCode = "HACK4F2X";
   const referrals = 3;
+  const botUsername = import.meta.env.VITE_BOT_USERNAME || "cryptohackerheist_bot";
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(`https://t.me/cryptohackerheist_bot?start=${referralCode}`);
+    navigator.clipboard.writeText(`https://t.me/${botUsername}?start=${referralCode}`);
   };
 
   return (
