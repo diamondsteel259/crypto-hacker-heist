@@ -252,6 +252,39 @@ export default function Admin() {
     },
   });
 
+  const toggleFeatureFlagMutation = useMutation({
+    mutationFn: async ({ featureKey, isEnabled }: { featureKey: string; isEnabled: boolean }) => {
+      const initData = getTelegramInitData();
+      if (!initData) throw new Error('Not authenticated');
+      
+      const response = await fetch(`/api/admin/feature-flags/${featureKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': initData,
+        },
+        body: JSON.stringify({ isEnabled }),
+      });
+      if (!response.ok) throw new Error('Failed to update feature flag');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/feature-flags'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/feature-flags'] });
+      toast({
+        title: "Feature Updated",
+        description: "Feature visibility has been changed",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update feature flag",
+        variant: "destructive",
+      });
+    },
+  });
+
   const totalUsers = users?.length || 0;
   const totalBalance = users?.reduce((sum, u) => sum + u.csBalance, 0) || 0;
   const totalHashrate = users?.reduce((sum, u) => sum + u.totalHashrate, 0) || 0;
