@@ -709,3 +709,9 @@ export const insertUserStatisticsSchema = createInsertSchema(userStatistics).omi
 
 export type UserStatistics = typeof userStatistics.$inferSelect;
 export type InsertUserStatistics = z.infer<typeof insertUserStatisticsSchema>;
+
+// Feature Flags schemas and types
+export const insertFeatureFlagSchema = createInsertSchema(featureFlags).omit({ id: true, updatedAt: true });
+
+export type FeatureFlag = typeof featureFlags.$inferSelect;
+export type InsertFeatureFlag = z.infer<typeof insertFeatureFlagSchema>;
