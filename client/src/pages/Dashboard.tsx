@@ -47,6 +47,23 @@ interface HourlyBonusStatus {
   minutesRemaining: number;
 }
 
+interface DailyLoginStatus {
+  alreadyClaimed: boolean;
+  claimedAt?: string;
+  streakDay?: number;
+  reward?: {
+    cs: number;
+    chst: number;
+    item: string | null;
+  };
+  nextStreakDay?: number;
+  nextReward?: {
+    cs: number;
+    chst: number;
+    item: string | null;
+  };
+}
+
 export default function Dashboard() {
   const { toast } = useToast();
   const [userId, setUserId] = useState<string | null>(null);
@@ -137,6 +154,11 @@ export default function Dashboard() {
     refetchInterval: 60000, // Check every minute
   });
 
+  const { data: dailyLoginStatus } = useQuery<DailyLoginStatus>({
+    queryKey: ['/api/user', userId, 'daily-login', 'status'],
+    enabled: !!userId,
+  });
+
   const checkinMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest('POST', `/api/user/${userId}/streak/checkin`);
@@ -148,6 +170,30 @@ export default function Dashboard() {
       toast({
         title: "Daily Check-in!",
         description: data.message || `Earned ${data.reward} CS!`,
+      });
+    },
+  });
+
+  const claimDailyLoginMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', `/api/user/${userId}/daily-login/claim`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'daily-login'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'streak'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user', userId] });
+      toast({
+        title: "Daily Reward Claimed! 🎁",
+        description: `Day ${data.streakDay}: +${data.reward.cs} CS, +${data.reward.chst} CHST${data.reward.item ? ` + ${data.reward.item}` : ''}`,
+        duration: 5000,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Claim Failed",
+        description: error.message || "Already claimed today or failed to claim",
+        variant: "destructive",
       });
     },
   });
@@ -257,34 +303,66 @@ export default function Dashboard() {
 
         {/* Streak & Hourly Bonus */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-          {/* Streak Bonus */}
-          {streak && (
+          {/* Daily Login Rewards */}
+          {dailyLoginStatus && (
             <Card className="p-4 bg-gradient-to-r from-orange-500/10 to-red-500/10 border-orange-500/30">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <Flame className="w-5 h-5 text-orange-500" />
-                  <h3 className="text-sm md:text-base font-semibold">Daily Streak</h3>
+                  <Gift className="w-5 h-5 text-orange-500" />
+                  <h3 className="text-sm md:text-base font-semibold">Daily Login Reward</h3>
                 </div>
-                <Badge variant="secondary" className="text-xs">
-                  {streak.currentStreak} days
-                </Badge>
+                {dailyLoginStatus.alreadyClaimed ? (
+                  <Badge variant="outline" className="text-xs border-green-500 text-green-500">
+                    ✓ Claimed
+                  </Badge>
+                ) : (
+                  <Badge variant="default" className="text-xs bg-orange-500">
+                    Available!
+                  </Badge>
+                )}
               </div>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-2xl font-bold font-mono text-orange-500">
-                    {streak.currentStreak}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Best: {streak.longestStreak} days
-                  </p>
+                  {dailyLoginStatus.alreadyClaimed ? (
+                    <>
+                      <p className="text-lg font-bold text-orange-500">
+                        Day {dailyLoginStatus.streakDay}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        +{dailyLoginStatus.reward?.cs} CS, +{dailyLoginStatus.reward?.chst} CHST
+                      </p>
+                      {dailyLoginStatus.reward?.item && (
+                        <p className="text-xs text-purple-400 capitalize mt-1">
+                          {dailyLoginStatus.reward.item.replace(/_/g, ' ')}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xl font-bold text-orange-500">
+                        Day {dailyLoginStatus.nextStreakDay}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        +{dailyLoginStatus.nextReward?.cs} CS
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        +{dailyLoginStatus.nextReward?.chst} CHST
+                      </p>
+                      {dailyLoginStatus.nextReward?.item && (
+                        <p className="text-xs text-purple-400 capitalize mt-1">
+                          + {dailyLoginStatus.nextReward.item.replace(/_/g, ' ')}
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
                 <Button
                   size="sm"
-                  onClick={() => checkinMutation.mutate()}
-                  disabled={checkinMutation.isPending}
+                  onClick={() => claimDailyLoginMutation.mutate()}
+                  disabled={dailyLoginStatus.alreadyClaimed || claimDailyLoginMutation.isPending}
                   className="bg-orange-500 hover:bg-orange-600"
                 >
-                  {checkinMutation.isPending ? "Checking..." : "Check In"}
+                  {claimDailyLoginMutation.isPending ? "Claiming..." : dailyLoginStatus.alreadyClaimed ? "Claimed" : "Claim Now"}
                 </Button>
               </div>
             </Card>
