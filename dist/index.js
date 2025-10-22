@@ -2721,7 +2721,14 @@ async function registerRoutes(app2) {
           new_balance: type === "cs" ? updatedUser[0].csBalance : updatedUser[0].chstBalance
         };
       });
-      res.json(result);
+      res.json({
+        success: true,
+        reward: result.reward,
+        currency: result.currency,
+        remaining_claims: result.remaining_claims,
+        next_reset: result.next_reset,
+        new_balance: result.new_balance
+      });
     } catch (error) {
       console.error("Daily claim error:", error);
       if (error.statusCode === 429) {
@@ -4080,8 +4087,8 @@ async function registerRoutes(app2) {
       });
       res.json({
         success: true,
-        rewards,
-        newStreak: currentStreak,
+        reward: rewards,
+        streakDay: currentStreak,
         message: `Day ${currentStreak} reward claimed!`
       });
     } catch (error) {
