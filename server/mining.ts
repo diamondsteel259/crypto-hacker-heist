@@ -4,11 +4,18 @@ import { eq, sql, and } from "drizzle-orm";
 
 const BLOCK_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const BLOCK_REWARD = 100000; // 100K CS (Phase 1: Months 1-6)
+const MAX_CONSECUTIVE_FAILURES = 5;
+const MINING_TIMEOUT = 4 * 60 * 1000; // 4 minutes (less than block interval)
+
+// Health monitoring state
+let lastSuccessfulMine: Date | null = null;
+let consecutiveFailures: number = 0;
 
 export class MiningService {
   private intervalId: NodeJS.Timeout | null = null;
   private lastBlockNumber = 0;
   private isMining = false;
+  private miningTimeoutId: NodeJS.Timeout | null = null;
 
   async start() {
     await this.initializeBlockNumber();
@@ -88,6 +95,14 @@ export class MiningService {
     }
 
     this.isMining = true;
+    
+    // Timeout protection: Reset flag if mining takes too long
+    this.miningTimeoutId = setTimeout(() => {
+      if (this.isMining) {
+        console.error('[MINING] Mining operation timed out, resetting flag');
+        this.isMining = false;
+      }
+    }, MINING_TIMEOUT);
     
     try {
       const blockNumber = this.lastBlockNumber + 1;
@@ -191,13 +206,46 @@ export class MiningService {
       });
 
       this.lastBlockNumber = blockNumber;
+      
+      // Track success
+      lastSuccessfulMine = new Date();
+      consecutiveFailures = 0;
+      console.log('[MINING] Block mined successfully');
     } catch (error: any) {
-      console.error("Error during block mining:", error);
+      // Track failure
+      consecutiveFailures++;
+      console.error('[MINING] Failed to mine block:', error);
+      
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        console.error('[MINING CRITICAL] Mining has failed 5 times consecutively');
+        // TODO: Send alert (email, Slack, monitoring service)
+      }
+      
       throw error;
     } finally {
+      if (this.miningTimeoutId) {
+        clearTimeout(this.miningTimeoutId);
+        this.miningTimeoutId = null;
+      }
       this.isMining = false;
     }
   }
 }
 
 export const miningService = new MiningService();
+
+// Health check function for monitoring
+export function getMiningHealth() {
+  const now = Date.now();
+  const fifteenMinutesAgo = now - (15 * 60 * 1000);
+  
+  const isHealthy = consecutiveFailures < 3 && 
+    (lastSuccessfulMine === null || lastSuccessfulMine.getTime() > fifteenMinutesAgo);
+  
+  return {
+    status: isHealthy ? 'healthy' : 'degraded',
+    lastSuccessfulMine,
+    consecutiveFailures,
+    message: !isHealthy ? 'Mining has failed multiple times or not run recently' : undefined
+  };
+}
