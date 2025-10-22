@@ -365,5 +365,3 @@ export default function Dashboard() {
               )}
             </div>
           </Card>
-
-          <Card className="p-2.5 md:p-4 stat-glow-blue"></update><instruction>I am adding glowing effects to stat cards and adding loading skeleton states for when data is loading</instruction>
