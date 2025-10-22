@@ -3,17 +3,43 @@ import pg from 'pg';
 import * as schema from '@shared/schema';
 
 if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL must be set');
+  console.error('DATABASE_URL environment variable is not set. Database will not be available.');
 }
 
 const pool = new pg.Pool({ 
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: process.env.NODE_ENV === 'production' 
+    ? { rejectUnauthorized: true }
+    : { rejectUnauthorized: false }
 });
 
 export const db = drizzle(pool, { schema });
 
-// Ensure pgcrypto is available for gen_random_uuid()
-await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto;');
+// Initialize database with pgcrypto extension
+export async function initializeDatabase(): Promise<boolean> {
+  try {
+    if (!process.env.DATABASE_URL) {
+      console.error('[DB] DATABASE_URL not set, skipping database initialization');
+      return false;
+    }
+
+    await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto;');
+    console.log('[DB] Database initialized successfully');
+    return true;
+  } catch (error) {
+    console.error('[DB] Database initialization failed:', error);
+    console.error('[DB] Health endpoint will report unhealthy status');
+    return false;
+  }
+}
+
+// Check database health
+export async function checkDatabaseHealth(): Promise<boolean> {
+  try {
+    await pool.query('SELECT 1');
+    return true;
+  } catch (error) {
+    console.error('[DB] Health check failed:', error);
+    return false;
+  }
+}
