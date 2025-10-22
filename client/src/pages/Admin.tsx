@@ -58,6 +58,20 @@ export default function Admin() {
     queryKey: ['/api/equipment-types'],
   });
 
+  const { data: featureFlags, isLoading: flagsLoading } = useQuery<FeatureFlag[]>({
+    queryKey: ['/api/admin/feature-flags'],
+    queryFn: async () => {
+      const initData = getTelegramInitData();
+      if (!initData) throw new Error('Not authenticated');
+      
+      const response = await fetch('/api/admin/feature-flags', {
+        headers: { 'X-Telegram-Init-Data': initData },
+      });
+      if (!response.ok) throw new Error('Failed to fetch feature flags');
+      return response.json();
+    },
+  });
+
   useEffect(() => {
     const pausedSetting = settings?.find(s => s.key === 'mining_paused');
     setMiningPaused(pausedSetting?.value === 'true');
