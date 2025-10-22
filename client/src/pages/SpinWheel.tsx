@@ -4,7 +4,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Disc3, Gift, Clock, Sparkles, Trophy, Zap } from "lucide-react";
+import { useLoadingTimeout } from "@/hooks/use-loading-timeout";
+import { Disc3, Gift, Clock, Sparkles, Trophy, Zap, AlertCircle, RefreshCw } from "lucide-react";
 import { initializeUser } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useTonConnect, sendTonTransaction } from "@/lib/tonConnect";
@@ -46,11 +47,13 @@ export default function SpinWheel() {
       .catch(err => console.error('Failed to initialize user:', err));
   }, []);
 
-  const { data: spinStatus, isLoading } = useQuery<SpinStatus>({
+  const { data: spinStatus, isLoading, error, refetch } = useQuery<SpinStatus>({
     queryKey: ['/api/user', userId, 'spin', 'status'],
     enabled: !!userId,
     refetchInterval: 10000,
   });
+
+  const isTimedOut = useLoadingTimeout({ isLoading, timeoutMs: 5000 });
 
   const spinMutation = useMutation({
     mutationFn: async ({ isFree, quantity, tonData }: { isFree: boolean; quantity?: number; tonData?: any }) => {
@@ -150,12 +153,54 @@ export default function SpinWheel() {
     }
   };
 
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background p-3">
+        <div className="max-w-4xl mx-auto">
+          <Card className="p-6 border-destructive/50">
+            <div className="flex flex-col items-center text-center gap-4">
+              <AlertCircle className="w-12 h-12 text-destructive" />
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Failed to Load Spin Wheel</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {error.message || "Something went wrong loading the spin wheel."}
+                </p>
+              </div>
+              <Button onClick={() => refetch()} className="min-h-11">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Try Again
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading || !spinStatus) {
     return (
       <div className="min-h-screen bg-background p-3">
         <div className="max-w-4xl mx-auto">
           <Card className="p-6">
-            <p className="text-muted-foreground">Loading spin wheel...</p>
+            <div className="flex flex-col items-center text-center gap-4">
+              <Disc3 className="w-12 h-12 animate-spin text-primary" />
+              <div>
+                <p className="text-lg font-semibold mb-2">
+                  {isTimedOut ? "Still loading..." : "Loading spin wheel..."}
+                </p>
+                {isTimedOut && (
+                  <>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      This is taking longer than expected. Check your connection.
+                    </p>
+                    <Button onClick={() => refetch()} variant="outline" className="min-h-11">
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Retry
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
           </Card>
         </div>
       </div>
