@@ -625,6 +625,12 @@ export const insertDailyLoginRewardSchema = createInsertSchema(dailyLoginRewards
 export type DailyLoginReward = typeof dailyLoginRewards.$inferSelect;
 export type InsertDailyLoginReward = z.infer<typeof insertDailyLoginRewardSchema>;
 
+// Flash Sales schemas and types
+export const insertFlashSaleSchema = createInsertSchema(flashSales).omit({ id: true, createdAt: true });
+
+export type FlashSale = typeof flashSales.$inferSelect;
+export type InsertFlashSale = z.infer<typeof insertFlashSaleSchema>;
+
 // Hourly bonus schemas and types
 export const insertUserHourlyBonusSchema = createInsertSchema(userHourlyBonuses).omit({ id: true, claimedAt: true });
 
