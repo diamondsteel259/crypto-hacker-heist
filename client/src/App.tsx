@@ -49,6 +49,8 @@ function Router() {
       <Route path="/statistics" component={Statistics} />
       <Route path="/spin" component={SpinWheel} />
       <Route path="/admin" component={Admin} />
+      <Route path="/terms" component={Terms} />
+      <Route path="/privacy" component={Privacy} />
       <Route component={NotFound} />
     </Switch>
   );
