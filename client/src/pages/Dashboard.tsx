@@ -236,12 +236,14 @@ export default function Dashboard() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'hourly-bonus'] });
       queryClient.invalidateQueries({ queryKey: ['/api/user', userId] });
+      hapticSuccess();
       toast({
         title: "Bonus Claimed!",
         description: data.message || `Earned ${data.reward} CS!`,
       });
     },
     onError: (error: any) => {
+      hapticError();
       toast({
         title: "Claim Failed",
         description: error.message || "Failed to claim hourly bonus",
