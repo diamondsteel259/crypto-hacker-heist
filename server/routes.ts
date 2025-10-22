@@ -8,7 +8,6 @@ import { validateTelegramAuth, requireAdmin, verifyUserAccess, type AuthRequest 
 import { verifyTONTransaction, getGameWalletAddress, isValidTONAddress } from "./tonVerification";
 import { miningService } from "./mining";
 import { getBotWebhookHandler } from "./bot";
-import { queryClient } from "./queryClient";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health endpoint for Render
@@ -3737,10 +3736,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/seasons/:seasonId/toggle", validateTelegramAuth, requireAdmin, async (req, res) => {
     const { seasonId } = req.params;
     const { isActive } = req.body;
-
-    if (isActive === undefined) {
-      return res.status(400).json({ error: "isActive field is required" });
-    }
 
     try {
       const existing = await db.select().from(seasons)
