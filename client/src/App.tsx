@@ -5,6 +5,7 @@ import { QueryClientProvider, useQuery, useMutation } from "@tanstack/react-quer
 import { TonConnectUIProvider } from '@tonconnect/ui-react';
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Tutorial } from "@/components/Tutorial";
 import { useToast } from "@/hooks/use-toast";
 import BottomNav from "@/components/BottomNav";
 import MobileHeader from "@/components/MobileHeader";
@@ -25,15 +26,6 @@ import Subscription from "@/pages/Subscription";
 import NotFound from "@/pages/not-found";
 import { initializeUser } from "@/lib/user";
 import { apiRequest } from "@/lib/queryClient";
-
-// Check if Tutorial component exists, import conditionally
-let Tutorial: any = null;
-try {
-  const tutorialModule = await import("@/components/Tutorial");
-  Tutorial = tutorialModule.Tutorial;
-} catch (e) {
-  console.log("Tutorial component not found, skipping");
-}
 
 function Router() {
   return (
@@ -73,9 +65,9 @@ function AppContent() {
     enabled: !!userId,
   });
 
-  // Show tutorial if user hasn't completed it and Tutorial component exists
+  // Show tutorial if user hasn't completed it
   useEffect(() => {
-    if (Tutorial && userProfile && !userProfile.tutorialCompleted && !tutorialOpen) {
+    if (userProfile && !userProfile.tutorialCompleted && !tutorialOpen) {
       const timer = setTimeout(() => {
         setTutorialOpen(true);
       }, 1000);
@@ -120,13 +112,11 @@ function AppContent() {
         <BottomNav />
       </div>
       
-      {Tutorial && (
-        <Tutorial
-          open={tutorialOpen}
-          onComplete={handleTutorialComplete}
-          onSkip={handleTutorialSkip}
-        />
-      )}
+      <Tutorial
+        open={tutorialOpen}
+        onComplete={handleTutorialComplete}
+        onSkip={handleTutorialSkip}
+      />
       
       <Toaster />
     </>
