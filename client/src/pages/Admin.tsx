@@ -21,6 +21,7 @@ export default function Admin() {
   const [editingEquipment, setEditingEquipment] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState<string>("");
   const [editCurrency, setEditCurrency] = useState<string>("");
+  const [selectedUserForPayments, setSelectedUserForPayments] = useState<string | null>(null);
 
   const { data: settings, isLoading: settingsLoading } = useQuery<GameSetting[]>({
     queryKey: ['/api/admin/settings'],
@@ -436,6 +437,14 @@ export default function Admin() {
                     {user.isAdmin && (
                       <Badge variant="destructive" className="text-xs">Admin</Badge>
                     )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSelectedUserForPayments(user.id)}
+                      className="text-xs"
+                    >
+                      View Payments
+                    </Button>
                     <Switch
                       checked={user.isAdmin}
                       onCheckedChange={(checked) => 
@@ -450,7 +459,10 @@ export default function Admin() {
           </div>
         </Card>
 
-        {/* Game Content Management */}
+        {/* Payment Logs */}
+        {selectedUserForPayments && <PaymentLogsSection userId={selectedUserForPayments} onClose={() => setSelectedUserForPayments(null)} />}
+
+        {/* Game Content Overview */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <SettingsIcon className="w-5 h-5" />
@@ -622,5 +634,128 @@ export default function Admin() {
         </Card>
       </div>
     </div>
+  );
+}
+
+// Payment Logs Component
+function PaymentLogsSection({ userId, onClose }: { userId: string; onClose: () => void }) {
+  const { data: paymentData, isLoading } = useQuery({
+    queryKey: [`/api/admin/users/${userId}/payment-history`],
+    queryFn: async () => {
+      const initData = getTelegramInitData();
+      if (!initData) throw new Error('Not authenticated');
+      
+      const response = await fetch(`/api/admin/users/${userId}/payment-history`, {
+        headers: { 'X-Telegram-Init-Data': initData },
+      });
+      if (!response.ok) throw new Error('Failed to fetch payment history');
+      return response.json();
+    },
+  });
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <DollarSign className="w-5 h-5 text-yellow-500" />
+          Payment Logs - User {userId.slice(0, 8)}...
+        </h3>
+        <Button size="sm" variant="outline" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading payment history...</p>
+      ) : paymentData && paymentData.payments.length > 0 ? (
+        <>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
+              <p className="text-xs text-muted-foreground uppercase mb-1">Total TON Spent</p>
+              <p className="text-2xl font-bold font-mono text-yellow-500">
+                {paymentData.totalTonSpent} TON
+              </p>
+            </div>
+            <div className="p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-md">
+              <p className="text-xs text-muted-foreground uppercase mb-1">Total Purchases</p>
+              <p className="text-2xl font-bold font-mono text-cyan-500">
+                {paymentData.totalPayments}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {paymentData.payments.map((payment: any) => (
+              <div
+                key={payment.id}
+                className="p-4 bg-muted/30 rounded-md border border-border"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant={payment.verified ? "default" : "secondary"} className="text-xs">
+                        {payment.type}
+                      </Badge>
+                      {payment.verified && (
+                        <Badge variant="outline" className="text-xs border-green-500 text-green-500">
+                          Verified
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="font-semibold text-sm capitalize">{payment.itemName.replace(/_/g, ' ')}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(payment.purchasedAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono font-bold text-yellow-500">
+                      {payment.tonAmount} TON
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-2 pt-2 border-t border-border/50">
+                  <p className="text-xs text-muted-foreground mb-1">Transaction Hash:</p>
+                  <p className="text-xs font-mono break-all bg-black/20 p-2 rounded">
+                    {payment.transactionHash}
+                  </p>
+                </div>
+
+                <div className="mt-2 pt-2 border-t border-border/50">
+                  <p className="text-xs text-muted-foreground mb-1">Rewards:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {payment.rewards.cs > 0 && (
+                      <Badge variant="outline" className="text-xs">
+                        {payment.rewards.cs.toLocaleString()} CS
+                      </Badge>
+                    )}
+                    {payment.rewards.chst > 0 && (
+                      <Badge variant="outline" className="text-xs">
+                        {payment.rewards.chst.toLocaleString()} CHST
+                      </Badge>
+                    )}
+                    {payment.rewards.items && payment.rewards.items.length > 0 && (
+                      payment.rewards.items.map((item: string, idx: number) => (
+                        <Badge key={idx} variant="outline" className="text-xs capitalize">
+                          {item.replace(/_/g, ' ')}
+                        </Badge>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="p-8 text-center">
+          <DollarSign className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+          <p className="text-muted-foreground">No payment history found for this user.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            TON purchases will appear here once made.
+          </p>
+        </div>
+      )}
+    </Card>
   );
 }
