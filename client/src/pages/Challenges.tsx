@@ -41,7 +41,7 @@ export default function Challenges() {
   const { data: challengesData, isLoading } = useQuery<ChallengesResponse>({
     queryKey: ['/api/user', userId, 'challenges', 'today'],
     enabled: !!userId,
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 10000, // Refresh every 10 seconds for real-time updates
   });
 
   const completeMutation = useMutation({
@@ -168,16 +168,13 @@ export default function Challenges() {
                     </div>
                   </div>
 
-                  {/* Manual complete button for testing - remove in production */}
+                  {/* Requirement hint for incomplete challenges */}
                   {!challenge.completed && (
-                    <Button
-                      size="sm"
-                      className="mt-3"
-                      onClick={() => completeMutation.mutate(challenge.challengeId)}
-                      disabled={completeMutation.isPending}
-                    >
-                      {completeMutation.isPending ? "Completing..." : "Mark Complete (Test)"}
-                    </Button>
+                    <div className="mt-2">
+                      <p className="text-xs text-muted-foreground italic">
+                        Requirement: {challenge.requirement}
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -188,7 +185,7 @@ export default function Challenges() {
         {/* Info Card */}
         <Card className="p-4 bg-muted/30">
           <p className="text-sm text-muted-foreground">
-            💡 <strong>Tip:</strong> Challenges reset every 24 hours at midnight UTC. Complete all challenges to maximize your daily rewards!
+            💡 <strong>Tip:</strong> Challenges automatically complete when you meet their requirements. Progress updates every 10 seconds. Challenges reset daily at midnight UTC.
           </p>
         </Card>
       </div>
