@@ -776,6 +776,23 @@ export default function Shop() {
             <ShoppingBag className="w-6 h-6 text-matrix-green" />
             <h1 className="text-xl font-bold terminal-gradient">EQUIPMENT SHOP</h1>
           </div>
+          {isTimedOut && (
+            <Card className="p-6 border-yellow-500/50">
+              <div className="flex flex-col items-center text-center gap-4">
+                <AlertCircle className="w-10 h-10 text-yellow-500" />
+                <div>
+                  <h3 className="text-lg font-semibold mb-2">Still Loading...</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    This is taking longer than expected. Check your connection or try refreshing.
+                  </p>
+                </div>
+                <Button onClick={() => refetchEquipment()} variant="outline" className="min-h-11">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Retry
+                </Button>
+              </div>
+            </Card>
+          )}
           <div className="grid grid-cols-2 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <Card key={i} className="p-4">
@@ -788,6 +805,7 @@ export default function Shop() {
         </div>
       </div>
     );
+  }
   }
 
   const { data: activePowerUps } = useQuery<ActivePowerUpsResponse>({
