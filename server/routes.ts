@@ -58,6 +58,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(user);
   });
 
+  // Complete tutorial
+  app.post("/api/user/:userId/tutorial/complete", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    
+    try {
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
+        if (!user[0]) throw new Error("User not found");
+
+        if (user[0].tutorialCompleted) {
+          return {
+            success: true,
+            message: "Tutorial already completed",
+            alreadyCompleted: true,
+          };
+        }
+
+        // Mark tutorial as completed and award bonus
+        await tx.update(users)
+          .set({
+            tutorialCompleted: true,
+            csBalance: sql`${users.csBalance} + 5000`,
+          })
+          .where(eq(users.id, userId));
+
+        return {
+          success: true,
+          message: "Tutorial completed! Earned 5,000 CS bonus",
+          bonus: 5000,
+        };
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Tutorial completion error:", error);
+      res.status(500).json({ error: error.message || "Failed to complete tutorial" });
+    }
+  });
+
   // Equipment catalog routes
   app.get("/api/equipment-types", async (req, res) => {
     try {
@@ -3833,8 +3872,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Grant rewards
         await tx.update(users)
           .set({
-            csBalance: user[0].csBalance + rewards.cs,
-            chstBalance: user[0].chstBalance + rewards.chst,
+            csBalance: sql`${users.csBalance} + ${rewards.cs}`,
+            chstBalance: sql`${users.chstBalance} + ${rewards.chst}`
           })
           .where(eq(users.id, userId));
 
