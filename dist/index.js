@@ -2043,6 +2043,36 @@ async function registerRoutes(app2) {
     await storage.setUserAdmin(req.params.userId, isAdmin);
     res.json({ success: true });
   });
+  app2.post("/api/admin/users/:userId/balance", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { csBalance, chstBalance } = req.body;
+      if (csBalance === void 0 && chstBalance === void 0) {
+        return res.status(400).json({ error: "At least one balance must be provided" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const updates = {};
+      if (csBalance !== void 0) updates.csBalance = Math.max(0, Number(csBalance));
+      if (chstBalance !== void 0) updates.chstBalance = Math.max(0, Number(chstBalance));
+      await db.update(users).set(updates).where(eq5(users.id, userId));
+      const updatedUser = await storage.getUser(userId);
+      res.json({
+        success: true,
+        user: {
+          id: updatedUser?.id,
+          username: updatedUser?.username,
+          csBalance: updatedUser?.csBalance,
+          chstBalance: updatedUser?.chstBalance
+        }
+      });
+    } catch (error) {
+      console.error("Update balance error:", error);
+      res.status(500).json({ error: "Failed to update balance" });
+    }
+  });
   app2.get("/api/admin/users/:userId/payment-history", validateTelegramAuth, requireAdmin, async (req, res) => {
     try {
       const { userId } = req.params;
