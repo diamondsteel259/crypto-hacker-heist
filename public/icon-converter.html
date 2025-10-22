@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Icon Converter - SVG to PNG</title>
+    <style>
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: #0a0a0a;
+            color: #2dd76f;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            text-align: center;
+        }
+        h1 {
+            margin-bottom: 30px;
+        }
+        #preview {
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(45, 215, 111, 0.05);
+            border: 2px solid rgba(45, 215, 111, 0.3);
+            border-radius: 8px;
+        }
+        canvas {
+            border: 2px solid #2dd76f;
+            border-radius: 4px;
+        }
+        button {
+            background: linear-gradient(135deg, #2dd76f, #00ff41);
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(45, 215, 111, 0.5);
+        }
+        .info {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(59, 182, 252, 0.1);
+            border: 1px solid rgba(59, 182, 252, 0.3);
+            border-radius: 8px;
+            text-align: left;
+        }
+        .success {
+            color: #00ff41;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔓 Crypto Hacker Heist - Icon Generator</h1>
+
+        <div id="preview">
+            <h3>Icon Preview (512x512)</h3>
+            <canvas id="canvas" width="512" height="512"></canvas>
+        </div>
+
+        <button onclick="generateAndDownload()">⬇️ Download icon-512x512.png</button>
+        <button onclick="generateAllSizes()">📦 Generate All Icon Sizes</button>
+
+        <div class="success" id="status"></div>
+
+        <div class="info">
+            <h3>Instructions:</h3>
+            <ol>
+                <li>Click "Download icon-512x512.png" to get the main icon</li>
+                <li>Save the file to the <code>public/</code> directory</li>
+                <li>Click "Generate All Icon Sizes" for favicon and other sizes</li>
+                <li>The icon will be automatically loaded by TON Connect manifest</li>
+            </ol>
+            <p><strong>Note:</strong> This page converts the SVG icon to PNG at various sizes needed for the application.</p>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const statusDiv = document.getElementById('status');
+
+        // Load and render SVG
+        async function loadSVG() {
+            try {
+                const response = await fetch('icon-512x512.svg');
+                const svgText = await response.text();
+                const blob = new Blob([svgText], { type: 'image/svg+xml' });
+                const url = URL.createObjectURL(blob);
+
+                const img = new Image();
+                img.onload = function() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, 512, 512);
+                    URL.revokeObjectURL(url);
+                };
+                img.src = url;
+            } catch (error) {
+                console.error('Error loading SVG:', error);
+                statusDiv.textContent = '❌ Error loading SVG. Make sure icon-512x512.svg exists in the same directory.';
+            }
+        }
+
+        function downloadCanvas(filename, width, height) {
+            // Create a temporary canvas for the specific size
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = width;
+            tempCanvas.height = height;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            // Draw the image at the new size
+            tempCtx.drawImage(canvas, 0, 0, 512, 512, 0, 0, width, height);
+
+            // Convert to blob and download
+            tempCanvas.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 'image/png');
+        }
+
+        function generateAndDownload() {
+            downloadCanvas('icon-512x512.png', 512, 512);
+            statusDiv.textContent = '✅ Downloaded icon-512x512.png - Save it to the public/ directory';
+        }
+
+        function generateAllSizes() {
+            const sizes = [
+                { filename: 'icon-512x512.png', size: 512 },
+                { filename: 'icon-192x192.png', size: 192 },
+                { filename: 'apple-touch-icon.png', size: 180 },
+                { filename: 'icon-32x32.png', size: 32 },
+                { filename: 'icon-16x16.png', size: 16 }
+            ];
+
+            sizes.forEach((icon, index) => {
+                setTimeout(() => {
+                    downloadCanvas(icon.filename, icon.size, icon.size);
+                    if (index === sizes.length - 1) {
+                        statusDiv.textContent = '✅ All icon sizes generated! Save them to the public/ directory';
+                    }
+                }, index * 500); // Stagger downloads
+            });
+        }
+
+        // Load SVG on page load
+        loadSVG();
+    </script>
+</body>
+</html>
