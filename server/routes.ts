@@ -1959,7 +1959,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           powerUpType,
           reward: { cs: rewardCs, chst: rewardChst },
           boost_active: true,
-          boost_percentage,
+          boost_percentage: boostPercentage,
           activated_at: now.toISOString(),
           expires_at: expiresAt.toISOString(),
           new_balance: {
@@ -2804,7 +2804,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: true,
-        message: `Alert set for ${equipment[0].name}`,
+        message: "Alert set for " + equipment[0].name,
         alert: result,
       });
     } catch (error: any) {
