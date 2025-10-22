@@ -49,31 +49,22 @@ export async function seedDatabase() {
       { id: 'asic-whatsminer-m63s-hydro', name: 'WhatsMiner M63S Hydro', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 500000, basePrice: 50.0, currency: 'TON', maxOwned: 50, orderIndex: 30 },
     ];
 
-      // Clear existing equipment and reseed with new data
-      console.log(`🗑️  Clearing existing equipment data...`);
-      
-      // Delete in correct order to avoid foreign key constraints
-      // 1. Delete component_upgrades first (references owned_equipment)
-      await db.delete(componentUpgrades);
-      console.log(`🗑️  Cleared component upgrades...`);
-      
-      // 2. Then delete owned_equipment (references equipment_types)
-      await db.delete(ownedEquipment);
-      console.log(`🗑️  Cleared owned equipment...`);
-      
-      // 3. Finally delete equipment_types
-      await db.delete(equipmentTypes);
-      console.log(`🗑️  Cleared equipment types...`);
-      
+    // Check if equipment types already exist - ONLY seed if empty
+    const existingEquipment = await db.select().from(equipmentTypes);
+    
+    if (existingEquipment.length === 0) {
       console.log(`📦 Inserting ${equipmentCatalog.length} equipment items...`);
       await db.insert(equipmentTypes).values(equipmentCatalog);
       console.log(`✅ Equipment types seeded: ${equipmentCatalog.length}`);
+    } else {
+      console.log(`✅ Equipment types already exist (${existingEquipment.length} items) - skipping seed`);
+    }
     
-    // Verify the data was inserted
-    const insertedCount = await db.select().from(equipmentTypes);
-    console.log(`🔍 Verification: ${insertedCount.length} equipment items in database`);
+    // Verify the data
+    const finalCount = await db.select().from(equipmentTypes);
+    console.log(`🔍 Verification: ${finalCount.length} equipment items in database`);
 
-    // Seed default game settings
+    // Seed default game settings (only if they don't exist)
     const defaultSettings = [
       { key: 'mining_paused', value: 'false' },
       { key: 'equipment_price_multiplier', value: '1.0' },
