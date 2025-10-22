@@ -29,6 +29,16 @@ export const gameSettings = pgTable("game_settings", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+export const featureFlags = pgTable("feature_flags", {
+  id: serial("id").primaryKey(),
+  featureKey: text("feature_key").notNull().unique(), // blocks, leaderboard, challenges, etc.
+  featureName: text("feature_name").notNull(), // Display name
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  description: text("description"), // What this feature does
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  updatedBy: text("updated_by"), // Admin user ID who made the change
+});
+
 export const equipmentTypes = pgTable("equipment_types", {
   id: varchar("id").primaryKey(),
   name: text("name").notNull(),
