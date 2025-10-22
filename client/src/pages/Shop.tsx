@@ -640,11 +640,22 @@ export default function Shop() {
   });
 
   const componentUpgradeMutation = useMutation({
-    mutationFn: async ({ equipmentId, componentType, currency }: { equipmentId: string; componentType: string; currency: string }) => {
+    mutationFn: async ({ equipmentId, componentType, currency, tonTransactionHash, userWalletAddress, tonAmount }: { 
+      equipmentId: string; 
+      componentType: string; 
+      currency: string;
+      tonTransactionHash?: string;
+      userWalletAddress?: string;
+      tonAmount?: string;
+    }) => {
       const response = await apiRequest(
         "POST",
         `/api/user/${userId}/equipment/${equipmentId}/components/upgrade`,
-        { componentType, currency }
+        { 
+          componentType, 
+          currency,
+          ...(tonTransactionHash && { tonTransactionHash, userWalletAddress, tonAmount })
+        }
       );
       return response.json();
     },
@@ -657,6 +668,11 @@ export default function Shop() {
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "equipment"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "components", "all"] });
+      
+      // Refresh TON balance if paid with TON
+      if (data.currency === "TON" && isConnected) {
+        getTonBalance(userFriendlyAddress).then(setTonBalance).catch(console.error);
+      }
     },
     onError: (error: Error) => {
       toast({
