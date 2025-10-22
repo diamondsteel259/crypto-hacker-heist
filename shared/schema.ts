@@ -16,6 +16,7 @@ export const users = pgTable("users", {
   referralCode: text("referral_code").notNull().unique(),
   referredBy: text("referred_by"),
   isAdmin: boolean("is_admin").notNull().default(false),
+  tutorialCompleted: boolean("tutorial_completed").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
   referralCodeIdx: index("users_referral_code_idx").on(table.referralCode),
@@ -305,6 +306,23 @@ export const spinHistory = pgTable("spin_history", {
   userSpinHistoryIdx: index("spin_history_user_idx").on(table.userId),
 }));
 
+// Jackpot Wins (Grand Prize from Spin Wheel)
+export const jackpotWins = pgTable("jackpot_wins", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  username: text("username").notNull(),
+  walletAddress: text("wallet_address"),
+  amount: text("amount").notNull().default("1.0"), // 1 TON jackpot
+  wonAt: timestamp("won_at").notNull().defaultNow(),
+  paidOut: boolean("paid_out").notNull().default(false),
+  paidAt: timestamp("paid_at"),
+  paidByAdmin: text("paid_by_admin"),
+  notes: text("notes"),
+}, (table) => ({
+  userJackpotIdx: index("jackpot_wins_user_idx").on(table.userId),
+  paidOutIdx: index("jackpot_wins_paid_out_idx").on(table.paidOut),
+}));
+
 // Equipment Presets
 export const equipmentPresets = pgTable("equipment_presets", {
   id: serial("id").primaryKey(),
@@ -586,6 +604,12 @@ export type UserSpin = typeof userSpins.$inferSelect;
 export type InsertUserSpin = z.infer<typeof insertUserSpinSchema>;
 export type SpinHistory = typeof spinHistory.$inferSelect;
 export type InsertSpinHistory = z.infer<typeof insertSpinHistorySchema>;
+
+// Jackpot wins schemas and types
+export const insertJackpotWinSchema = createInsertSchema(jackpotWins).omit({ id: true, wonAt: true });
+
+export type JackpotWin = typeof jackpotWins.$inferSelect;
+export type InsertJackpotWin = z.infer<typeof insertJackpotWinSchema>;
 
 // Equipment Preset schemas and types
 export const insertEquipmentPresetSchema = createInsertSchema(equipmentPresets).omit({ id: true, createdAt: true, updatedAt: true });

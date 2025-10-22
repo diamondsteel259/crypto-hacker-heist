@@ -84,6 +84,46 @@ export default function Cosmetics() {
     },
   });
 
+  const equipMutation = useMutation({
+    mutationFn: async ({ cosmeticId, equipped }: { cosmeticId: string; equipped: boolean }) => {
+      const response = await apiRequest(
+        'POST',
+        `/api/user/${userId}/cosmetics/${cosmeticId}/equip`,
+        { equipped }
+      );
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'cosmetics'] });
+      
+      const action = variables.equipped ? 'equipped' : 'unequipped';
+      const effect = selectedCategory === 'background' 
+        ? 'Your profile now shows this custom background!'
+        : selectedCategory === 'nameColor'
+        ? 'Your username now displays in this color!'
+        : 'This badge now appears on your profile!';
+
+      toast({
+        title: variables.equipped ? "✨ Cosmetic Equipped!" : "Cosmetic Unequipped",
+        description: variables.equipped ? effect : "Cosmetic removed from your profile.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Action Failed",
+        description: error.message || "Failed to update cosmetic",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleEquip = (cosmeticId: string, currentlyEquipped: boolean) => {
+    equipMutation.mutate({
+      cosmeticId,
+      equipped: !currentlyEquipped,
+    });
+  };
+
   const handlePurchase = async (item: CosmeticItem) => {
     // Determine which currency to use
     let currency = 'CS';
@@ -206,13 +246,17 @@ export default function Cosmetics() {
         {/* Cosmetics Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredCosmetics.map((item) => {
-            const isOwned = ownedIds.includes(item.itemId);
+            const owned = ownedCosmetics?.find(o => o.cosmeticId === item.itemId);
+            const isOwned = !!owned;
+            const isEquipped = owned?.isEquipped || false;
 
             return (
               <Card
                 key={item.itemId}
                 className={`p-4 transition-all ${
-                  isOwned
+                  isEquipped
+                    ? 'bg-gradient-to-br from-matrix-green/20 to-cyan-500/20 border-matrix-green/50 shadow-[0_0_15px_rgba(0,255,65,0.3)]'
+                    : isOwned
                     ? 'bg-gradient-to-br from-green-500/20 to-emerald-500/20 border-green-500/50'
                     : 'hover:border-primary'
                 }`}
@@ -225,7 +269,15 @@ export default function Cosmetics() {
                       Animated
                     </Badge>
                   )}
-                  {isOwned && (
+                  {isEquipped && (
+                    <div className="absolute top-2 left-2">
+                      <Badge className="bg-matrix-green text-black animate-pulse">
+                        <Check className="w-3 h-3 mr-1" />
+                        Equipped
+                      </Badge>
+                    </div>
+                  )}
+                  {isOwned && !isEquipped && (
                     <div className="absolute top-2 left-2">
                       <Badge className="bg-green-500">
                         <Check className="w-3 h-3 mr-1" />
@@ -260,15 +312,38 @@ export default function Cosmetics() {
                   )}
                 </div>
 
-                {/* Price & Purchase */}
+                {/* Price & Purchase / Equip */}
                 {isOwned ? (
-                  <Button
-                    className="w-full bg-green-500 hover:bg-green-600"
-                    disabled
-                  >
-                    <Check className="w-4 h-4 mr-2" />
-                    Owned
-                  </Button>
+                  <div className="space-y-2">
+                    {isEquipped ? (
+                      <>
+                        <Button
+                          className="w-full bg-matrix-green hover:bg-matrix-green/90 text-black"
+                          disabled
+                        >
+                          <Check className="w-4 h-4 mr-2" />
+                          Currently Equipped
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => handleEquip(item.itemId, true)}
+                          disabled={equipMutation.isPending}
+                        >
+                          Unequip
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        className="w-full bg-cyber-blue hover:bg-cyber-blue/90"
+                        onClick={() => handleEquip(item.itemId, false)}
+                        disabled={equipMutation.isPending}
+                      >
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Equip
+                      </Button>
+                    )}
+                  </div>
                 ) : (
                   <div className="space-y-2">
                     {item.priceCs && (
@@ -320,7 +395,7 @@ export default function Cosmetics() {
         {/* Info Card */}
         <Card className="p-4 bg-muted/30">
           <p className="text-sm text-muted-foreground">
-            💡 <strong>Tip:</strong> Cosmetic items are permanent once purchased. Show off your collection and stand out from the crowd!
+            💡 <strong>Tip:</strong> Equip cosmetics to customize your profile! Backgrounds, name colors, and badges will display when other players view your profile.
           </p>
         </Card>
       </div>

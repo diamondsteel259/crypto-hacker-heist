@@ -191,17 +191,33 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background terminal-scanline">
-      <div className="max-w-7xl mx-auto p-3 space-y-4">
+      <div className="max-w-7xl mx-auto p-3 md:p-4 space-y-4 md:space-y-6">
+        {/* Welcome Header */}
+        <Card className="p-4 md:p-6 bg-gradient-to-r from-matrix-green/10 to-cyber-blue/10 border-matrix-green/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl md:text-2xl lg:text-3xl font-bold mb-1">
+                Welcome back, {userProfile?.username || 'Hacker'}!
+              </h1>
+              <p className="text-sm md:text-base text-muted-foreground">
+                Your crypto mining empire at a glance
+              </p>
+            </div>
+            <div className="hidden md:flex items-center gap-2">
+              <Cpu className="w-8 h-8 text-matrix-green animate-pulse" />
+            </div>
+          </div>
+        </Card>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
-          <Card className="p-2.5 md:p-4">
-            <div className="flex items-center gap-1 md:gap-2 mb-1 md:mb-2">
-              <Gem className="w-3 md:w-4 h-3 md:h-4 text-matrix-green" />
-              <p className="text-[10px] md:text-xs text-muted-foreground uppercase">CS Balance</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+          <Card className="p-4 md:p-5 hover:border-matrix-green/50 transition-all">
+            <div className="flex items-center gap-2 mb-2">
+              <Coins className="w-4 md:w-5 h-4 md:h-5 text-matrix-green" />
+              <p className="text-xs md:text-sm font-medium text-muted-foreground uppercase tracking-wider">CS Balance</p>
             </div>
-            <p className="text-lg md:text-2xl font-bold font-mono text-matrix-green" data-testid="text-cs-balance">
-              {userLoading ? '...' : csBalance.toLocaleString()}
+            <p className="text-2xl md:text-3xl font-bold font-mono text-matrix-green">
+              {userProfile?.csBalance?.toLocaleString() || 0}
             </p>
           </Card>
 
@@ -369,9 +385,9 @@ export default function Dashboard() {
         )}
 
         {/* Main Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
           {/* Left Column */}
-          <div className="lg:col-span-2 space-y-3 md:space-y-6">
+          <div className="lg:col-span-2 space-y-4 md:space-y-6">
             <BlockTimer 
               onBlockMined={() => console.log('Block mined!')} 
               userHashrate={user?.totalHashrate || 0}

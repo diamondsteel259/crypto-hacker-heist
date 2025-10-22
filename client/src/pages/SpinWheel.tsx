@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Disc3, Gift, Clock, Sparkles } from "lucide-react";
+import { Disc3, Gift, Clock, Sparkles, Trophy, Zap } from "lucide-react";
 import { initializeUser } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useTonConnect, sendTonTransaction } from "@/lib/tonConnect";
@@ -19,11 +19,17 @@ interface SpinStatus {
 
 interface SpinResult {
   success: boolean;
-  prize: {
+  prizes: Array<{
     type: string;
     value: number | string;
+    display: string;
+  }>;
+  summary: {
+    total_cs: number;
+    total_chst: number;
+    jackpot_won: boolean;
+    spins_completed: number;
   };
-  reward: any;
   message: string;
 }
 
@@ -32,7 +38,7 @@ export default function SpinWheel() {
   const { tonConnectUI, isConnected } = useTonConnect();
   const [userId, setUserId] = useState<string | null>(null);
   const [isSpinning, setIsSpinning] = useState(false);
-  const [lastPrize, setLastPrize] = useState<any>(null);
+  const [lastResult, setLastResult] = useState<SpinResult | null>(null);
 
   useEffect(() => {
     initializeUser()
@@ -47,8 +53,8 @@ export default function SpinWheel() {
   });
 
   const spinMutation = useMutation({
-    mutationFn: async ({ isFree, tonData }: { isFree: boolean; tonData?: any }) => {
-      const body: any = { isFree };
+    mutationFn: async ({ isFree, quantity, tonData }: { isFree: boolean; quantity?: number; tonData?: any }) => {
+      const body: any = { isFree, quantity: quantity || 1 };
       if (!isFree && tonData) {
         body.tonTransactionHash = tonData.txHash;
         body.userWalletAddress = tonData.userWallet;
@@ -60,12 +66,12 @@ export default function SpinWheel() {
     },
     onSuccess: (data: SpinResult) => {
       setIsSpinning(false);
-      setLastPrize(data.prize);
+      setLastResult(data);
       queryClient.invalidateQueries({ queryKey: ['/api/user', userId, 'spin'] });
       queryClient.invalidateQueries({ queryKey: ['/api/user', userId] });
 
       toast({
-        title: "🎉 You Won!",
+        title: data.summary.jackpot_won ? "🎰 JACKPOT WIN! 🎰" : "🎉 You Won!",
         description: data.message,
       });
     },
@@ -90,24 +96,46 @@ export default function SpinWheel() {
     }
 
     setIsSpinning(true);
-    spinMutation.mutate({ isFree: true });
+    spinMutation.mutate({ isFree: true, quantity: 1 });
   };
 
-  const handlePaidSpin = async () => {
+  const handlePaidSpin = async (quantity: number) => {
     if (!isConnected) {
       await tonConnectUI.openModal();
+      return;
+    }
+
+    const pricing: Record<number, string> = {
+      1: "0.1",
+      10: "0.9",
+      20: "1.7",
+    };
+
+    const cost = pricing[quantity];
+    if (!cost) {
+      toast({
+        title: "Invalid Quantity",
+        description: "Please select 1, 10, or 20 spins",
+        variant: "destructive",
+      });
       return;
     }
 
     setIsSpinning(true);
 
     try {
-      const txHash = await sendTonTransaction(tonConnectUI, TON_PAYMENT_ADDRESS, "0.1", "Spin Wheel");
+      const txHash = await sendTonTransaction(
+        tonConnectUI, 
+        TON_PAYMENT_ADDRESS, 
+        cost, 
+        `Spin Wheel x${quantity}`
+      );
       
       if (txHash) {
         spinMutation.mutate({
           isFree: false,
-          tonData: { txHash },
+          quantity,
+          tonData: { txHash, amount: cost },
         });
       } else {
         throw new Error("Transaction cancelled");
@@ -135,14 +163,14 @@ export default function SpinWheel() {
   }
 
   const prizes = [
-    { type: 'cs', label: '1,000 CS', color: 'from-green-500 to-emerald-500' },
-    { type: 'chst', label: '100 CHST', color: 'from-blue-500 to-cyan-500' },
-    { type: 'cs', label: '5,000 CS', color: 'from-green-500 to-emerald-500' },
-    { type: 'powerup', label: 'Luck Boost', color: 'from-purple-500 to-pink-500' },
-    { type: 'cs', label: '10,000 CS', color: 'from-yellow-500 to-orange-500' },
-    { type: 'equipment', label: 'Equipment', color: 'from-red-500 to-pink-500' },
-    { type: 'cs', label: '2,500 CS', color: 'from-green-500 to-emerald-500' },
-    { type: 'chst', label: '250 CHST', color: 'from-blue-500 to-cyan-500' },
+    { type: 'jackpot', label: '1 TON', color: 'from-yellow-400 to-orange-500', icon: '🎰' },
+    { type: 'cs', label: '1K CS', color: 'from-green-500 to-emerald-500', icon: '💰' },
+    { type: 'chst', label: '100 CHST', color: 'from-blue-500 to-cyan-500', icon: '💎' },
+    { type: 'cs', label: '5K CS', color: 'from-green-500 to-emerald-500', icon: '💰' },
+    { type: 'powerup', label: 'Boost', color: 'from-purple-500 to-pink-500', icon: '⚡' },
+    { type: 'cs', label: '10K CS', color: 'from-yellow-500 to-orange-500', icon: '💰' },
+    { type: 'equipment', label: 'Equipment', color: 'from-red-500 to-pink-500', icon: '🎁' },
+    { type: 'cs', label: '2.5K CS', color: 'from-green-500 to-emerald-500', icon: '💰' },
   ];
 
   return (
@@ -156,7 +184,7 @@ export default function SpinWheel() {
           <div className="flex-1">
             <h1 className="text-2xl md:text-3xl font-bold">Spin the Wheel</h1>
             <p className="text-xs text-muted-foreground uppercase tracking-wider">
-              Win amazing prizes every day!
+              Win prizes + 1 TON jackpot!
             </p>
           </div>
         </div>
@@ -175,11 +203,33 @@ export default function SpinWheel() {
               <p className="text-2xl font-bold">{spinStatus.paidSpinsCount}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Cost per Spin</p>
-              <p className="text-xl font-bold text-blue-500">0.1 TON</p>
+              <p className="text-sm text-muted-foreground">Bulk Discounts</p>
+              <p className="text-sm font-bold text-green-500">10-15% OFF</p>
             </div>
           </div>
         </Card>
+
+        {/* Last Result */}
+        {lastResult && (
+          <Card className="p-4 bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border-yellow-500/30">
+            <div className="flex items-center gap-3">
+              <Trophy className="w-6 h-6 text-yellow-500" />
+              <div className="flex-1">
+                <p className="font-semibold">Last Spin Result:</p>
+                {lastResult.summary.jackpot_won && (
+                  <p className="text-lg font-bold text-yellow-500 animate-pulse">
+                    🎰 1 TON JACKPOT WON! 🎰
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  {lastResult.summary.spins_completed} spin(s): 
+                  {lastResult.summary.total_cs > 0 && ` ${lastResult.summary.total_cs.toLocaleString()} CS`}
+                  {lastResult.summary.total_chst > 0 && ` ${lastResult.summary.total_chst.toLocaleString()} CHST`}
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Wheel Visualization */}
         <Card className="p-8 bg-gradient-to-br from-purple-500/5 to-pink-500/5">
@@ -197,7 +247,7 @@ export default function SpinWheel() {
                     style={{
                       transform: `rotate(${rotation}deg)`,
                       clipPath: `polygon(50% 50%, 100% 0%, 100% 50%)`,
-                      opacity: 0.8,
+                      opacity: prize.type === 'jackpot' ? 1 : 0.8,
                     }}
                   />
                 );
@@ -214,20 +264,10 @@ export default function SpinWheel() {
               <div className="w-0 h-0 border-l-[20px] border-l-transparent border-r-[20px] border-r-transparent border-t-[40px] border-t-primary"></div>
             </div>
           </div>
-
-          {/* Last Prize */}
-          {lastPrize && (
-            <div className="mt-6 text-center">
-              <Badge variant="outline" className="text-lg px-4 py-2">
-                <Gift className="w-5 h-5 mr-2" />
-                Last Win: {JSON.stringify(lastPrize)}
-              </Badge>
-            </div>
-          )}
         </Card>
 
         {/* Spin Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           {/* Free Spin */}
           <Card className="p-6">
             <div className="flex items-center gap-3 mb-4">
@@ -263,41 +303,57 @@ export default function SpinWheel() {
             </Button>
           </Card>
 
-          {/* Paid Spin */}
+          {/* Paid Spins */}
           <Card className="p-6 bg-gradient-to-br from-blue-500/10 to-purple-500/10">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
                 <Sparkles className="w-6 h-6 text-blue-500" />
               </div>
               <div>
-                <h3 className="font-semibold text-lg">Extra Spin</h3>
-                <p className="text-xs text-muted-foreground">Buy additional spins with TON</p>
+                <h3 className="font-semibold text-lg">Buy Extra Spins</h3>
+                <p className="text-xs text-muted-foreground">Bulk purchases with discount!</p>
               </div>
             </div>
-            <Button
-              className="w-full h-12 text-lg bg-blue-500 hover:bg-blue-600"
-              onClick={handlePaidSpin}
-              disabled={isSpinning || spinMutation.isPending}
-            >
-              {isSpinning ? (
-                <>
-                  <Disc3 className="w-5 h-5 mr-2 animate-spin" />
-                  Spinning...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-5 h-5 mr-2" />
-                  Spin for 0.1 TON
-                </>
-              )}
-            </Button>
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                className="h-16 flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600"
+                onClick={() => handlePaidSpin(1)}
+                disabled={isSpinning || spinMutation.isPending}
+              >
+                <span className="text-lg font-bold">1</span>
+                <span className="text-xs">0.1 TON</span>
+              </Button>
+              <Button
+                className="h-16 flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 relative"
+                onClick={() => handlePaidSpin(10)}
+                disabled={isSpinning || spinMutation.isPending}
+              >
+                <Badge className="absolute -top-2 -right-2 bg-green-500 text-xs">-10%</Badge>
+                <span className="text-lg font-bold">10</span>
+                <span className="text-xs">0.9 TON</span>
+              </Button>
+              <Button
+                className="h-16 flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 relative"
+                onClick={() => handlePaidSpin(20)}
+                disabled={isSpinning || spinMutation.isPending}
+              >
+                <Badge className="absolute -top-2 -right-2 bg-green-500 text-xs">-15%</Badge>
+                <span className="text-lg font-bold">20</span>
+                <span className="text-xs">1.7 TON</span>
+              </Button>
+            </div>
           </Card>
         </div>
 
         {/* Possible Prizes */}
         <Card className="p-6">
           <h3 className="font-semibold text-lg mb-4">Possible Prizes</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="p-3 bg-yellow-500/20 rounded-lg text-center border border-yellow-500/50">
+              <p className="text-2xl mb-1">🎰</p>
+              <p className="text-sm font-semibold text-yellow-500">1 TON</p>
+              <p className="text-xs text-muted-foreground">0.1% chance</p>
+            </div>
             <div className="p-3 bg-green-500/10 rounded-lg text-center">
               <p className="text-2xl mb-1">💰</p>
               <p className="text-sm font-semibold">1K-25K CS</p>
@@ -323,8 +379,11 @@ export default function SpinWheel() {
 
         {/* Info Card */}
         <Card className="p-4 bg-muted/30">
+          <p className="text-sm text-muted-foreground mb-2">
+            🎰 <strong>Jackpot Prize:</strong> Win 1 TON with paid spins! 0.1% chance (1 in 1000). Admin will process your payout.
+          </p>
           <p className="text-sm text-muted-foreground">
-            🎰 <strong>How it works:</strong> Spin the wheel to win random prizes! You get 1 free spin every day. Want more? Buy extra spins for just 0.1 TON each!
+            💡 <strong>Bulk Discounts:</strong> Buy 10 spins for 10% off or 20 spins for 15% off!
           </p>
         </Card>
       </div>

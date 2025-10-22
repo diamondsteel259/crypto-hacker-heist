@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, db } from "./storage";
 import { insertUserSchema, insertOwnedEquipmentSchema } from "@shared/schema";
-import { users, ownedEquipment, equipmentTypes, referrals, componentUpgrades, blockRewards, blocks, dailyClaims, userTasks, powerUpPurchases, lootBoxPurchases, activePowerUps, priceAlerts, autoUpgradeSettings, seasons, packPurchases, userPrestige, prestigeHistory, userSubscriptions } from "@shared/schema";
+import { users, ownedEquipment, equipmentTypes, referrals, componentUpgrades, blockRewards, blocks, dailyClaims, userTasks, powerUpPurchases, lootBoxPurchases, activePowerUps, priceAlerts, autoUpgradeSettings, seasons, packPurchases, userPrestige, prestigeHistory, userSubscriptions, userStatistics } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { validateTelegramAuth, requireAdmin, verifyUserAccess, type AuthRequest } from "./middleware/auth";
 import { verifyTONTransaction, getGameWalletAddress, isValidTONAddress } from "./tonVerification";
@@ -55,6 +55,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const user = await storage.getUser(req.params.userId);
     if (!user) return res.status(404).json({ message: "User not found" });
     res.json(user);
+  });
+
+  // Complete tutorial
+  app.post("/api/user/:userId/tutorial/complete", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    
+    try {
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
+        if (!user[0]) throw new Error("User not found");
+
+        if (user[0].tutorialCompleted) {
+          return {
+            success: true,
+            message: "Tutorial already completed",
+            alreadyCompleted: true,
+          };
+        }
+
+        // Mark tutorial as completed and award bonus
+        await tx.update(users)
+          .set({
+            tutorialCompleted: true,
+            csBalance: sql`${users.csBalance} + 5000`,
+          })
+          .where(eq(users.id, userId));
+
+        return {
+          success: true,
+          message: "Tutorial completed! Earned 5,000 CS bonus",
+          bonus: 5000,
+        };
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Tutorial completion error:", error);
+      res.status(500).json({ error: error.message || "Failed to complete tutorial" });
+    }
   });
 
   // Equipment catalog routes
@@ -185,10 +224,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/user/:userId/equipment/:equipmentId/components/upgrade", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId, equipmentId } = req.params;
-    const { componentType, currency = "CS" } = req.body;
+    const { componentType, currency = "CS", tonTransactionHash, userWalletAddress, tonAmount } = req.body;
 
     if (!componentType || !["RAM", "CPU", "Storage", "GPU"].includes(componentType)) {
       return res.status(400).json({ message: "Invalid component type" });
+    }
+
+    if (!["CS", "CHST", "TON"].includes(currency)) {
+      return res.status(400).json({ message: "Invalid currency. Must be CS, CHST, or TON" });
     }
 
     try {
@@ -239,25 +282,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "GPU": 1.5
         }[componentType] || 1;
 
-        const upgradeCost = Math.floor(baseCost * componentMultiplier * Math.pow(1.15, currentLevel));
-
-        // Check user balance
-        const user = await tx.select().from(users).where(eq(users.id, userId));
-        const balanceField = currency === "CS" ? "csBalance" : "chstBalance";
-        const currentBalance = user[0][balanceField];
-
-        if (currentBalance < upgradeCost) {
-          throw new Error(`Insufficient ${currency} balance. Need ${upgradeCost} ${currency}`);
+        const upgradeCostCS = Math.floor(baseCost * componentMultiplier * Math.pow(1.15, currentLevel));
+        
+        // Calculate cost in different currencies
+        let upgradeCost = upgradeCostCS;
+        if (currency === "TON") {
+          upgradeCost = parseFloat((upgradeCostCS / 10000).toFixed(3)); // CS to TON conversion
         }
 
-        // Deduct balance and upgrade component
-        const newLevel = currentLevel + 1;
-        await tx.update(users)
-          .set({
-            [balanceField]: sql`${balanceField === "csBalance" ? users.csBalance : users.chstBalance} - ${upgradeCost}`
-          })
-          .where(eq(users.id, userId));
+        // Handle TON payment
+        if (currency === "TON") {
+          if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
+            throw new Error("TON transaction details required");
+          }
 
+          // Verify TON amount matches upgrade cost
+          if (parseFloat(tonAmount) < upgradeCost) {
+            throw new Error(`Insufficient TON amount. Required: ${upgradeCost} TON`);
+          }
+
+          // Verify TON transaction
+          const isValid = await verifyTONTransaction(
+            tonTransactionHash,
+            userWalletAddress,
+            tonAmount
+          );
+
+          if (!isValid) {
+            throw new Error("TON transaction verification failed");
+          }
+        } else {
+          // Handle CS/CHST payment
+          const user = await tx.select().from(users).where(eq(users.id, userId));
+          const balanceField = currency === "CS" ? "csBalance" : "chstBalance";
+          const currentBalance = user[0][balanceField];
+
+          if (currentBalance < upgradeCost) {
+            throw new Error(`Insufficient ${currency} balance. Need ${upgradeCost} ${currency}`);
+          }
+
+          // Deduct balance
+          await tx.update(users)
+            .set({
+              [balanceField]: sql`${balanceField === "csBalance" ? users.csBalance : users.chstBalance} - ${upgradeCost}`
+            })
+            .where(eq(users.id, userId));
+        }
+
+        // Upgrade component
+        const newLevel = currentLevel + 1;
         await tx.update(componentUpgrades)
           .set({
             currentLevel: newLevel,
@@ -287,6 +360,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           componentType,
           newLevel,
           upgradeCost,
+          currency,
           hashrateIncrease,
           message: `${componentType} upgraded to level ${newLevel}! +${hashrateIncrease.toFixed(2)} GH/s`
         };
@@ -710,23 +784,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/admin/reset-all-users", validateTelegramAuth, requireAdmin, async (req, res) => {
     try {
       const result = await db.transaction(async (tx: any) => {
+        // Import all schema tables needed for reset
+        const { 
+          userDailyChallenges, userAchievements, userCosmetics, 
+          userStreaks, userHourlyBonuses, userSpins, spinHistory,
+          equipmentPresets, priceAlerts, autoUpgradeSettings,
+          packPurchases, userPrestige, prestigeHistory, userSubscriptions, userStatistics
+        } = await import("@shared/schema");
+
         // Delete all data in correct order (respecting foreign keys)
+        // Order matters: delete child tables before parent tables
+        
+        // User-specific data first
+        const deletedSpinHistory = await tx.delete(spinHistory);
+        const deletedUserSpins = await tx.delete(userSpins);
+        const deletedUserHourlyBonuses = await tx.delete(userHourlyBonuses);
+        const deletedUserStreaks = await tx.delete(userStreaks);
         const deletedActivePowerUps = await tx.delete(activePowerUps);
         const deletedPowerUpPurchases = await tx.delete(powerUpPurchases);
         const deletedLootBoxPurchases = await tx.delete(lootBoxPurchases);
         const deletedDailyClaims = await tx.delete(dailyClaims);
         const deletedUserTasks = await tx.delete(userTasks);
+        const deletedUserDailyChallenges = await tx.delete(userDailyChallenges);
+        const deletedUserAchievements = await tx.delete(userAchievements);
+        const deletedUserCosmetics = await tx.delete(userCosmetics);
+        const deletedEquipmentPresets = await tx.delete(equipmentPresets);
+        const deletedPriceAlerts = await tx.delete(priceAlerts);
+        const deletedAutoUpgradeSettings = await tx.delete(autoUpgradeSettings);
+        const deletedPackPurchases = await tx.delete(packPurchases);
+        const deletedPrestigeHistory = await tx.delete(prestigeHistory);
+        const deletedUserPrestige = await tx.delete(userPrestige);
+        const deletedUserSubscriptions = await tx.delete(userSubscriptions);
+        const deletedUserStatistics = await tx.delete(userStatistics);
+        
+        // Block rewards and blocks
         const deletedBlockRewards = await tx.delete(blockRewards);
         const deletedBlocks = await tx.delete(blocks);
+        
+        // Equipment-related
         const deletedComponentUpgrades = await tx.delete(componentUpgrades);
         const deletedOwnedEquipment = await tx.delete(ownedEquipment);
+        
+        // Referrals
         const deletedReferrals = await tx.delete(referrals);
 
         // Get user count before reset
         const allUsers = await tx.select().from(users);
         const userCount = allUsers.length;
 
-        // Reset all users' balances and hashrate (keep accounts)
+        // Reset all users' balances, hashrate, and progress (keep accounts)
         await tx.update(users).set({
           csBalance: 0,
           chstBalance: 0,
@@ -737,11 +843,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           success: true,
           users_reset: userCount,
           records_deleted: {
+            spin_history: deletedSpinHistory.length || 0,
+            user_spins: deletedUserSpins.length || 0,
+            user_hourly_bonuses: deletedUserHourlyBonuses.length || 0,
+            user_streaks: deletedUserStreaks.length || 0,
             active_power_ups: deletedActivePowerUps.length || 0,
             power_up_purchases: deletedPowerUpPurchases.length || 0,
             loot_box_purchases: deletedLootBoxPurchases.length || 0,
             daily_claims: deletedDailyClaims.length || 0,
             user_tasks: deletedUserTasks.length || 0,
+            user_daily_challenges: deletedUserDailyChallenges.length || 0,
+            user_achievements: deletedUserAchievements.length || 0,
+            user_cosmetics: deletedUserCosmetics.length || 0,
+            equipment_presets: deletedEquipmentPresets.length || 0,
+            price_alerts: deletedPriceAlerts.length || 0,
+            auto_upgrade_settings: deletedAutoUpgradeSettings.length || 0,
+            pack_purchases: deletedPackPurchases.length || 0,
+            prestige_history: deletedPrestigeHistory.length || 0,
+            user_prestige: deletedUserPrestige.length || 0,
+            user_subscriptions: deletedUserSubscriptions.length || 0,
+            user_statistics: deletedUserStatistics.length || 0,
             block_rewards: deletedBlockRewards.length || 0,
             blocks: deletedBlocks.length || 0,
             component_upgrades: deletedComponentUpgrades.length || 0,
@@ -761,6 +882,146 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({
         error: "Reset failed: Database transaction error",
         details: "All changes have been rolled back. Database is in original state.",
+      });
+    }
+  });
+
+  // Recalculate all users' hashrates from actual equipment - admin only
+  app.post("/api/admin/recalculate-hashrates", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const result = await db.transaction(async (tx: any) => {
+        // Get all users
+        const allUsers = await tx.select().from(users);
+        let usersUpdated = 0;
+        const updates = [];
+
+        for (const user of allUsers) {
+          // Get user's equipment
+          const equipment = await tx.select()
+            .from(ownedEquipment)
+            .leftJoin(equipmentTypes, eq(ownedEquipment.equipmentTypeId, equipmentTypes.id))
+            .where(eq(ownedEquipment.userId, user.telegramId));
+
+          // Calculate total hashrate from equipment
+          const actualHashrate = equipment.reduce((sum: number, row: any) => {
+            return sum + (row.owned_equipment?.currentHashrate || 0);
+          }, 0);
+
+          // Update if there's a mismatch
+          if (user.totalHashrate !== actualHashrate) {
+            await tx.update(users)
+              .set({ totalHashrate: actualHashrate })
+              .where(eq(users.telegramId, user.telegramId));
+
+            usersUpdated++;
+            updates.push({
+              userId: user.telegramId,
+              username: user.username,
+              oldHashrate: user.totalHashrate,
+              newHashrate: actualHashrate,
+              equipmentCount: equipment.length
+            });
+          }
+        }
+
+        return {
+          success: true,
+          totalUsers: allUsers.length,
+          usersUpdated,
+          updates: updates.slice(0, 20), // Return first 20 for logging
+        };
+      });
+
+      console.log(`Hashrate recalculation complete: ${result.usersUpdated}/${result.totalUsers} users updated`);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Hashrate recalculation error:", error);
+      res.status(500).json({
+        error: "Hashrate recalculation failed",
+        details: error.message,
+      });
+    }
+  });
+
+  // Get all jackpot wins (admin only)
+  app.get("/api/admin/jackpots", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const { jackpotWins } = await import("@shared/schema");
+      
+      const allJackpots = await db.select().from(jackpotWins)
+        .orderBy(sql`${jackpotWins.wonAt} DESC`);
+
+      const unpaidCount = allJackpots.filter(j => !j.paidOut).length;
+      const totalPaidOut = allJackpots.filter(j => j.paidOut).length;
+
+      res.json({
+        success: true,
+        jackpots: allJackpots,
+        summary: {
+          total_wins: allJackpots.length,
+          unpaid: unpaidCount,
+          paid: totalPaidOut,
+        },
+      });
+    } catch (error: any) {
+      console.error("Get jackpots error:", error);
+      res.status(500).json({
+        error: "Failed to fetch jackpots",
+        details: error.message,
+      });
+    }
+  });
+
+  // Mark jackpot as paid (admin only)
+  app.post("/api/admin/jackpots/:jackpotId/mark-paid", validateTelegramAuth, requireAdmin, async (req, res) => {
+    const { jackpotId } = req.params;
+    const { notes } = req.body;
+    
+    try {
+      const { jackpotWins } = await import("@shared/schema");
+      const adminUser = req.user; // From auth middleware
+
+      const result = await db.transaction(async (tx: any) => {
+        // Get jackpot
+        const jackpot = await tx.select().from(jackpotWins)
+          .where(eq(jackpotWins.id, parseInt(jackpotId)))
+          .limit(1);
+
+        if (!jackpot[0]) {
+          throw new Error("Jackpot not found");
+        }
+
+        if (jackpot[0].paidOut) {
+          throw new Error("Jackpot already marked as paid");
+        }
+
+        // Mark as paid
+        await tx.update(jackpotWins)
+          .set({
+            paidOut: true,
+            paidAt: new Date(),
+            paidByAdmin: adminUser?.telegramId || 'unknown',
+            notes: notes || null,
+          })
+          .where(eq(jackpotWins.id, parseInt(jackpotId)));
+
+        const updated = await tx.select().from(jackpotWins)
+          .where(eq(jackpotWins.id, parseInt(jackpotId)))
+          .limit(1);
+
+        return updated[0];
+      });
+
+      console.log(`Jackpot ${jackpotId} marked as paid by admin ${req.user?.telegramId}`);
+      res.json({
+        success: true,
+        jackpot: result,
+        message: "Jackpot marked as paid successfully",
+      });
+    } catch (error: any) {
+      console.error("Mark jackpot paid error:", error);
+      res.status(400).json({
+        error: error.message || "Failed to mark jackpot as paid",
       });
     }
   });
@@ -950,7 +1211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Grant rewards
         await tx.update(users)
-          .set({ 
+          .set({
             csBalance: sql`${users.csBalance} + ${rewardCs}`,
             chstBalance: sql`${users.chstBalance} + ${rewardChst}`
           })
@@ -1098,7 +1359,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Grant rewards
         await tx.update(users)
-          .set({ 
+          .set({
             csBalance: sql`${users.csBalance} + ${rewardCs}`,
             chstBalance: sql`${users.chstBalance} + ${rewardChst}`
           })
@@ -1473,7 +1734,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           boost_percentage: powerUp.boostPercentage,
           activated_at: powerUp.activatedAt.toISOString(),
           expires_at: powerUp.expiresAt.toISOString(),
-          time_remaining_seconds: Math.floor(timeRemaining / 1000),
+          time_remaining_seconds: Math.floor(timeRemaining / 1000 / 60),
         };
       });
 
@@ -1487,6 +1748,140 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Get active power-ups error:", error);
       res.status(500).json({ error: "Failed to get active power-ups" });
+    }
+  });
+
+  // ==========================================
+  // LOOT BOX / MYSTERY BOX ROUTES
+  // ==========================================
+
+  app.post("/api/user/:userId/lootbox/open", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { boxType, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
+
+    if (!boxType) {
+      return res.status(400).json({ error: "Box type is required" });
+    }
+
+    try {
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users)
+          .where(eq(users.id, userId))
+          .for('update');
+        if (!user[0]) throw new Error("User not found");
+
+        // Define box types and their rewards
+        const boxRewards: Record<string, { tonCost: number; minCS: number; maxCS: number; }> = {
+          'basic': { tonCost: 0.5, minCS: 50000, maxCS: 55000 }, // 100-110% RTP
+          'premium': { tonCost: 2, minCS: 200000, maxCS: 220000 },
+          'epic': { tonCost: 5, minCS: 500000, maxCS: 550000 },
+          'daily-task': { tonCost: 0, minCS: 5000, maxCS: 10000 }, // Free box
+          'invite-friend': { tonCost: 0, minCS: 10000, maxCS: 15000 }, // Free box
+        };
+
+        const boxConfig = boxRewards[boxType];
+        if (!boxConfig) {
+          throw new Error("Invalid box type");
+        }
+
+        // Handle TON payment boxes
+        if (boxConfig.tonCost > 0) {
+          if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
+            throw new Error("TON transaction details required for paid boxes");
+          }
+
+          // Verify TON amount matches box cost
+          if (parseFloat(tonAmount) < boxConfig.tonCost) {
+            throw new Error(`Insufficient TON amount. Required: ${boxConfig.tonCost} TON`);
+          }
+
+          // Check if transaction was already used
+          const existingPurchase = await tx.select().from(lootBoxPurchases)
+            .where(eq(lootBoxPurchases.tonTransactionHash, tonTransactionHash))
+            .limit(1);
+
+          if (existingPurchase[0]) {
+            throw new Error("This transaction has already been used");
+          }
+
+          // Verify TON transaction
+          const isValid = await verifyTONTransaction(
+            tonTransactionHash,
+            "0.1", // 0.1 TON per paid spin
+            gameWallet,
+            userWalletAddress
+          );
+
+          if (!isValid) {
+            throw new Error("TON transaction verification failed");
+          }
+        }
+
+        // Calculate random reward (CS currency)
+        const csReward = Math.floor(
+          boxConfig.minCS + Math.random() * (boxConfig.maxCS - boxConfig.minCS)
+        );
+
+        // Determine if user gets bonus items (10% chance for premium/epic)
+        const bonusChance = boxType === 'epic' ? 0.2 : boxType === 'premium' ? 0.1 : 0;
+        const getBonus = Math.random() < bonusChance;
+
+        const rewards: any = {
+          cs: csReward,
+        };
+
+        // Add bonus rewards
+        if (getBonus) {
+          const bonusType = Math.random();
+          if (bonusType < 0.5) {
+            // CHST bonus
+            rewards.chst = Math.floor(csReward * 0.1); // 10% of CS reward in CHST
+          } else {
+            // Free spin bonus
+            rewards.freeSpins = boxType === 'epic' ? 3 : 1;
+          }
+        }
+
+        // Update user balance
+        await tx.update(users)
+          .set({
+            csBalance: sql`${users.csBalance} + ${rewards.cs}`,
+            ...(rewards.chst && { chstBalance: sql`${users.chstBalance} + ${rewards.chst}` }),
+          })
+          .where(eq(users.id, userId));
+
+        // Record purchase if TON was paid
+        if (boxConfig.tonCost > 0) {
+          await tx.insert(lootBoxPurchases).values({
+            userId: user[0].telegramId,
+            boxType,
+            tonAmount: tonAmount.toString(),
+            tonTransactionHash,
+            tonTransactionVerified: true,
+            rewardsJson: JSON.stringify(rewards),
+          });
+        }
+
+        // Get updated user balance
+        const updatedUser = await tx.select().from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+
+        return {
+          success: true,
+          rewards,
+          newBalance: {
+            cs: updatedUser[0].csBalance,
+            chst: updatedUser[0].chstBalance,
+          },
+        };
+      });
+
+      console.log(`Loot box opened: ${boxType} for user ${userId}, rewards:`, result.rewards);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Loot box open error:", error);
+      res.status(400).json({ error: error.message || "Failed to open loot box" });
     }
   });
 
@@ -2331,10 +2726,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Spin the wheel
   app.post("/api/user/:userId/spin", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
-    const { isFree, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
+    const { isFree, quantity = 1, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
 
     try {
-      const { userSpins, spinHistory, userStatistics } = await import("@shared/schema");
+      const { userSpins, spinHistory, userStatistics, jackpotWins } = await import("@shared/schema");
+
+      // Validate quantity
+      if (![1, 10, 20].includes(quantity) && !isFree) {
+        return res.status(400).json({ error: "Invalid quantity. Must be 1, 10, or 20" });
+      }
+
+      // Calculate expected TON cost
+      const tonPricing: Record<number, number> = {
+        1: 0.1,
+        10: 0.9,  // 10% discount
+        20: 1.7,  // 15% discount
+      };
 
       const result = await db.transaction(async (tx: any) => {
         const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
@@ -2371,16 +2778,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (todaySpins[0].freeSpinUsed) {
             throw new Error("Free spin already used today");
           }
+          if (quantity !== 1) {
+            throw new Error("Free spin can only be used once");
+          }
         } else {
           // Paid spin - verify TON payment
           if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
             throw new Error("Payment verification required");
           }
 
+          const expectedCost = tonPricing[quantity];
           const gameWallet = getGameWalletAddress();
+          
           const verification = await verifyTONTransaction(
             tonTransactionHash,
-            "0.1", // 0.1 TON per paid spin
+            expectedCost.toString(),
             gameWallet,
             userWalletAddress
           );
@@ -2390,68 +2802,146 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        // Determine prize (random)
-        const rand = Math.random();
-        let prizeType, prizeValue, reward;
+        // Process multiple spins
+        const prizes: any[] = [];
+        let totalCs = 0;
+        let totalChst = 0;
+        let jackpotWon = false;
 
-        if (rand < 0.4) {
-          // 40% - CS prize
-          const csAmounts = [1000, 2500, 5000, 10000, 25000];
-          prizeValue = csAmounts[Math.floor(Math.random() * csAmounts.length)];
-          prizeType = "cs";
-          reward = { cs: prizeValue };
+        for (let i = 0; i < quantity; i++) {
+          // Check for JACKPOT first (0.1% chance = 1 in 1000)
+          const jackpotRoll = Math.random();
+          
+          if (jackpotRoll < 0.001 && !isFree) {
+            // JACKPOT WON! 1 TON prize
+            jackpotWon = true;
+            const prizeType = "jackpot";
+            const prizeValue = "1.0 TON";
 
+            // Record jackpot win for admin
+            await tx.insert(jackpotWins).values({
+              userId: user[0].telegramId,
+              username: user[0].username || user[0].telegramId,
+              walletAddress: userWalletAddress || null,
+              amount: "1.0",
+              paidOut: false,
+            });
+
+            prizes.push({
+              type: prizeType,
+              value: prizeValue,
+              display: "🎰 1 TON JACKPOT! 🎰",
+            });
+
+            // Record in history
+            await tx.insert(spinHistory).values({
+              userId: user[0].telegramId,
+              prizeType,
+              prizeValue,
+              wasFree: isFree,
+            });
+
+            continue; // Skip normal prize for this spin
+          }
+
+          // Normal prize distribution
+          const rand = Math.random();
+          let prizeType, prizeValue;
+
+          if (rand < 0.4) {
+            // 40% - CS prize
+            const csAmounts = [1000, 2500, 5000, 10000, 25000];
+            prizeValue = csAmounts[Math.floor(Math.random() * csAmounts.length)];
+            prizeType = "cs";
+            totalCs += prizeValue;
+
+            prizes.push({
+              type: prizeType,
+              value: prizeValue,
+              display: `${prizeValue.toLocaleString()} CS`,
+            });
+          } else if (rand < 0.7) {
+            // 30% - CHST prize
+            const chstAmounts = [50, 100, 250, 500];
+            prizeValue = chstAmounts[Math.floor(Math.random() * chstAmounts.length)];
+            prizeType = "chst";
+            totalChst += prizeValue;
+
+            prizes.push({
+              type: prizeType,
+              value: prizeValue,
+              display: `${prizeValue.toLocaleString()} CHST`,
+            });
+          } else if (rand < 0.9) {
+            // 20% - Power-up (give CS equivalent)
+            prizeType = "powerup";
+            prizeValue = 5000;
+            totalCs += prizeValue;
+
+            prizes.push({
+              type: prizeType,
+              value: prizeValue,
+              display: "Power-up Boost (5,000 CS)",
+            });
+          } else {
+            // 10% - Equipment (give CS equivalent)
+            prizeType = "equipment";
+            prizeValue = 10000;
+            totalCs += prizeValue;
+
+            prizes.push({
+              type: prizeType,
+              value: prizeValue,
+              display: "Equipment Bonus (10,000 CS)",
+            });
+          }
+
+          // Record in history
+          await tx.insert(spinHistory).values({
+            userId: user[0].telegramId,
+            prizeType,
+            prizeValue: prizeValue.toString(),
+            wasFree: isFree,
+          });
+        }
+
+        // Update user balances
+        if (totalCs > 0) {
           await tx.update(users)
-            .set({ csBalance: sql`${users.csBalance} + ${prizeValue}` })
+            .set({ csBalance: sql`${users.csBalance} + ${totalCs}` })
             .where(eq(users.id, userId));
 
           await tx.insert(userStatistics)
             .values({
               userId: user[0].telegramId,
-              totalCsEarned: prizeValue,
+              totalCsEarned: totalCs,
             })
             .onConflictDoUpdate({
               target: userStatistics.userId,
               set: {
-                totalCsEarned: sql`${userStatistics.totalCsEarned} + ${prizeValue}`,
+                totalCsEarned: sql`${userStatistics.totalCsEarned} + ${totalCs}`,
                 updatedAt: sql`NOW()`,
               },
             });
-        } else if (rand < 0.7) {
-          // 30% - CHST prize
-          const chstAmounts = [50, 100, 250, 500];
-          prizeValue = chstAmounts[Math.floor(Math.random() * chstAmounts.length)];
-          prizeType = "chst";
-          reward = { chst: prizeValue };
+        }
 
+        if (totalChst > 0) {
           await tx.update(users)
-            .set({ chstBalance: sql`${users.chstBalance} + ${prizeValue}` })
+            .set({ chstBalance: sql`${users.chstBalance} + ${totalChst}` })
             .where(eq(users.id, userId));
 
           await tx.insert(userStatistics)
             .values({
               userId: user[0].telegramId,
-              totalChstEarned: prizeValue,
+              totalChstEarned: totalChst,
             })
             .onConflictDoUpdate({
               target: userStatistics.userId,
               set: {
-                totalChstEarned: sql`${userStatistics.totalChstEarned} + ${prizeValue}`,
+                totalChstEarned: sql`${userStatistics.totalChstEarned} + ${totalChst}`,
                 updatedAt: sql`NOW()`,
               },
             });
-        } else if (rand < 0.9) {
-          // 20% - Power-up
-          prizeType = "powerup";
-          prizeValue = "luck-boost-24h";
-          reward = { powerup: "Luck Boost (24h)" };
-          // Note: Would need to activate power-up here
-        } else {
-          // 10% - Equipment (small item)
-          prizeType = "equipment";
-          prizeValue = "gaming-laptop";
-          reward = { equipment: "Gaming Laptop" };
-          // Note: Would need to grant equipment here
         }
 
         // Update spin record
@@ -2468,7 +2958,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else {
           await tx.update(userSpins)
             .set({
-              paidSpinsCount: sql`${userSpins.paidSpinsCount} + 1`,
+              paidSpinsCount: sql`${userSpins.paidSpinsCount} + ${quantity}`,
               lastSpinAt: sql`NOW()`,
             })
             .where(and(
@@ -2477,19 +2967,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ));
         }
 
-        // Record in history
-        await tx.insert(spinHistory).values({
-          userId: user[0].telegramId,
-          prizeType,
-          prizeValue: prizeValue.toString(),
-          wasFree: isFree,
-        });
+        // Format response message
+        let message = "";
+        if (jackpotWon) {
+          message = "🎰💰 JACKPOT! You won 1 TON! Admin will process your payout. ";
+        }
+
+        if (quantity === 1) {
+          message += prizes[0].display;
+        } else {
+          message += `${quantity} spins complete! `;
+          if (totalCs > 0) message += `${totalCs.toLocaleString()} CS `;
+          if (totalChst > 0) message += `${totalChst.toLocaleString()} CHST `;
+        }
 
         return {
           success: true,
-          prize: { type: prizeType, value: prizeValue },
-          reward,
-          message: `You won ${JSON.stringify(reward)}!`,
+          prizes,
+          summary: {
+            total_cs: totalCs,
+            total_chst: totalChst,
+            jackpot_won: jackpotWon,
+            spins_completed: quantity,
+          },
+          message,
         };
       });
 
@@ -2739,44 +3240,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
+      const { equipmentTypes, userCosmetics, userStatistics } = await import("@shared/schema");
 
-      // Get equipment details
-      const equipment = await db.select().from(equipmentTypes)
-        .where(eq(equipmentTypes.id, equipmentTypeId))
-        .limit(1);
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
+        if (!user[0]) throw new Error("User not found");
 
-      if (!equipment[0]) {
-        return res.status(404).json({ error: "Equipment not found" });
-      }
+        // Check if alert already exists
+        const existingAlert = await tx.select().from(priceAlerts)
+          .where(and(
+            eq(priceAlerts.userId, user[0].telegramId),
+            eq(priceAlerts.equipmentTypeId, equipmentTypeId)
+          ))
+          .limit(1);
 
-      // Check if alert already exists
-      const existingAlert = await db.select().from(priceAlerts)
-        .where(and(
-          eq(priceAlerts.userId, user.telegramId),
-          eq(priceAlerts.equipmentTypeId, equipmentTypeId)
-        ))
-        .limit(1);
+        if (existingAlert.length > 0) {
+          throw new Error("Alert already exists for this equipment");
+        }
 
-      if (existingAlert.length > 0) {
-        return res.status(400).json({ error: "Alert already exists for this equipment" });
-      }
+        // Get equipment details
+        const equipment = await tx.select().from(equipmentTypes)
+          .where(and(
+            eq(equipmentTypes.id, equipmentTypeId),
+            eq(equipmentTypes.isActive, true)
+          ))
+          .limit(1);
 
-      // Create alert
-      const newAlert = await db.insert(priceAlerts).values({
-        userId: user.telegramId,
-        equipmentTypeId,
-        targetPrice: equipment[0].basePrice,
-        triggered: false,
-      }).returning();
+        if (!equipment[0]) {
+          throw new Error("Equipment not found");
+        }
+
+        // Create alert
+        const newAlert = await tx.insert(priceAlerts).values({
+          userId: user[0].telegramId,
+          equipmentTypeId,
+          targetPrice: equipment[0].basePrice,
+          triggered: false,
+        }).returning();
+
+        return newAlert[0];
+      });
 
       res.json({
         success: true,
         message: `Alert set for ${equipment[0].name}`,
-        alert: newAlert[0],
+        alert: result,
       });
     } catch (error: any) {
       console.error("Create price alert error:", error);
@@ -2789,8 +3297,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { userId, alertId } = req.params;
 
     try {
-      const user = await storage.getUser(userId);
-      if (!user) {
+      const { equipmentTypes, userCosmetics, userStatistics } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
         return res.status(404).json({ error: "User not found" });
       }
 
@@ -2798,7 +3308,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const alert = await db.select().from(priceAlerts)
         .where(and(
           eq(priceAlerts.id, parseInt(alertId)),
-          eq(priceAlerts.userId, user.telegramId)
+          eq(priceAlerts.userId, user[0].telegramId)
         ))
         .limit(1);
 
@@ -3227,10 +3737,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { seasonId } = req.params;
     const { isActive } = req.body;
 
-    if (isActive === undefined) {
-      return res.status(400).json({ error: "isActive field is required" });
-    }
-
     try {
       const existing = await db.select().from(seasons)
         .where(eq(seasons.seasonId, seasonId))
@@ -3318,7 +3824,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Purchase pack with TON
   app.post("/api/user/:userId/packs/purchase", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
-    const { packType, tonTransactionHash, tonAmount } = req.body;
+    const { packType, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
 
     if (!packType || !tonTransactionHash || !tonAmount) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -3361,8 +3867,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Grant rewards
         await tx.update(users)
           .set({
-            csBalance: user[0].csBalance + rewards.cs,
-            chstBalance: user[0].chstBalance + rewards.chst,
+            csBalance: sql`${users.csBalance} + ${rewards.cs}`,
+            chstBalance: sql`${users.chstBalance} + ${rewards.chst}`
           })
           .where(eq(users.id, userId));
 

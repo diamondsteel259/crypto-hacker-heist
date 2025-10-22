@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, Pause, Play, Users, Settings as SettingsIcon, DollarSign, RotateCcw, AlertTriangle, Edit } from "lucide-react";
+import { Shield, Pause, Play, Users, Settings as SettingsIcon, DollarSign, RotateCcw, AlertTriangle, Edit, TrendingUp } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getTelegramInitData } from "@/lib/user";
 import type { User, GameSetting, EquipmentType } from "@shared/schema";
@@ -135,6 +135,37 @@ export default function Admin() {
       toast({
         title: "Reset Failed",
         description: error.message || "Failed to reset game data",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const recalculateHashratesMutation = useMutation({
+    mutationFn: async () => {
+      const initData = getTelegramInitData();
+      if (!initData) throw new Error('Not authenticated');
+      
+      const response = await fetch(`/api/admin/recalculate-hashrates`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': initData,
+        },
+      });
+      if (!response.ok) throw new Error('Failed to recalculate hashrates');
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      toast({
+        title: "Hashrates Recalculated",
+        description: `Updated ${data.usersUpdated} out of ${data.totalUsers} users with corrected hashrates`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Recalculation Failed",
+        description: error.message || "Failed to recalculate hashrates",
         variant: "destructive",
       });
     },
@@ -454,6 +485,39 @@ export default function Admin() {
         </Card>
         <SeasonsAdmin />
 
+        {/* Recalculate Hashrates Section */}
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-cyan-500" />
+            Recalculate Hashrates
+          </h3>
+          
+          <div className="p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-md">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-cyan-500 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold mb-2">
+                  Fix Hashrate Inconsistencies
+                </p>
+                <p className="text-sm text-muted-foreground mb-3">
+                  This will recalculate all users' total hashrate based on their actual equipment. 
+                  Use this to fix data inconsistencies (e.g., user shows hashrate but has no rigs).
+                  This is a safe operation that only updates hashrate values.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => recalculateHashratesMutation.mutate()}
+                  disabled={recalculateHashratesMutation.isPending}
+                  className="border-cyan-500 text-cyan-500 hover:bg-cyan-500/10"
+                >
+                  <TrendingUp className="w-4 h-4 mr-2" />
+                  {recalculateHashratesMutation.isPending ? "Recalculating..." : "Recalculate All Hashrates"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Card>
 
         {/* Game Reset Section */}
         <Card className="p-6">

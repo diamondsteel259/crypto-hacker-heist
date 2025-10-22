@@ -1,5 +1,5 @@
 import { storage, db } from "./storage";
-import { blocks, blockRewards, users, activePowerUps } from "@shared/schema";
+import { blocks, blockRewards, users, activePowerUps, ownedEquipment, equipmentTypes } from "@shared/schema";
 import { eq, sql, and } from "drizzle-orm";
 
 const BLOCK_INTERVAL = 5 * 60 * 1000; // 5 minutes
@@ -12,6 +12,7 @@ export class MiningService {
 
   async start() {
     await this.initializeBlockNumber();
+    await this.recalculateAllHashrates();
     
     this.intervalId = setInterval(async () => {
       try {
@@ -35,6 +36,43 @@ export class MiningService {
   async initializeBlockNumber() {
     const latestBlock = await storage.getLatestBlock();
     this.lastBlockNumber = latestBlock?.blockNumber ?? 0;
+  }
+
+  async recalculateAllHashrates() {
+    console.log("Recalculating all user hashrates from equipment...");
+    try {
+      const result = await db.transaction(async (tx: any) => {
+        const allUsers = await tx.select().from(users);
+        let usersUpdated = 0;
+
+        for (const user of allUsers) {
+          // Get user's equipment
+          const equipment = await tx.select()
+            .from(ownedEquipment)
+            .leftJoin(equipmentTypes, eq(ownedEquipment.equipmentTypeId, equipmentTypes.id))
+            .where(eq(ownedEquipment.userId, user.telegramId));
+
+          // Calculate total hashrate from equipment
+          const actualHashrate = equipment.reduce((sum: number, row: any) => {
+            return sum + (row.owned_equipment?.currentHashrate || 0);
+          }, 0);
+
+          // Update if there's a mismatch
+          if (user.totalHashrate !== actualHashrate) {
+            await tx.update(users)
+              .set({ totalHashrate: actualHashrate })
+              .where(eq(users.telegramId, user.telegramId));
+            usersUpdated++;
+          }
+        }
+
+        return { totalUsers: allUsers.length, usersUpdated };
+      });
+
+      console.log(`Hashrate recalculation complete: ${result.usersUpdated}/${result.totalUsers} users updated`);
+    } catch (error) {
+      console.error("Hashrate recalculation error:", error);
+    }
   }
 
   async mineBlock() {

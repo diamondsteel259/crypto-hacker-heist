@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Monitor, Cpu, Server, Boxes, Zap, Rocket, Shield, ShoppingBag, CheckCircle2, Gem, Star, Crown, Sparkles, Gift, ChevronDown, ChevronUp, Bell } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { RewardModal } from "@/components/RewardModal";
 import { getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useTonConnect, sendTonTransaction, getTonBalance } from "@/lib/tonConnect";
@@ -21,6 +22,7 @@ const tierColors = {
   Professional: "bg-chart-2/20 text-chart-2 border-chart-2/30",
   Enterprise: "bg-chart-3/20 text-chart-3 border-chart-3/30",
   Specialized: "bg-chart-4/20 text-chart-4 border-chart-4/30",
+  Server: "bg-purple-500/20 text-purple-400 border-purple-500/30",
   ASIC: "bg-neon-orange/20 text-neon-orange border-neon-orange/30",
   "Data Center": "bg-chart-5/20 text-chart-5 border-chart-5/30",
 };
@@ -145,16 +147,33 @@ function EquipmentCard({ equipment, owned, onPurchase, onTonPurchase, isPurchasi
 // TON payment address as specified by user
 const TON_PAYMENT_ADDRESS = "UQBdFhwckY9C8MU0AC4uiPbRH_C3QIjZH6OzV47ROfHjnyfe";
 
+interface ActivePowerUp {
+  id: number;
+  type: string;
+  boost_percentage: number;
+  activated_at: string;
+  expires_at: string;
+  time_remaining_seconds: number;
+}
+
+interface ActivePowerUpsResponse {
+  active_power_ups: ActivePowerUp[];
+  effects?: {
+    total_hashrate_boost: number;
+    total_luck_boost: number;
+  };
+}
+
 export default function Shop() {
   const [activeTab, setActiveTab] = useState("equipment");
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [tonBalance, setTonBalance] = useState<string>("0.0000");
   const { toast } = useToast();
+  const { tonConnectUI, isConnected, userFriendlyAddress } = useTonConnect();
   const userId = getCurrentUserId();
+  const [rewardModalOpen, setRewardModalOpen] = useState(false);
+  const [rewardModalData, setRewardModalData] = useState<any>(null);
   
-  // Initialize TON Connect
-  const { isConnected, userFriendlyAddress, tonConnectUI } = useTonConnect();
-
   console.log("Shop component rendering...");
 
   // Fetch TON balance when wallet is connected
@@ -177,7 +196,7 @@ export default function Shop() {
     // Refresh balance every 30 seconds
     const interval = setInterval(fetchTonBalance, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isConnected, userFriendlyAddress]);
 
   const { data: allEquipment = [], isLoading: isLoadingTypes, error: equipmentError, refetch: refetchEquipment } = useQuery<EquipmentType[]>({
     queryKey: ["/api/equipment-types"],
@@ -618,27 +637,41 @@ export default function Shop() {
       if (isConnected) {
         getTonBalance(userFriendlyAddress).then(setTonBalance).catch(console.error);
       }
-      toast({ 
-        title: "Loot box opened!",
-        description: `You received: ${data.rewards?.cs ? `${data.rewards.cs} CS` : ''} ${data.rewards?.chst ? `${data.rewards.chst} CHST` : ''}`
+
+      // Show reward modal instead of toast
+      setRewardModalData({
+        rewards: data.rewards,
+        boxType: data.boxType || 'mystery',
       });
+      setRewardModalOpen(true);
     },
     onError: (error: any) => {
-      console.error("Loot box opening failed:", error);
-      toast({ 
-        title: "Loot box failed", 
-        description: error.message || "Failed to open loot box. Please try again.",
-        variant: "destructive" 
+      console.error("Loot box open failed:", error);
+      toast({
+        title: "Failed to open loot box",
+        description: error.message || "Something went wrong",
+        variant: "destructive",
       });
     },
   });
 
   const componentUpgradeMutation = useMutation({
-    mutationFn: async ({ equipmentId, componentType, currency }: { equipmentId: string; componentType: string; currency: string }) => {
+    mutationFn: async ({ equipmentId, componentType, currency, tonTransactionHash, userWalletAddress, tonAmount }: { 
+      equipmentId: string; 
+      componentType: string; 
+      currency: string;
+      tonTransactionHash?: string;
+      userWalletAddress?: string;
+      tonAmount?: string;
+    }) => {
       const response = await apiRequest(
         "POST",
         `/api/user/${userId}/equipment/${equipmentId}/components/upgrade`,
-        { componentType, currency }
+        { 
+          componentType, 
+          currency,
+          ...(tonTransactionHash && { tonTransactionHash, userWalletAddress, tonAmount })
+        }
       );
       return response.json();
     },
@@ -651,6 +684,11 @@ export default function Shop() {
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "equipment"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId, "components", "all"] });
+      
+      // Refresh TON balance if paid with TON
+      if (data.currency === "TON" && isConnected) {
+        getTonBalance(userFriendlyAddress).then(setTonBalance).catch(console.error);
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -728,6 +766,12 @@ export default function Shop() {
       </div>
     );
   }
+
+  const { data: activePowerUps } = useQuery<ActivePowerUpsResponse>({
+    queryKey: ['/api/user', userId, 'powerups', 'active'],
+    enabled: !!userId,
+    refetchInterval: 10000, // Refresh every 10 seconds
+  });
 
   return (
     <div className="min-h-screen bg-background p-3">
@@ -909,7 +953,51 @@ export default function Shop() {
                             
                             const baseCost = owned.equipmentType.basePrice * 0.1;
                             const currentLevel = getComponentLevel(owned.id, componentType);
-                            const upgradeCost = Math.floor(baseCost * componentMultiplier * Math.pow(1.15, currentLevel));
+                            const upgradeCostCS = Math.floor(baseCost * componentMultiplier * Math.pow(1.15, currentLevel));
+                            const upgradeCostTON = (upgradeCostCS / 10000).toFixed(3);
+                            
+                            const handleComponentUpgrade = async (currency: string) => {
+                              if (currentLevel >= 10) return;
+
+                              if (currency === "TON") {
+                                if (!isConnected) {
+                                  await tonConnectUI.openModal();
+                                  return;
+                                }
+
+                                try {
+                                  const txHash = await sendTonTransaction(
+                                    tonConnectUI,
+                                    "GAME_WALLET_ADDRESS_HERE",
+                                    upgradeCostTON,
+                                    `Component: ${componentType} Upgrade`
+                                  );
+
+                                  if (txHash) {
+                                    componentUpgradeMutation.mutate({
+                                      equipmentId: owned.id,
+                                      componentType,
+                                      currency,
+                                      tonTransactionHash: txHash,
+                                      userWalletAddress: userFriendlyAddress,
+                                      tonAmount: upgradeCostTON,
+                                    });
+                                  }
+                                } catch (error: any) {
+                                  toast({
+                                    title: "Transaction Failed",
+                                    description: error.message || "Failed to send TON transaction",
+                                    variant: "destructive",
+                                  });
+                                }
+                              } else {
+                                componentUpgradeMutation.mutate({
+                                  equipmentId: owned.id,
+                                  componentType,
+                                  currency
+                                });
+                              }
+                            };
                             
                             return (
                               <div key={componentType} className="p-3 border rounded-lg">
@@ -920,20 +1008,42 @@ export default function Shop() {
                                 <p className="text-xs text-muted-foreground mb-2">
                                   +{(owned.equipmentType.baseHashrate * 0.05 * owned.quantity).toFixed(2)} GH/s
                                 </p>
-                                <Button 
-                                  size="sm" 
-                                  className="w-full text-xs bg-matrix-green hover:bg-matrix-green/90 text-black"
-                                  onClick={() => {
-                                    componentUpgradeMutation.mutate({
-                                      equipmentId: owned.id,
-                                      componentType,
-                                      currency: "CS"
-                                    });
-                                  }}
-                                  disabled={componentUpgradeMutation.isPending || currentLevel >= 10}
-                                >
-                                  {componentUpgradeMutation.isPending ? "Upgrading..." : currentLevel >= 10 ? "Max Level" : `Upgrade: ${upgradeCost.toLocaleString()} CS`}
-                                </Button>
+                                {currentLevel >= 10 ? (
+                                  <Button size="sm" className="w-full text-xs" disabled>
+                                    Max Level
+                                  </Button>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <Button 
+                                      size="sm" 
+                                      className="w-full text-xs bg-matrix-green hover:bg-matrix-green/90 text-black"
+                                      onClick={() => handleComponentUpgrade("CS")}
+                                      disabled={componentUpgradeMutation.isPending}
+                                    >
+                                      {componentUpgradeMutation.isPending ? "..." : `${upgradeCostCS.toLocaleString()} CS`}
+                                    </Button>
+                                    <div className="grid grid-cols-2 gap-1">
+                                      <Button 
+                                        size="sm" 
+                                        variant="outline"
+                                        className="text-xs"
+                                        onClick={() => handleComponentUpgrade("CHST")}
+                                        disabled={componentUpgradeMutation.isPending}
+                                      >
+                                        {componentUpgradeMutation.isPending ? "..." : `${upgradeCostCS.toLocaleString()} CHST`}
+                                      </Button>
+                                      <Button 
+                                        size="sm" 
+                                        variant="outline"
+                                        className="text-xs border-cyber-blue text-cyber-blue"
+                                        onClick={() => handleComponentUpgrade("TON")}
+                                        disabled={componentUpgradeMutation.isPending}
+                                      >
+                                        {componentUpgradeMutation.isPending ? "..." : `${upgradeCostTON} TON`}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -976,13 +1086,34 @@ export default function Shop() {
 
           <TabsContent value="powerups" className="space-y-4">
             <div className="space-y-4">
+              {/* Active Power-Ups Indicator */}
+              {activePowerUps && activePowerUps.active_power_ups && activePowerUps.active_power_ups.length > 0 && (
+                <Card className="p-4 bg-matrix-green/10 border-matrix-green/30">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Zap className="w-5 h-5 text-matrix-green animate-pulse" />
+                    <h3 className="text-sm md:text-lg font-semibold text-matrix-green">Active Boosts</h3>
+                  </div>
+                  {activePowerUps.active_power_ups.map((powerUp) => {
+                    const minutes = Math.floor(powerUp.time_remaining_seconds);
+                    return (
+                      <div key={powerUp.id} className="flex items-center justify-between text-xs md:text-sm">
+                        <span className="font-medium">
+                          {powerUp.type === "hashrate-boost" ? "⚡ Hashrate" : "✨ Luck"} +{powerUp.boost_percentage}%
+                        </span>
+                        <span className="text-muted-foreground">{minutes}m left</span>
+                      </div>
+                    );
+                  })}
+                </Card>
+              )}
+
               <Card className="p-4">
                 <div className="flex items-center gap-3 mb-3">
-                  <Zap className="w-4 md:w-5 h-4 md:h-5 text-yellow-500" />
-                  <h3 className="text-sm md:text-lg font-semibold">Daily Free Power-Ups</h3>
+                  <Star className="w-4 md:w-5 h-4 md:h-5 text-yellow-500" />
+                  <h3 className="text-sm md:text-lg font-semibold">Daily Currency Claims</h3>
                 </div>
                 <p className="text-xs md:text-sm text-muted-foreground mb-4">
-                  Get 5 free CS/CHST every day!
+                  Claim small amounts of CS or CHST currency for free! Limited to 5 claims per day (resets at midnight). These are NOT mining boosts - just free currency to help you get started.
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <Button 
@@ -991,7 +1122,7 @@ export default function Shop() {
                     disabled={powerUpClaimMutation.isPending}
                   >
                     <Star className="w-3 md:w-4 h-3 md:h-4 mr-1 md:mr-2" />
-                    {powerUpClaimMutation.isPending ? "..." : "Claim CS"}
+                    {powerUpClaimMutation.isPending ? "..." : "Claim 5 CS"}
                   </Button>
                   <Button 
                     className="bg-cyber-blue hover:bg-cyber-blue/90 text-white text-xs md:text-sm"
@@ -999,7 +1130,7 @@ export default function Shop() {
                     disabled={powerUpClaimMutation.isPending}
                   >
                     <Crown className="w-3 md:w-4 h-3 md:h-4 mr-1 md:mr-2" />
-                    {powerUpClaimMutation.isPending ? "..." : "Claim CHST"}
+                    {powerUpClaimMutation.isPending ? "..." : "Claim 2 CHST"}
                   </Button>
                 </div>
               </Card>
@@ -1007,29 +1138,60 @@ export default function Shop() {
               <Card className="p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <Rocket className="w-4 md:w-5 h-4 md:h-5 text-purple-500" />
-                  <h3 className="text-sm md:text-lg font-semibold">Premium Power-Ups</h3>
+                  <h3 className="text-sm md:text-lg font-semibold">Mining Boost Power-Ups</h3>
                 </div>
                 <p className="text-xs md:text-sm text-muted-foreground mb-4">
-                  TON purchases for boosts
+                  Purchase temporary mining boosts with TON. These power-ups last for 1 hour and boost your mining performance! You also receive bonus CS currency instantly.
                 </p>
                 <div className="grid grid-cols-1 gap-3">
-                  <Button 
-                    className="bg-cyber-blue hover:bg-cyber-blue/90 text-white text-xs md:text-sm"
-                    onClick={() => premiumPowerUpMutation.mutate({ powerUpType: "hashrate-boost", tonAmount: 0.1 })}
-                    disabled={premiumPowerUpMutation.isPending}
-                  >
-                    <Shield className="w-3 md:w-4 h-3 md:h-4 mr-1 md:mr-2" />
-                    {premiumPowerUpMutation.isPending ? "Buying..." : "Hashrate +50% (0.1 TON)"}
-                  </Button>
-                  <Button 
-                    className="bg-cyber-blue hover:bg-cyber-blue/90 text-white text-xs md:text-sm"
-                    onClick={() => premiumPowerUpMutation.mutate({ powerUpType: "luck-boost", tonAmount: 0.2 })}
-                    disabled={premiumPowerUpMutation.isPending}
-                  >
-                    <Sparkles className="w-3 md:w-4 h-3 md:h-4 mr-1 md:mr-2" />
-                    {premiumPowerUpMutation.isPending ? "Buying..." : "Luck +25% (0.2 TON)"}
-                  </Button>
+                  <div className="border border-cyber-blue/30 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Shield className="w-4 h-4 text-cyber-blue" />
+                        <span className="font-semibold text-sm">Hashrate Boost</span>
+                      </div>
+                      <Badge variant="outline" className="text-xs bg-cyber-blue/20 text-cyber-blue">+50%</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Increases your mining hashrate by 50% for 1 hour. Mine blocks faster and earn more rewards! Includes 100 CS bonus.
+                    </p>
+                    <Button 
+                      className="w-full bg-cyber-blue hover:bg-cyber-blue/90 text-white text-xs md:text-sm"
+                      onClick={() => premiumPowerUpMutation.mutate({ powerUpType: "hashrate-boost", tonAmount: 0.2 })}
+                      disabled={premiumPowerUpMutation.isPending}
+                    >
+                      <Zap className="w-3 md:w-4 h-3 md:h-4 mr-1 md:mr-2" />
+                      {premiumPowerUpMutation.isPending ? "Buying..." : "Buy for 0.2 TON"}
+                    </Button>
+                  </div>
+
+                  <div className="border border-purple-500/30 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-500" />
+                        <span className="font-semibold text-sm">Luck Boost</span>
+                      </div>
+                      <Badge variant="outline" className="text-xs bg-purple-500/20 text-purple-500">+20%</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Increases your block reward luck by 20% for 1 hour. Get better rewards from mined blocks! Includes 50 CS bonus.
+                    </p>
+                    <Button 
+                      className="w-full bg-purple-500 hover:bg-purple-600 text-white text-xs md:text-sm"
+                      onClick={() => premiumPowerUpMutation.mutate({ powerUpType: "luck-boost", tonAmount: 0.1 })}
+                      disabled={premiumPowerUpMutation.isPending}
+                    >
+                      <Sparkles className="w-3 md:w-4 h-3 md:h-4 mr-1 md:mr-2" />
+                      {premiumPowerUpMutation.isPending ? "Buying..." : "Buy for 0.1 TON"}
+                    </Button>
+                  </div>
                 </div>
+              </Card>
+
+              <Card className="p-4 bg-muted/30">
+                <p className="text-xs text-muted-foreground">
+                  💡 <strong>Tip:</strong> Power-ups stack with your equipment! Check the Dashboard to see your active boosts and time remaining.
+                </p>
               </Card>
             </div>
           </TabsContent>
@@ -1218,6 +1380,17 @@ export default function Shop() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Reward Modal */}
+        <RewardModal
+          open={rewardModalOpen}
+          onClose={() => {
+            setRewardModalOpen(false);
+            setRewardModalData(null);
+          }}
+          rewards={rewardModalData?.rewards || {}}
+          boxType={rewardModalData?.boxType}
+        />
       </div>
     </div>
   );
