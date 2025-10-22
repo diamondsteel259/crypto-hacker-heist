@@ -60,18 +60,39 @@ function AppContent() {
   const [userInitError, setUserInitError] = useState<string | null>(null);
 
   useEffect(() => {
-    setUserInitLoading(true);
-    initializeUser()
-      .then((id) => {
+    const initializeApp = async () => {
+      setUserInitLoading(true);
+      
+      // Check backend health first
+      try {
+        const healthResponse = await fetch('/api/health');
+        const healthData = await healthResponse.json();
+        
+        if (healthData.status === 'degraded') {
+          setUserInitError("Service is temporarily unavailable. Please try again in a few minutes.");
+          setUserInitLoading(false);
+          return;
+        }
+      } catch (error) {
+        // Health check failed, but could be client network issue
+        // Proceed anyway and let user init handle the error
+        console.warn('Health check failed, proceeding with initialization:', error);
+      }
+      
+      // Initialize user
+      try {
+        const id = await initializeUser();
         setUserId(id);
         setUserInitLoading(false);
         setUserInitError(null);
-      })
-      .catch((err) => {
+      } catch (err: any) {
         console.error('Failed to initialize user:', err);
         setUserInitError(err.message || "Failed to initialize. Please try again.");
         setUserInitLoading(false);
-      });
+      }
+    };
+    
+    initializeApp();
   }, []);
 
   const { data: userProfile } = useQuery({
