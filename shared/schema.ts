@@ -287,6 +287,20 @@ export const dailyLoginRewards = pgTable("daily_login_rewards", {
   userLoginRewardIdx: index("daily_login_rewards_user_idx").on(table.userId, table.loginDate),
 }));
 
+// Flash Sales
+export const flashSales = pgTable("flash_sales", {
+  id: serial("id").primaryKey(),
+  equipmentId: text("equipment_id").notNull().references(() => equipmentTypes.id),
+  discountPercentage: integer("discount_percentage").notNull(), // 10-50%
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  equipmentIdx: index("flash_sales_equipment_idx").on(table.equipmentId),
+  activeIdx: index("flash_sales_active_idx").on(table.isActive, table.endTime),
+}));
+
 // Hourly Bonuses
 export const userHourlyBonuses = pgTable("user_hourly_bonuses", {
   id: serial("id").primaryKey(),
