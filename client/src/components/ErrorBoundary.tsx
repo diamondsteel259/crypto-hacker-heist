@@ -28,11 +28,12 @@ class ErrorBoundary extends Component<Props, State> {
 
   handleReportIssue = () => {
     // Open Telegram support if available
+    const botUsername = import.meta.env.VITE_BOT_USERNAME || 'cryptohackerheist_bot';
     if (window.Telegram?.WebApp?.openTelegramLink) {
       // Replace with actual support bot or channel
-      window.Telegram.WebApp.openTelegramLink('https://t.me/cryptohackerheist_bot');
+      window.Telegram.WebApp.openTelegramLink(`https://t.me/${botUsername}`);
     } else if (window.Telegram?.WebApp?.openLink) {
-      window.Telegram.WebApp.openLink('https://t.me/cryptohackerheist_bot');
+      window.Telegram.WebApp.openLink(`https://t.me/${botUsername}`);
     }
   }
 
