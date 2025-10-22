@@ -17,7 +17,7 @@ import { initializeUser, getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLoadingTimeout } from "@/hooks/use-loading-timeout";
-// import { hapticSuccess } from "@/lib/telegram";
+import { hapticSuccess, hapticLight, hapticError } from "@/lib/telegram";
 import type { User } from "@shared/schema";
 
 interface ActivePowerUp {
