@@ -24,6 +24,7 @@ import SpinWheel from "@/pages/SpinWheel";
 import Admin from "@/pages/Admin";
 import Packs from "@/pages/Packs";
 import Subscription from "@/pages/Subscription";
+import Leaderboard from "@/pages/Leaderboard";
 import NotFound from "@/pages/not-found";
 import { initializeUser } from "@/lib/user";
 import { apiRequest } from "@/lib/queryClient";
@@ -37,6 +38,7 @@ function Router() {
       <Route path="/shop" component={Shop} />
       <Route path="/blocks" component={BlockExplorer} />
       <Route path="/referrals" component={Referrals} />
+      <Route path="/leaderboard" component={Leaderboard} />
       <Route path="/challenges" component={Challenges} />
       <Route path="/achievements" component={Achievements} />
       <Route path="/cosmetics" component={Cosmetics} />
