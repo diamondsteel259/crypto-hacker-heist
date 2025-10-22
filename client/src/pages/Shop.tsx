@@ -205,7 +205,7 @@ export default function Shop() {
   const { data: allEquipment = [], isLoading: isLoadingTypes, error: equipmentError, refetch: refetchEquipment } = useQuery<EquipmentType[]>({
     queryKey: ["/api/equipment-types"],
     staleTime: 0,
-    cacheTime: 0,
+    gcTime: 0,
   });
 
   const { data: ownedEquipment = [] } = useQuery<UserEquipment[]>({
