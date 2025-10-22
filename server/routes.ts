@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, db } from "./storage";
 import { insertUserSchema, insertOwnedEquipmentSchema } from "@shared/schema";
-import { users, ownedEquipment, equipmentTypes, referrals, componentUpgrades, blockRewards, blocks, dailyClaims, userTasks, powerUpPurchases, lootBoxPurchases, activePowerUps, priceAlerts, autoUpgradeSettings, seasons, packPurchases, userPrestige, prestigeHistory, userSubscriptions, userStatistics, dailyLoginRewards, userStreaks } from "@shared/schema";
+import { users, ownedEquipment, equipmentTypes, referrals, componentUpgrades, blockRewards, blocks, dailyClaims, userTasks, powerUpPurchases, lootBoxPurchases, activePowerUps, priceAlerts, autoUpgradeSettings, seasons, packPurchases, userPrestige, prestigeHistory, userSubscriptions, userStatistics, dailyLoginRewards, userStreaks, featureFlags } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { validateTelegramAuth, requireAdmin, verifyUserAccess, type AuthRequest } from "./middleware/auth";
 import { verifyTONTransaction, getGameWalletAddress, isValidTONAddress } from "./tonVerification";
@@ -957,6 +957,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     const setting = await storage.setGameSetting(key, value);
     res.json(setting);
+  });
+
+  // Feature flags routes
+  app.get("/api/admin/feature-flags", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const flags = await db.select().from(featureFlags).orderBy(featureFlags.featureName);
+      res.json(flags);
+    } catch (error) {
+      console.error('Error fetching feature flags:', error);
+      res.status(500).json({ error: "Failed to fetch feature flags" });
+    }
+  });
+
+  app.post("/api/admin/feature-flags/:key", validateTelegramAuth, requireAdmin, async (req: AuthRequest, res) => {
+    const { key } = req.params;
+    const { isEnabled } = req.body;
+    
+    if (typeof isEnabled !== 'boolean') {
+      return res.status(400).json({ error: "isEnabled must be a boolean" });
+    }
+
+    try {
+      const updated = await db.update(featureFlags)
+        .set({ 
+          isEnabled, 
+          updatedAt: new Date(),
+          updatedBy: req.telegramUser?.id?.toString() || 'unknown'
+        })
+        .where(eq(featureFlags.featureKey, key))
+        .returning();
+
+      if (updated.length === 0) {
+        return res.status(404).json({ error: "Feature flag not found" });
+      }
+
+      res.json(updated[0]);
+    } catch (error) {
+      console.error('Error updating feature flag:', error);
+      res.status(500).json({ error: "Failed to update feature flag" });
+    }
+  });
+
+  // Public endpoint to get enabled features (for navigation)
+  app.get("/api/feature-flags", async (req, res) => {
+    try {
+      const flags = await db.select({
+        featureKey: featureFlags.featureKey,
+        isEnabled: featureFlags.isEnabled
+      }).from(featureFlags);
+      
+      const enabledFeatures = flags.reduce((acc, flag) => {
+        acc[flag.featureKey] = flag.isEnabled;
+        return acc;
+      }, {} as Record<string, boolean>);
+      
+      res.json(enabledFeatures);
+    } catch (error) {
+      console.error('Error fetching feature flags:', error);
+      // Return all enabled if error (fail-open)
+      res.json({});
+    }
   });
 
   app.get("/api/admin/users", validateTelegramAuth, requireAdmin, async (req, res) => {
@@ -2146,7 +2207,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .where(eq(lootBoxPurchases.tonTransactionHash, tonTransactionHash))
             .limit(1);
 
-          if (existingPurchase[0]) {
+          if (existingPurchase.length > 0) {
             throw new Error("This transaction has already been used");
           }
 
