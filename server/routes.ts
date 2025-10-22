@@ -970,6 +970,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: true });
   });
 
+  // Update user balances - admin only
+  app.post("/api/admin/users/:userId/balance", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { csBalance, chstBalance } = req.body;
+
+      if (csBalance === undefined && chstBalance === undefined) {
+        return res.status(400).json({ error: "At least one balance must be provided" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Build update object with only provided values
+      const updates: any = {};
+      if (csBalance !== undefined) updates.csBalance = Math.max(0, Number(csBalance));
+      if (chstBalance !== undefined) updates.chstBalance = Math.max(0, Number(chstBalance));
+
+      await db.update(users)
+        .set(updates)
+        .where(eq(users.id, userId));
+
+      const updatedUser = await storage.getUser(userId);
+      res.json({ 
+        success: true, 
+        user: {
+          id: updatedUser?.id,
+          username: updatedUser?.username,
+          csBalance: updatedUser?.csBalance,
+          chstBalance: updatedUser?.chstBalance
+        }
+      });
+    } catch (error: any) {
+      console.error("Update balance error:", error);
+      res.status(500).json({ error: "Failed to update balance" });
+    }
+  });
+
   // Get payment history for a specific user - admin only
   app.get("/api/admin/users/:userId/payment-history", validateTelegramAuth, requireAdmin, async (req, res) => {
     try {
