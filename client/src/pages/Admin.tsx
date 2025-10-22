@@ -111,6 +111,34 @@ export default function Admin() {
     },
   });
 
+  const updateBalanceMutation = useMutation({
+    mutationFn: async ({ userId, csBalance, chstBalance }: { userId: string; csBalance?: number; chstBalance?: number }) => {
+      const initData = getTelegramInitData();
+      if (!initData) throw new Error('Not authenticated');
+      
+      const response = await fetch(`/api/admin/users/${userId}/balance`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Telegram-Init-Data': initData,
+        },
+        body: JSON.stringify({ csBalance, chstBalance }),
+      });
+      if (!response.ok) throw new Error('Failed to update balance');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      setSelectedUserForBalanceEdit(null);
+      setEditCs("");
+      setEditChst("");
+      toast({
+        title: "Balance Updated",
+        description: "User balance has been updated successfully",
+      });
+    },
+  });
+
   const resetGameMutation = useMutation({
     mutationFn: async () => {
       const initData = getTelegramInitData();
