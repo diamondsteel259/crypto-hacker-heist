@@ -2654,6 +2654,165 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ==========================================
+  // DAILY LOGIN REWARDS ROUTES
+  // ==========================================
+
+  // Get daily login reward status
+  app.get("/api/user/:userId/daily-login/status", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const { dailyLoginRewards, userStreaks } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+
+      // Check if already claimed today
+      const todayClaim = await db.select().from(dailyLoginRewards)
+        .where(and(
+          eq(dailyLoginRewards.userId, user[0].telegramId),
+          eq(dailyLoginRewards.loginDate, today)
+        ))
+        .limit(1);
+
+      if (todayClaim[0]) {
+        return res.json({
+          alreadyClaimed: true,
+          claimedAt: todayClaim[0].claimedAt,
+          streakDay: todayClaim[0].streakDay,
+          reward: {
+            cs: todayClaim[0].rewardCs,
+            chst: todayClaim[0].rewardChst,
+            item: todayClaim[0].rewardItem,
+          },
+        });
+      }
+
+      // Get current streak to determine next reward
+      const streak = await db.select().from(userStreaks)
+        .where(eq(userStreaks.userId, user[0].telegramId))
+        .limit(1);
+
+      const currentStreak = streak[0]?.currentStreak || 0;
+      const nextReward = calculateDailyLoginReward(currentStreak + 1);
+
+      res.json({
+        alreadyClaimed: false,
+        nextStreakDay: currentStreak + 1,
+        nextReward,
+      });
+    } catch (error: any) {
+      console.error("Get daily login status error:", error);
+      res.status(500).json({ error: "Failed to get daily login status" });
+    }
+  });
+
+  // Claim daily login reward
+  app.post("/api/user/:userId/daily-login/claim", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const { dailyLoginRewards, userStreaks } = await import("@shared/schema");
+
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+
+      // Check if already claimed today
+      const todayClaim = await db.select().from(dailyLoginRewards)
+        .where(and(
+          eq(dailyLoginRewards.userId, user[0].telegramId),
+          eq(dailyLoginRewards.loginDate, today)
+        ))
+        .limit(1);
+
+      if (todayClaim[0]) {
+        return res.status(400).json({ error: "Already claimed today's reward" });
+      }
+
+      // Get or create streak
+      const streak = await db.select().from(userStreaks)
+        .where(eq(userStreaks.userId, user[0].telegramId))
+        .limit(1);
+
+      let currentStreakDay = 1;
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+      if (streak[0]) {
+        if (streak[0].lastLoginDate === yesterdayStr) {
+          // Streak continues
+          currentStreakDay = streak[0].currentStreak + 1;
+        } else if (streak[0].lastLoginDate === today) {
+          // Already logged in today
+          currentStreakDay = streak[0].currentStreak;
+        } else {
+          // Streak broke, reset to 1
+          currentStreakDay = 1;
+        }
+
+        // Update streak
+        const newLongest = Math.max(currentStreakDay, streak[0].longestStreak);
+        await db.update(userStreaks)
+          .set({
+            currentStreak: currentStreakDay,
+            longestStreak: newLongest,
+            lastLoginDate: today,
+            updatedAt: sql`NOW()`,
+          })
+          .where(eq(userStreaks.userId, user[0].telegramId));
+      } else {
+        // Create new streak
+        await db.insert(userStreaks).values({
+          userId: user[0].telegramId,
+          currentStreak: 1,
+          longestStreak: 1,
+          lastLoginDate: today,
+        });
+      }
+
+      // Calculate reward
+      const reward = calculateDailyLoginReward(currentStreakDay);
+
+      // Award rewards
+      await db.update(users)
+        .set({
+          csBalance: sql`${users.csBalance} + ${reward.cs}`,
+          chstBalance: sql`${users.chstBalance} + ${reward.chst}`,
+        })
+        .where(eq(users.id, userId));
+
+      // Record in daily login rewards
+      await db.insert(dailyLoginRewards).values({
+        userId: user[0].telegramId,
+        loginDate: today,
+        streakDay: currentStreakDay,
+        rewardCs: reward.cs,
+        rewardChst: reward.chst,
+        rewardItem: reward.item,
+      });
+
+      res.json({
+        success: true,
+        streakDay: currentStreakDay,
+        reward,
+        message: `Day ${currentStreakDay} reward claimed!`,
+      });
+    } catch (error: any) {
+      console.error("Claim daily login error:", error);
+      res.status(500).json({ error: "Failed to claim daily login reward" });
+    }
+  });
+
+  // ==========================================
   // HOURLY BONUS ROUTES
   // ==========================================
 
@@ -4309,4 +4468,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
   return httpServer;
+}
+
+function calculateDailyLoginReward(day: number): { cs: number; chst: number; item: string } {
+  const rewards: Record<number, { cs: number; chst: number; item: string }> = {
+    1: { cs: 1000, chst: 0, item: "1000 CS" },
+    2: { cs: 2000, chst: 0, item: "2000 CS" },
+    3: { cs: 3000, chst: 0, item: "3000 CS" },
+    4: { cs: 4000, chst: 0, item: "4000 CS" },
+    5: { cs: 5000, chst: 0, item: "5000 CS" },
+    6: { cs: 6000, chst: 0, item: "6000 CS" },
+    7: { cs: 7000, chst: 0, item: "7000 CS" },
+    8: { cs: 8000, chst: 0, item: "8000 CS" },
+    9: { cs: 9000, chst: 0, item: "9000 CS" },
+    10: { cs: 10000, chst: 0, item: "10,000 CS" },
+    11: { cs: 11000, chst: 0, item: "11,000 CS" },
+    12: { cs: 12000, chst: 0, item: "12,000 CS" },
+    13: { cs: 13000, chst: 0, item: "13,000 CS" },
+    14: { cs: 14000, chst: 0, item: "14,000 CS" },
+    15: { cs: 15000, chst: 0, item: "15,000 CS" },
+    16: { cs: 16000, chst: 0, item: "16,000 CS" },
+    17: { cs: 17000, chst: 0, item: "17,000 CS" },
+    18: { cs: 18000, chst: 0, item: "18,000 CS" },
+    19: { cs: 19000, chst: 0, item: "19,000 CS" },
+    20: { cs: 20000, chst: 0, item: "20,000 CS" },
+    21: { cs: 21000, chst: 0, item: "21,000 CS" },
+    22: { cs: 22000, chst: 0, item: "22,000 CS" },
+    23: { cs: 23000, chst: 0, item: "23,000 CS" },
+    24: { cs: 24000, chst: 0, item: "24,000 CS" },
+    25: { cs: 25000, chst: 0, item: "25,000 CS" },
+    26: { cs: 26000, chst: 0, item: "26,000 CS" },
+    27: { cs: 27000, chst: 0, item: "27,000 CS" },
+    28: { cs: 28000, chst: 0, item: "28,000 CS" },
+    29: { cs: 29000, chst: 0, item: "29,000 CS" },
+    30: { cs: 30000, chst: 0, item: "30,000 CS" },
+  };
+
+  return rewards[day] || { cs: 0, chst: 0, item: "0 CS" };
 }
