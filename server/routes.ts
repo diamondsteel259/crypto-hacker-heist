@@ -10,6 +10,35 @@ import { miningService } from "./mining";
 import { getBotWebhookHandler } from "./bot";
 import { queryClient } from "./queryClient";
 
+// Helper function to calculate daily login rewards based on streak day
+function calculateDailyLoginReward(streakDay: number): { cs: number; chst: number; item: string | null } {
+  // Rewards escalate each day, with special bonuses on day 7, 14, 21, etc.
+  const baseCs = 500;
+  const baseChst = 10;
+  
+  // Calculate CS reward (increases by 500 each day)
+  const cs = baseCs * streakDay;
+  
+  // Calculate CHST reward (increases by 10 each day)
+  const chst = baseChst * streakDay;
+  
+  // Special items on milestone days
+  let item: string | null = null;
+  
+  if (streakDay % 30 === 0) {
+    // Every 30 days: Epic reward
+    item = "epic_power_boost";
+  } else if (streakDay % 14 === 0) {
+    // Every 14 days: Rare reward
+    item = "rare_power_boost";
+  } else if (streakDay % 7 === 0) {
+    // Every 7 days: Common reward
+    item = "common_power_boost";
+  }
+  
+  return { cs, chst, item };
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health endpoint for Render
   app.get("/healthz", async (_req, res) => {
@@ -904,7 +933,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const deletedPowerUpPurchases = await tx.delete(powerUpPurchases);
         const deletedLootBoxPurchases = await tx.delete(lootBoxPurchases);
         const deletedDailyClaims = await tx.delete(dailyClaims);
-        const deletedUserTasks = await tx.delete(userTasks);
         const deletedUserDailyChallenges = await tx.delete(userDailyChallenges);
         const deletedUserAchievements = await tx.delete(userAchievements);
         const deletedUserCosmetics = await tx.delete(userCosmetics);
@@ -951,7 +979,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             power_up_purchases: deletedPowerUpPurchases.length || 0,
             loot_box_purchases: deletedLootBoxPurchases.length || 0,
             daily_claims: deletedDailyClaims.length || 0,
-            user_tasks: deletedUserTasks.length || 0,
             user_daily_challenges: deletedUserDailyChallenges.length || 0,
             user_achievements: deletedUserAchievements.length || 0,
             user_cosmetics: deletedUserCosmetics.length || 0,
@@ -1191,7 +1218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const completed = await db.select().from(userTasks)
         .where(eq(userTasks.userId, user[0].telegramId));
 
-      const completedTaskIds = completed.map(t => t.taskId);
+      const completedTaskIds = completed.map(c => c.taskId);
 
       res.json({
         completed_task_ids: completedTaskIds,
@@ -1677,9 +1704,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const result = await db.transaction(async (tx: any) => {
-        const user = await tx.select().from(users)
-          .where(eq(users.id, userId))
-          .for('update');
+        const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
         if (!user[0]) throw new Error("User not found");
 
         // Check if transaction hash already used
@@ -2579,73 +2604,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const today = new Date().toISOString().split('T')[0];
 
-      const existing = await db.select().from(userStreaks)
+      // Check if already checked in today
+      const todayClaim = await db.select().from(userStreaks)
         .where(eq(userStreaks.userId, user[0].telegramId))
         .limit(1);
 
-      if (!existing[0]) {
-        // First login
-        await db.insert(userStreaks).values({
-          userId: user[0].telegramId,
-          currentStreak: 1,
-          longestStreak: 1,
-          lastLoginDate: today,
-        });
-
+      if (todayClaim[0]) {
         return res.json({
-          currentStreak: 1,
-          longestStreak: 1,
-          message: "Welcome! Streak started!",
-          reward: 1000,
-        });
-      }
-
-      // Check if already checked in today
-      if (existing[0].lastLoginDate === today) {
-        return res.json({
-          currentStreak: existing[0].currentStreak,
-          longestStreak: existing[0].longestStreak,
+          currentStreak: todayClaim[0].currentStreak,
+          longestStreak: todayClaim[0].longestStreak,
           message: "Already checked in today",
           reward: 0,
         });
       }
 
-      // Check if streak continues or breaks
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      // Get current streak to determine next reward
+      const streak = await db.select().from(userStreaks)
+        .where(eq(userStreaks.userId, user[0].telegramId))
+        .limit(1);
 
-      let newStreak = 1;
-      if (existing[0].lastLoginDate === yesterdayStr) {
-        // Streak continues
-        newStreak = existing[0].currentStreak + 1;
-      }
-
-      const newLongest = Math.max(newStreak, existing[0].longestStreak);
-
-      // Calculate reward based on streak
-      const reward = Math.min(1000 * newStreak, 30000); // Max 30k at 30 day streak
-
-      // Update user CS balance
-      await db.update(users)
-        .set({ csBalance: sql`${users.csBalance} + ${reward}` })
-        .where(eq(users.id, userId));
-
-      // Update streak
-      await db.update(userStreaks)
-        .set({
-          currentStreak: newStreak,
-          longestStreak: newLongest,
-          lastLoginDate: today,
-          updatedAt: sql`NOW()`,
-        })
-        .where(eq(userStreaks.userId, user[0].telegramId));
+      const currentStreak = streak[0]?.currentStreak || 0;
+      const nextReward = calculateDailyLoginReward(currentStreak + 1);
 
       res.json({
-        currentStreak: newStreak,
-        longestStreak: newLongest,
-        message: `Day ${newStreak} streak! Earned ${reward} CS`,
-        reward,
+        currentStreak: currentStreak + 1,
+        longestStreak: currentStreak + 1,
+        message: "Day 1 streak! Earned 1000 CS",
+        reward: nextReward.cs,
       });
     } catch (error: any) {
       console.error("Check-in streak error:", error);
@@ -3720,7 +3705,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .set({
             targetLevel,
             enabled: enabled !== undefined ? enabled : true,
-            updatedAt: new Date(),
+            updatedAt: sql`NOW()`,
           })
           .where(eq(autoUpgradeSettings.id, existingSetting[0].id))
           .returning();
