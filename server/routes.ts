@@ -2,12 +2,13 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, db } from "./storage";
 import { insertUserSchema, insertOwnedEquipmentSchema } from "@shared/schema";
-import { users, ownedEquipment, equipmentTypes, referrals, componentUpgrades, blockRewards, blocks, dailyClaims, userTasks, powerUpPurchases, lootBoxPurchases, activePowerUps, priceAlerts, autoUpgradeSettings, seasons, packPurchases, userPrestige, prestigeHistory, userSubscriptions } from "@shared/schema";
+import { users, ownedEquipment, equipmentTypes, referrals, componentUpgrades, blockRewards, blocks, dailyClaims, userTasks, powerUpPurchases, lootBoxPurchases, activePowerUps, priceAlerts, autoUpgradeSettings, seasons, packPurchases, userPrestige, prestigeHistory, userSubscriptions, userStatistics } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { validateTelegramAuth, requireAdmin, verifyUserAccess, type AuthRequest } from "./middleware/auth";
 import { verifyTONTransaction, getGameWalletAddress, isValidTONAddress } from "./tonVerification";
 import { miningService } from "./mining";
 import { getBotWebhookHandler } from "./bot";
+import { queryClient } from "./queryClient";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health endpoint for Render
@@ -710,23 +711,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/admin/reset-all-users", validateTelegramAuth, requireAdmin, async (req, res) => {
     try {
       const result = await db.transaction(async (tx: any) => {
+        // Import all schema tables needed for reset
+        const { 
+          userDailyChallenges, userAchievements, userCosmetics, 
+          userStreaks, userHourlyBonuses, userSpins, spinHistory,
+          equipmentPresets, priceAlerts, autoUpgradeSettings,
+          packPurchases, userPrestige, prestigeHistory, userSubscriptions, userStatistics
+        } = await import("@shared/schema");
+
         // Delete all data in correct order (respecting foreign keys)
+        // Order matters: delete child tables before parent tables
+        
+        // User-specific data first
+        const deletedSpinHistory = await tx.delete(spinHistory);
+        const deletedUserSpins = await tx.delete(userSpins);
+        const deletedUserHourlyBonuses = await tx.delete(userHourlyBonuses);
+        const deletedUserStreaks = await tx.delete(userStreaks);
         const deletedActivePowerUps = await tx.delete(activePowerUps);
         const deletedPowerUpPurchases = await tx.delete(powerUpPurchases);
         const deletedLootBoxPurchases = await tx.delete(lootBoxPurchases);
         const deletedDailyClaims = await tx.delete(dailyClaims);
         const deletedUserTasks = await tx.delete(userTasks);
+        const deletedUserDailyChallenges = await tx.delete(userDailyChallenges);
+        const deletedUserAchievements = await tx.delete(userAchievements);
+        const deletedUserCosmetics = await tx.delete(userCosmetics);
+        const deletedEquipmentPresets = await tx.delete(equipmentPresets);
+        const deletedPriceAlerts = await tx.delete(priceAlerts);
+        const deletedAutoUpgradeSettings = await tx.delete(autoUpgradeSettings);
+        const deletedPackPurchases = await tx.delete(packPurchases);
+        const deletedPrestigeHistory = await tx.delete(prestigeHistory);
+        const deletedUserPrestige = await tx.delete(userPrestige);
+        const deletedUserSubscriptions = await tx.delete(userSubscriptions);
+        const deletedUserStatistics = await tx.delete(userStatistics);
+        
+        // Block rewards and blocks
         const deletedBlockRewards = await tx.delete(blockRewards);
         const deletedBlocks = await tx.delete(blocks);
+        
+        // Equipment-related
         const deletedComponentUpgrades = await tx.delete(componentUpgrades);
         const deletedOwnedEquipment = await tx.delete(ownedEquipment);
+        
+        // Referrals
         const deletedReferrals = await tx.delete(referrals);
 
         // Get user count before reset
         const allUsers = await tx.select().from(users);
         const userCount = allUsers.length;
 
-        // Reset all users' balances and hashrate (keep accounts)
+        // Reset all users' balances, hashrate, and progress (keep accounts)
         await tx.update(users).set({
           csBalance: 0,
           chstBalance: 0,
@@ -737,11 +770,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           success: true,
           users_reset: userCount,
           records_deleted: {
+            spin_history: deletedSpinHistory.length || 0,
+            user_spins: deletedUserSpins.length || 0,
+            user_hourly_bonuses: deletedUserHourlyBonuses.length || 0,
+            user_streaks: deletedUserStreaks.length || 0,
             active_power_ups: deletedActivePowerUps.length || 0,
             power_up_purchases: deletedPowerUpPurchases.length || 0,
             loot_box_purchases: deletedLootBoxPurchases.length || 0,
             daily_claims: deletedDailyClaims.length || 0,
             user_tasks: deletedUserTasks.length || 0,
+            user_daily_challenges: deletedUserDailyChallenges.length || 0,
+            user_achievements: deletedUserAchievements.length || 0,
+            user_cosmetics: deletedUserCosmetics.length || 0,
+            equipment_presets: deletedEquipmentPresets.length || 0,
+            price_alerts: deletedPriceAlerts.length || 0,
+            auto_upgrade_settings: deletedAutoUpgradeSettings.length || 0,
+            pack_purchases: deletedPackPurchases.length || 0,
+            prestige_history: deletedPrestigeHistory.length || 0,
+            user_prestige: deletedUserPrestige.length || 0,
+            user_subscriptions: deletedUserSubscriptions.length || 0,
+            user_statistics: deletedUserStatistics.length || 0,
             block_rewards: deletedBlockRewards.length || 0,
             blocks: deletedBlocks.length || 0,
             component_upgrades: deletedComponentUpgrades.length || 0,
@@ -1603,8 +1651,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Verify TON transaction
           const isValid = await verifyTONTransaction(
             tonTransactionHash,
-            userWalletAddress,
-            tonAmount
+            "0.1", // 0.1 TON per paid spin
+            gameWallet,
+            userWalletAddress
           );
 
           if (!isValid) {
