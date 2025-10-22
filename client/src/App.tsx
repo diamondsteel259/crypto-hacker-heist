@@ -234,8 +234,10 @@ export default function App() {
     }
   }, []);
 
+  const manifestUrl = import.meta.env.VITE_TON_MANIFEST_URL || "https://crypto-hacker-heist.onrender.com/tonconnect-manifest.json";
+
   return (
-    <TonConnectUIProvider manifestUrl="https://crypto-hacker-heist.onrender.com/tonconnect-manifest.json">
+    <TonConnectUIProvider manifestUrl={manifestUrl}>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <AppContent />
