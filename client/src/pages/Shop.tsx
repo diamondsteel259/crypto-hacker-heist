@@ -616,9 +616,16 @@ export default function Shop() {
       if (isConnected) {
         getTonBalance(userFriendlyAddress).then(setTonBalance).catch(console.error);
       }
+
+      // Format rewards message
+      const rewards = [];
+      if (data.rewards?.cs) rewards.push(`${data.rewards.cs.toLocaleString()} CS`);
+      if (data.rewards?.chst) rewards.push(`${data.rewards.chst.toLocaleString()} CHST`);
+      if (data.rewards?.freeSpins) rewards.push(`${data.rewards.freeSpins} Free Spin${data.rewards.freeSpins > 1 ? 's' : ''}`);
+
       toast({ 
-        title: "Loot box opened!",
-        description: `You received: ${data.rewards?.cs ? `${data.rewards.cs} CS` : ''} ${data.rewards?.chst ? `${data.rewards.chst} CHST` : ''}`
+        title: "🎉 You Won!",
+        description: rewards.length > 0 ? `You received: ${rewards.join(', ')}` : "You received rewards!"
       });
     },
     onError: (error: any) => {
