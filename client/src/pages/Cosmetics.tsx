@@ -47,7 +47,7 @@ export default function Cosmetics() {
       .catch(err => console.error('Failed to initialize user:', err));
   }, []);
 
-  const { data: allCosmetics, isLoading: cosmeticsLoading } = useQuery<CosmeticItem[]>({
+  const { data: allCosmetics, isLoading: cosmeticsLoading, refetch: refetchCosmetics } = useQuery<CosmeticItem[]>({
     queryKey: ['/api/cosmetics'],
   });
 
