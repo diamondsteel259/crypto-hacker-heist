@@ -476,6 +476,18 @@ export default function Admin() {
                     >
                       View Payments
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedUserForBalanceEdit(user.id);
+                        setEditCs(user.csBalance.toString());
+                        setEditChst(user.chstBalance.toString());
+                      }}
+                      className="text-xs"
+                    >
+                      Edit Balance
+                    </Button>
                     <Switch
                       checked={user.isAdmin}
                       onCheckedChange={(checked) => 
