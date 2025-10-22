@@ -64,11 +64,18 @@ interface DailyLoginStatus {
   };
 }
 
+interface UserRank {
+  hashrateRank: number;
+  balanceRank: number;
+  totalUsers: number;
+}
+
 export default function Dashboard() {
   const { toast } = useToast();
   const [userId, setUserId] = useState<string | null>(null);
   const lastBlockNumberRef = useRef<number | null>(null);
   const lastBalanceRef = useRef<number | null>(null);
+  const [isMining, setIsMining] = useState(false);
 
   useEffect(() => {
     initializeUser()
@@ -88,6 +95,15 @@ export default function Dashboard() {
     enabled: !!userId,
     refetchInterval: 5000, // Check every 5 seconds for new blocks
   });
+
+  // Mining animation effect - pulse when user has active hashrate
+  useEffect(() => {
+    if (user && user.totalHashrate > 0) {
+      setIsMining(true);
+    } else {
+      setIsMining(false);
+    }
+  }, [user]);
 
   // Monitor for new blocks and show notification if user received reward
   useEffect(() => {
@@ -157,6 +173,12 @@ export default function Dashboard() {
   const { data: dailyLoginStatus } = useQuery<DailyLoginStatus>({
     queryKey: ['/api/user', userId, 'daily-login', 'status'],
     enabled: !!userId,
+  });
+
+  const { data: userRank } = useQuery<UserRank>({
+    queryKey: ['/api/user', userId, 'rank'],
+    enabled: !!userId,
+    refetchInterval: 60000, // Refresh every minute
   });
 
   const checkinMutation = useMutation({
@@ -265,6 +287,11 @@ export default function Dashboard() {
             <p className="text-2xl md:text-3xl font-bold font-mono text-matrix-green">
               {user?.csBalance?.toLocaleString() || 0}
             </p>
+            {userRank && (
+              <p className="text-[10px] md:text-xs text-muted-foreground mt-1">
+                Rank #{userRank.balanceRank} / {userRank.totalUsers}
+              </p>
+            )}
           </Card>
 
           <Card className="p-2.5 md:p-4">
@@ -278,15 +305,28 @@ export default function Dashboard() {
             <p className="text-[10px] md:text-xs text-muted-foreground">Active</p>
           </Card>
 
-          <Card className="p-2.5 md:p-4">
-            <div className="flex items-center gap-1 md:gap-2 mb-1 md:mb-2">
-              <TrendingUp className="w-3 md:w-4 h-3 md:h-4 text-neon-orange" />
-              <p className="text-[10px] md:text-xs text-muted-foreground uppercase">Your HR</p>
+          <Card className={`p-2.5 md:p-4 relative overflow-hidden ${isMining ? 'border-matrix-green/50' : ''}`}>
+            {isMining && (
+              <div className="absolute inset-0 bg-gradient-to-r from-matrix-green/5 via-matrix-green/10 to-matrix-green/5 animate-pulse" />
+            )}
+            <div className="relative z-10">
+              <div className="flex items-center gap-1 md:gap-2 mb-1 md:mb-2">
+                <TrendingUp className={`w-3 md:w-4 h-3 md:h-4 ${isMining ? 'text-matrix-green animate-pulse' : 'text-neon-orange'}`} />
+                <p className="text-[10px] md:text-xs text-muted-foreground uppercase">Your HR</p>
+                {isMining && <Zap className="w-3 h-3 text-matrix-green animate-bounce" />}
+              </div>
+              <p className={`text-lg md:text-2xl font-bold font-mono ${isMining ? 'text-matrix-green' : 'text-foreground'}`} data-testid="text-hashrate">
+                {userLoading ? '...' : (user?.totalHashrate ?? 0).toLocaleString()}
+              </p>
+              <p className="text-[10px] md:text-xs text-muted-foreground">
+                H/s {isMining && '⚡ Mining'}
+              </p>
+              {userRank && (
+                <p className="text-[10px] md:text-xs text-muted-foreground mt-1">
+                  Rank #{userRank.hashrateRank} / {userRank.totalUsers}
+                </p>
+              )}
             </div>
-            <p className="text-lg md:text-2xl font-bold font-mono text-matrix-green" data-testid="text-hashrate">
-              {userLoading ? '...' : (user?.totalHashrate ?? 0).toLocaleString()}
-            </p>
-            <p className="text-[10px] md:text-xs text-muted-foreground">H/s</p>
           </Card>
 
           <Card className="p-2.5 md:p-4">
