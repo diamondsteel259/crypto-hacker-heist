@@ -12,7 +12,7 @@ import PriceAlerts from "@/components/PriceAlerts";
 import ActiveSeason from "@/components/ActiveSeason";
 import PrestigeSystem from "@/components/PrestigeSystem";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Terminal, Gem, Package, TrendingUp, Zap, Shield, Sparkles, Flame, Clock, Gift, Cpu, Coins } from "lucide-react";
+import { Terminal, Gem, Package, TrendingUp, Zap, Shield, Sparkles, Flame, Clock, Gift, Cpu, Coins, ChevronDown, ChevronUp } from "lucide-react";
 import { initializeUser, getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -78,6 +78,7 @@ export default function Dashboard() {
   const lastBlockNumberRef = useRef<number | null>(null);
   const lastBalanceRef = useRef<number | null>(null);
   const [isMining, setIsMining] = useState(false);
+  const [showAllCards, setShowAllCards] = useState(false);
 
   useEffect(() => {
     initializeUser()
@@ -527,55 +528,80 @@ export default function Dashboard() {
         {/* Prestige System */}
         <PrestigeSystem />
 
+        {/* Show More/Less Button */}
+        <div className="flex justify-center">
+          <Button
+            onClick={() => setShowAllCards(!showAllCards)}
+            variant="outline"
+            className="gap-2"
+          >
+            {showAllCards ? (
+              <>
+                <ChevronUp className="w-4 h-4" />
+                Show Less
+              </>
+            ) : (
+              <>
+                <ChevronDown className="w-4 h-4" />
+                Show More Stats
+              </>
+            )}
+          </Button>
+        </div>
 
-        {/* Active Power-Ups */}
-        {activePowerUps && activePowerUps.active_power_ups && activePowerUps.active_power_ups.length > 0 && (
-          <Card className="p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border-purple-500/30">
-            <div className="flex items-center gap-2 mb-3">
-              <Zap className="w-4 md:w-5 h-4 md:h-5 text-yellow-500" />
-              <h3 className="text-sm md:text-base font-semibold">Active Power-Ups</h3>
-              <Badge variant="secondary" className="text-[10px] md:text-xs">
-                {activePowerUps.active_power_ups.length} Active
-              </Badge>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {activePowerUps.active_power_ups.map((powerUp, index) => {
-                const Icon = powerUp.power_up_type === 'hashrate-boost' ? Shield : Sparkles;
-                const color = powerUp.power_up_type === 'hashrate-boost' ? 'text-cyan-400' : 'text-pink-400';
-                const minutes = Math.floor(powerUp.time_remaining_seconds / 60);
-                const seconds = powerUp.time_remaining_seconds % 60;
-                
-                return (
-                  <div key={index} className="p-3 bg-background/50 rounded-lg border border-border">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Icon className={`w-4 h-4 ${color}`} />
-                      <p className="text-xs md:text-sm font-medium">
-                        {powerUp.power_up_type === 'hashrate-boost' ? 'Hashrate Boost' : 'Luck Boost'}
-                      </p>
-                    </div>
-                    <p className="text-lg md:text-2xl font-bold font-mono text-matrix-green">
-                      +{powerUp.boost_percentage}%
-                    </p>
-                    <p className="text-[10px] md:text-xs text-muted-foreground mt-1">
-                      {minutes}m {seconds}s remaining
+        {/* Priority 2/3 Cards - Only show when expanded */}
+        {showAllCards && (
+          <>
+            {/* Active Power-Ups */}
+            {activePowerUps && activePowerUps.active_power_ups && activePowerUps.active_power_ups.length > 0 && (
+              <Card className="p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border-purple-500/30">
+                <div className="flex items-center gap-2 mb-3">
+                  <Zap className="w-4 md:w-5 h-4 md:h-5 text-yellow-500" />
+                  <h3 className="text-sm md:text-base font-semibold">Active Power-Ups</h3>
+                  <Badge variant="secondary" className="text-[10px] md:text-xs">
+                    {activePowerUps.active_power_ups.length} Active
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {activePowerUps.active_power_ups.map((powerUp, index) => {
+                    const Icon = powerUp.power_up_type === 'hashrate-boost' ? Shield : Sparkles;
+                    const color = powerUp.power_up_type === 'hashrate-boost' ? 'text-cyan-400' : 'text-pink-400';
+                    const minutes = Math.floor(powerUp.time_remaining_seconds / 60);
+                    const seconds = powerUp.time_remaining_seconds % 60;
+                    
+                    return (
+                      <div key={index} className="p-3 bg-background/50 rounded-lg border border-border">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Icon className={`w-4 h-4 ${color}`} />
+                          <p className="text-xs md:text-sm font-medium">
+                            {powerUp.power_up_type === 'hashrate-boost' ? 'Hashrate Boost' : 'Luck Boost'}
+                          </p>
+                        </div>
+                        <p className="text-lg md:text-2xl font-bold font-mono text-matrix-green">
+                          +{powerUp.boost_percentage}%
+                        </p>
+                        <p className="text-[10px] md:text-xs text-muted-foreground mt-1">
+                          {minutes}m {seconds}s remaining
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+                {activePowerUps.effects && (activePowerUps.effects.total_hashrate_boost > 0 || activePowerUps.effects.total_luck_boost > 0) && (
+                  <div className="mt-3 pt-3 border-t border-border/50">
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-semibold">Total Effects:</span>{' '}
+                      {activePowerUps.effects.total_hashrate_boost > 0 && `+${activePowerUps.effects.total_hashrate_boost}% Hashrate `}
+                      {activePowerUps.effects.total_luck_boost > 0 && `+${activePowerUps.effects.total_luck_boost}% Luck`}
                     </p>
                   </div>
-                );
-              })}
-            </div>
-            {activePowerUps.effects && (activePowerUps.effects.total_hashrate_boost > 0 || activePowerUps.effects.total_luck_boost > 0) && (
-              <div className="mt-3 pt-3 border-t border-border/50">
-                <p className="text-xs text-muted-foreground">
-                  <span className="font-semibold">Total Effects:</span>{' '}
-                  {activePowerUps.effects.total_hashrate_boost > 0 && `+${activePowerUps.effects.total_hashrate_boost}% Hashrate `}
-                  {activePowerUps.effects.total_luck_boost > 0 && `+${activePowerUps.effects.total_luck_boost}% Luck`}
-                </p>
-              </div>
+                )}
+              </Card>
             )}
-          </Card>
+          </>
         )}
 
-        {/* Main Grid */}
+        {/* Main Grid - Always visible (Priority 1 content) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
           {/* Left Column */}
           <div className="lg:col-span-2 space-y-4 md:space-y-6">
