@@ -32,17 +32,31 @@ export async function setupTestDatabase() {
     // Enable pgcrypto extension
     await testPool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto;');
 
-    // Drop all existing tables to ensure clean state
-    await testPool.query(`
-      DROP SCHEMA public CASCADE;
-      CREATE SCHEMA public;
-      GRANT ALL ON SCHEMA public TO PUBLIC;
+    // Check if tables already exist (from CI migration)
+    const tableCheck = await testPool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'users'
+      );
     `);
+    
+    const tablesExist = tableCheck.rows[0]?.exists;
 
-    // Run migrations by importing and pushing schema
-    // This will be done via drizzle-kit push in CI
+    if (!tablesExist) {
+      // Only drop schema if no tables exist (local dev)
+      console.log('[Test DB] No tables found, recreating schema...');
+      await testPool.query(`
+        DROP SCHEMA public CASCADE;
+        CREATE SCHEMA public;
+        GRANT ALL ON SCHEMA public TO PUBLIC;
+      `);
+      console.log('[Test DB] Schema recreated, migration needed');
+    } else {
+      console.log('[Test DB] Tables already exist from migration, skipping schema drop');
+    }
+
     console.log('[Test DB] Database schema initialized');
-
     isInitialized = true;
   } catch (error) {
     console.error('[Test DB] Setup failed:', error);
