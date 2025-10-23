@@ -82,6 +82,7 @@ export default function Dashboard() {
   const lastBalanceRef = useRef<number | null>(null);
   const [isMining, setIsMining] = useState(false);
   const [showAllCards, setShowAllCards] = useState(false);
+  const [showDailyLoginModal, setShowDailyLoginModal] = useState(false);
 
   useEffect(() => {
     initializeUser()
