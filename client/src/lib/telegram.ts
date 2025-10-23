@@ -56,6 +56,8 @@ declare global {
         isExpanded: boolean;
         viewportHeight: number;
         viewportStableHeight: number;
+        openTelegramLink: (url: string) => void;
+        openLink: (url: string, options?: { try_instant_view?: boolean }) => void;
       };
     };
   }
