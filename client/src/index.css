@@ -103,9 +103,9 @@
   --tracking-normal: 0em;
   --spacing: 0.25rem;
   
-  /* Mobile compact spacing */
+  /* Mobile comfortable spacing - removed cramped spacing */
   @media (max-width: 768px) {
-    --spacing: 0.15rem;
+    --spacing: 0.25rem;
   }
 
   --matrix-green: 150 75% 42%;
