@@ -55,12 +55,18 @@ export async function sendAnnouncementToAllUsers(announcementId: number): Promis
       await Promise.all(
         batch.map(async (user) => {
           try {
+            if (!user.telegramId) {
+              console.warn(`Skipping user with no telegramId: ${user.username}`);
+              return;
+            }
             const message = `📢 *${ann.title}*\n\n${ann.message}`;
             await sendMessageToUser(user.telegramId, message);
             sentCount++;
           } catch (error: any) {
             console.error(`Failed to send announcement to user ${user.telegramId}:`, error.message);
-            failedUsers.push(user.telegramId);
+            if (user.telegramId) {
+              failedUsers.push(user.telegramId);
+            }
           }
         })
       );
