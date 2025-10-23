@@ -58,9 +58,19 @@ export function registerModularRoutes(app: Express): void {
   // Segmentation (NEW - user classification, targeted offers)
   registerSegmentationRoutes(app);
 
-  // TODO: Migrate remaining routes from routes.ts
-  // - shop.routes.ts (flash sales, powerups, lootboxes, packs, price alerts)
-  // - achievements.routes.ts (achievements, challenges, tasks)
-  // - gamification.routes.ts (seasons, cosmetics, prestige, daily login, subscription)
-  // Admin routes already in admin.routes.ts but called separately
+  // MIGRATION STATUS:
+  // ✅ COMPLETED:
+  //   - admin.routes.ts (18 routes) - migrated in code review fix
+  //   - user.routes.ts (4 routes) - was already registered
+  //   - health.routes.ts, auth.routes.ts, social.routes.ts, mining.routes.ts
+  //   - equipment.routes.ts, announcements.routes.ts, promoCodes.routes.ts
+  //   - analytics.routes.ts, events.routes.ts, economy.routes.ts, segmentation.routes.ts
+  //
+  // 🔄 TODO: Migrate remaining routes from routes.ts
+  //   - shop.routes.ts (~25 routes: flash sales, powerups, lootboxes, packs, price alerts)
+  //   - achievements.routes.ts (~8 routes: achievements, challenges, tasks)
+  //   - gamification.routes.ts (~20 routes: seasons, cosmetics, prestige, daily login, subscription)
+  //   - leaderboard.routes.ts (~6 routes: hashrate, balance, referrals leaderboards)
+  //
+  // See server/routes.ts header for detailed migration plan
 }
