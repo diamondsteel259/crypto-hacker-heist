@@ -179,6 +179,30 @@ export async function initializeBot() {
   });
 }
 
+// Helper function to send message to specific user
+export async function sendMessageToUser(telegramId: string, message: string): Promise<void> {
+  if (!bot) {
+    throw new Error("Bot not initialized");
+  }
+
+  try {
+    await bot.telegram.sendMessage(telegramId, message, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '🎮 Open Game', web_app: { url: WEB_APP_URL } }]
+        ]
+      }
+    });
+  } catch (error: any) {
+    // User might have blocked the bot or deleted their account
+    if (error.response?.error_code === 403) {
+      throw new Error(`User ${telegramId} has blocked the bot`);
+    }
+    throw error;
+  }
+}
+
 // Export bot middleware for webhook handling
 export function getBotWebhookHandler() {
   if (!bot || !BOT_TOKEN) {
