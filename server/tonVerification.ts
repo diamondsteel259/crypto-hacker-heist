@@ -233,15 +233,15 @@ export function isValidTONAddress(address: string): boolean {
 
 /**
  * Poll for transaction confirmation with timeout
- * Checks every 10 seconds for up to 3 minutes
- * Perfect for TON blockchain's fast confirmation times
+ * Checks every 5 seconds for up to 5 minutes
+ * Perfect for TON blockchain's confirmation times
  * 
  * @param txHash - Transaction hash to verify
  * @param expectedAmount - Expected payment amount in TON
  * @param recipientAddress - Game wallet address
  * @param senderAddress - User's wallet address (optional)
- * @param timeoutMs - Max time to wait (default: 180000ms = 3 minutes)
- * @param intervalMs - Check interval (default: 10000ms = 10 seconds)
+ * @param timeoutMs - Max time to wait (default: 300000ms = 5 minutes)
+ * @param intervalMs - Check interval (default: 5000ms = 5 seconds)
  * @returns VerificationResult
  */
 export async function pollForTransaction(
@@ -249,8 +249,8 @@ export async function pollForTransaction(
   expectedAmount: number,
   recipientAddress: string,
   senderAddress?: string,
-  timeoutMs: number = 180000, // 3 minutes
-  intervalMs: number = 10000 // 10 seconds
+  timeoutMs: number = 300000, // 5 minutes (increased from 3)
+  intervalMs: number = 5000 // 5 seconds (reduced from 10)
 ): Promise<VerificationResult> {
   const startTime = Date.now();
   const endTime = startTime + timeoutMs;
@@ -286,7 +286,7 @@ export async function pollForTransaction(
       console.log(`⏱️ Transaction not confirmed after ${attempts} attempts (${Math.floor((Date.now() - startTime) / 1000)}s)`);
       return {
         verified: false,
-        error: `Transaction not confirmed within ${timeoutMs / 1000} seconds. Please ensure the transaction was sent and wait a moment before trying again.`,
+        error: `Transaction not confirmed within ${timeoutMs / 1000} seconds. The payment may still be processing on the blockchain. Please contact support with your transaction hash if the issue persists.`,
       };
     }
 
