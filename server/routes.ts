@@ -1285,7 +1285,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await db.update(userSubscriptions)
         .set({ isActive: false, autoRenew: false })
-        .where(eq(userSubscriptions.userId, user[0].telegramId));
+        .where(eq(userSubscriptions.userId, user[0].telegramId!));
 
       res.json({
         success: true,
