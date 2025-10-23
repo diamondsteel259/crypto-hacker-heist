@@ -24,59 +24,75 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getCurrentUserId } from "@/lib/user";
 import { isFeatureNew, markFeatureAsSeen } from "@/lib/featureBadges";
-import type { User } from "@shared/schema";
+import type { User, FeatureFlag } from "@shared/schema";
 
 // Primary navigation items (always visible)
 const primaryNavItems = [
-  { title: "Home", url: "/", icon: LayoutDashboard },
-  { title: "Rigs", url: "/rigs", icon: Package },
-  { title: "Shop", url: "/shop", icon: ShoppingBag },
-  { title: "Wallet", url: "/wallet", icon: Wallet },
+  { title: "Home", url: "/", icon: LayoutDashboard, featureKey: null },
+  { title: "Rigs", url: "/rigs", icon: Package, featureKey: "rigs" },
+  { title: "Shop", url: "/shop", icon: ShoppingBag, featureKey: "shop" },
+  { title: "Wallet", url: "/wallet", icon: Wallet, featureKey: "wallet" },
 ];
 
 // Secondary navigation items (in "More" menu)
-// Items are filtered based on user role and state
-const getSecondaryNavItems = (user: User | null | undefined) => {
+// Items are filtered based on user role, state, and feature flags
+const getSecondaryNavItems = (user: User | null | undefined, featureFlags: FeatureFlag[] | undefined) => {
   const items = [];
   
-  // Premium Packs - only show if user doesn't have premium
-  if (!user?.hasPremium) {
+  // Helper to check if feature is enabled
+  const isFeatureEnabled = (key: string) => {
+    if (!featureFlags) return true; // Default to enabled if flags not loaded
+    const flag = featureFlags.find(f => f.featureKey === key);
+    return flag ? flag.isEnabled : true;
+  };
+  
+  // Premium Packs - only show if user doesn't have premium AND feature is enabled
+  if (!user?.hasPremium && isFeatureEnabled("packs")) {
     items.push({ 
       title: "Premium Packs", 
       url: "/packs", 
       icon: Gift, 
       badge: isFeatureNew("premiumPacks") ? "NEW" : undefined,
-      featureName: "premiumPacks"
+      featureName: "premiumPacks",
+      featureKey: "packs"
     });
   }
   
-  // Subscription - only show if user doesn't have active subscription
-  if (!user?.hasActiveSubscription) {
+  // Subscription - only show if user doesn't have active subscription AND feature is enabled
+  if (!user?.hasActiveSubscription && isFeatureEnabled("subscription")) {
     items.push({ 
       title: "Subscription", 
       url: "/subscription", 
       icon: Crown, 
       badge: isFeatureNew("subscription") ? "NEW" : undefined,
-      featureName: "subscription"
+      featureName: "subscription",
+      featureKey: "subscription"
     });
   }
   
-  // Always show these essential items
-  items.push(
-    { title: "Block Explorer", url: "/blocks", icon: Blocks },
-    { title: "Leaderboard", url: "/leaderboard", icon: BarChart3 },
-    { title: "Referrals", url: "/referrals", icon: Users },
-    { title: "Achievements", url: "/achievements", icon: Trophy },
-    { title: "Challenges", url: "/challenges", icon: Target },
-    { title: "Cosmetics", url: "/cosmetics", icon: Palette },
-    { title: "Statistics", url: "/statistics", icon: BarChart3 },
-    { title: "Spin Wheel", url: "/spin", icon: Zap },
-    { title: "Settings", url: "/settings", icon: Settings }
-  );
+  // Add essential items if enabled via feature flags
+  const essentialItems = [
+    { title: "Block Explorer", url: "/blocks", icon: Blocks, featureKey: "blocks" },
+    { title: "Leaderboard", url: "/leaderboard", icon: BarChart3, featureKey: "leaderboard" },
+    { title: "Referrals", url: "/referrals", icon: Users, featureKey: "referrals" },
+    { title: "Achievements", url: "/achievements", icon: Trophy, featureKey: "achievements" },
+    { title: "Challenges", url: "/challenges", icon: Target, featureKey: "challenges" },
+    { title: "Cosmetics", url: "/cosmetics", icon: Palette, featureKey: "cosmetics" },
+    { title: "Statistics", url: "/statistics", icon: BarChart3, featureKey: "statistics" },
+    { title: "Spin Wheel", url: "/spin", icon: Zap, featureKey: "spin" },
+    { title: "Settings", url: "/settings", icon: Settings, featureKey: null }, // Always show settings
+  ];
   
-  // Admin Panel - only show if user is admin or moderator
-  if (user?.role === 'admin' || user?.role === 'moderator') {
-    items.push({ title: "Admin Panel", url: "/admin", icon: Shield });
+  // Filter out disabled features
+  essentialItems.forEach(item => {
+    if (!item.featureKey || isFeatureEnabled(item.featureKey)) {
+      items.push(item);
+    }
+  });
+  
+  // Admin Panel - only show if user is admin
+  if (user?.isAdmin) {
+    items.push({ title: "Admin Panel", url: "/admin", icon: Shield, featureKey: null });
   }
   
   return items;
@@ -93,7 +109,21 @@ export default function BottomNav() {
     enabled: !!userId,
   });
 
-  const secondaryNavItems = getSecondaryNavItems(user);
+  // Fetch feature flags to filter navigation
+  const { data: featureFlags } = useQuery<FeatureFlag[]>({
+    queryKey: ["/api/feature-flags"],
+    staleTime: 60000, // Cache for 1 minute
+  });
+
+  // Filter primary nav items based on feature flags
+  const enabledPrimaryNavItems = primaryNavItems.filter(item => {
+    if (!item.featureKey) return true;
+    if (!featureFlags) return true;
+    const flag = featureFlags.find(f => f.featureKey === item.featureKey);
+    return flag ? flag.isEnabled : true;
+  });
+
+  const secondaryNavItems = getSecondaryNavItems(user, featureFlags);
 
   // Check if current location is in secondary nav
   const isSecondaryActive = secondaryNavItems.some(item => location === item.url);
@@ -105,7 +135,7 @@ export default function BottomNav() {
       
       <div className="flex items-center justify-around h-16 px-2 relative z-10">
         {/* Primary Nav Items */}
-        {primaryNavItems.map((item) => {
+        {enabledPrimaryNavItems.map((item) => {
           const isActive = location === item.url;
           return (
             <Link
