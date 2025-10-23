@@ -1,8 +1,29 @@
 import type { Express } from "express";
 import { storage, db } from "../storage";
-import { users, ownedEquipment, blockRewards, referrals, userStreaks } from "@shared/schema";
-import { eq, sql } from "drizzle-orm";
+import { users, ownedEquipment, blockRewards, referrals, userStreaks, dailyLoginRewards } from "@shared/schema";
+import { eq, sql, and } from "drizzle-orm";
 import { validateTelegramAuth, verifyUserAccess } from "../middleware/auth";
+
+// Helper function to calculate daily login rewards based on streak day
+function calculateDailyLoginReward(streakDay: number): { cs: number; chst: number; item: string | null } {
+  const baseCs = 500;
+  const baseChst = 10;
+  
+  const cs = baseCs * streakDay;
+  const chst = baseChst * streakDay;
+  
+  let item: string | null = null;
+  
+  if (streakDay % 30 === 0) {
+    item = "epic_power_boost";
+  } else if (streakDay % 14 === 0) {
+    item = "rare_power_boost";
+  } else if (streakDay % 7 === 0) {
+    item = "common_power_boost";
+  }
+  
+  return { cs, chst, item };
+}
 
 export function registerUserRoutes(app: Express): void {
   // Get user profile
@@ -184,6 +205,142 @@ export function registerUserRoutes(app: Express): void {
     } catch (error: any) {
       console.error("Streak check-in error:", error);
       res.status(500).json({ error: "Failed to check in" });
+    }
+  });
+
+  // Get daily login status
+  app.get("/api/user/:userId/daily-login/status", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Get user's streak data
+      const streakData = await db.select().from(userStreaks).where(eq(userStreaks.userId, user.telegramId!)).limit(1);
+      const currentStreak = streakData.length > 0 ? streakData[0].currentStreak : 0;
+
+      // Check if user has claimed today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const todaysClaim = await db.select().from(dailyLoginRewards)
+        .where(and(
+          eq(dailyLoginRewards.userId, user.telegramId!),
+          sql`DATE(${dailyLoginRewards.claimedAt}) = DATE(${today})`
+        ))
+        .limit(1);
+
+      const canClaim = todaysClaim.length === 0;
+      const nextStreakDay = canClaim ? currentStreak + 1 : currentStreak;
+      const nextReward = calculateDailyLoginReward(nextStreakDay);
+
+      res.json({
+        canClaim,
+        currentStreak,
+        nextReward,
+        lastClaimDate: todaysClaim.length > 0 ? todaysClaim[0].claimedAt : null,
+      });
+    } catch (error: any) {
+      console.error("Daily login status error:", error);
+      res.status(500).json({ error: "Failed to get daily login status" });
+    }
+  });
+
+  // Claim daily login reward
+  app.post("/api/user/:userId/daily-login/claim", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Check if already claimed today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const todaysClaim = await db.select().from(dailyLoginRewards)
+        .where(and(
+          eq(dailyLoginRewards.userId, user.telegramId!),
+          sql`DATE(${dailyLoginRewards.claimedAt}) = DATE(${today})`
+        ))
+        .limit(1);
+
+      if (todaysClaim.length > 0) {
+        return res.status(400).json({ message: "Daily reward already claimed today" });
+      }
+
+      // Get or create streak data
+      const streakData = await db.select().from(userStreaks).where(eq(userStreaks.userId, user.telegramId!)).limit(1);
+      let currentStreak = 0;
+      
+      if (streakData.length > 0) {
+        const lastLoginDate = new Date(streakData[0].lastLoginDate);
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        
+        if (lastLoginDate >= yesterday && lastLoginDate < today) {
+          currentStreak = streakData[0].currentStreak + 1;
+        } else {
+          currentStreak = 1;
+        }
+      } else {
+        currentStreak = 1;
+      }
+
+      // Calculate rewards
+      const rewards = calculateDailyLoginReward(currentStreak);
+      const loginDateStr = today.toISOString().split('T')[0];
+
+      // Update user balances and streak in a transaction
+      await db.transaction(async (tx: any) => {
+        await tx.insert(dailyLoginRewards).values({
+          userId: user.telegramId!,
+          loginDate: loginDateStr,
+          streakDay: currentStreak,
+          rewardCs: rewards.cs,
+          rewardChst: rewards.chst,
+          rewardItem: rewards.item,
+        });
+
+        await tx.update(users)
+          .set({
+            csBalance: sql`${users.csBalance} + ${rewards.cs}`,
+            chstBalance: sql`${users.chstBalance} + ${rewards.chst}`,
+          })
+          .where(eq(users.id, userId));
+
+        if (streakData.length > 0) {
+          await tx.update(userStreaks)
+            .set({
+              currentStreak,
+              longestStreak: sql`GREATEST(${userStreaks.longestStreak}, ${currentStreak})`,
+              lastLoginDate: loginDateStr,
+            })
+            .where(eq(userStreaks.userId, user.telegramId!));
+        } else {
+          await tx.insert(userStreaks).values({
+            userId: user.telegramId!,
+            currentStreak,
+            longestStreak: currentStreak,
+            lastLoginDate: loginDateStr,
+          });
+        }
+      });
+
+      res.json({
+        success: true,
+        reward: rewards,
+        streakDay: currentStreak,
+        message: `Day ${currentStreak} reward claimed!`,
+      });
+    } catch (error: any) {
+      console.error("Daily login claim error:", error);
+      res.status(500).json({ error: "Failed to claim daily reward" });
     }
   });
 
