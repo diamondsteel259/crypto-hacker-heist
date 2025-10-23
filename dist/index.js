@@ -50,6 +50,8 @@ __export(schema_exports, {
   insertPowerUpPurchaseSchema: () => insertPowerUpPurchaseSchema,
   insertPrestigeHistorySchema: () => insertPrestigeHistorySchema,
   insertPriceAlertSchema: () => insertPriceAlertSchema,
+  insertPromoCodeRedemptionSchema: () => insertPromoCodeRedemptionSchema,
+  insertPromoCodeSchema: () => insertPromoCodeSchema,
   insertReferralSchema: () => insertReferralSchema,
   insertSeasonSchema: () => insertSeasonSchema,
   insertSpinHistorySchema: () => insertSpinHistorySchema,
@@ -72,6 +74,8 @@ __export(schema_exports, {
   powerUpPurchases: () => powerUpPurchases,
   prestigeHistory: () => prestigeHistory,
   priceAlerts: () => priceAlerts,
+  promoCodeRedemptions: () => promoCodeRedemptions,
+  promoCodes: () => promoCodes,
   referrals: () => referrals,
   seasons: () => seasons,
   spinHistory: () => spinHistory,
@@ -91,7 +95,7 @@ __export(schema_exports, {
 import { sql } from "drizzle-orm";
 import { pgTable, varchar, text, integer, real, timestamp, boolean, unique, decimal, index, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-var users, gameSettings, featureFlags, equipmentTypes, ownedEquipment, blocks, blockRewards, referrals, componentUpgrades, userTasks, dailyClaims, powerUpPurchases, lootBoxPurchases, activePowerUps, dailyChallenges, userDailyChallenges, achievements, userAchievements, seasons, cosmeticItems, userCosmetics, userStreaks, dailyLoginRewards, flashSales, userHourlyBonuses, userSpins, spinHistory, jackpotWins, equipmentPresets, priceAlerts, autoUpgradeSettings, packPurchases, userPrestige, prestigeHistory, userSubscriptions, userStatistics, announcements, userAnnouncements, insertUserSchema, insertEquipmentTypeSchema, insertOwnedEquipmentSchema, insertComponentUpgradeSchema, insertUserTaskSchema, insertDailyClaimSchema, insertPowerUpPurchaseSchema, insertLootBoxPurchaseSchema, insertActivePowerUpSchema, insertBlockSchema, insertBlockRewardSchema, insertReferralSchema, insertGameSettingSchema, insertDailyChallengeSchema, insertUserDailyChallengeSchema, insertAchievementSchema, insertUserAchievementSchema, insertSeasonSchema, insertCosmeticItemSchema, insertUserCosmeticSchema, insertUserStreakSchema, insertDailyLoginRewardSchema, insertFlashSaleSchema, insertUserHourlyBonusSchema, insertUserSpinSchema, insertSpinHistorySchema, insertJackpotWinSchema, insertEquipmentPresetSchema, insertPriceAlertSchema, insertAutoUpgradeSettingSchema, insertPackPurchaseSchema, insertUserPrestigeSchema, insertPrestigeHistorySchema, insertUserSubscriptionSchema, insertUserStatisticsSchema, insertFeatureFlagSchema, insertAnnouncementSchema, insertUserAnnouncementSchema;
+var users, gameSettings, featureFlags, equipmentTypes, ownedEquipment, blocks, blockRewards, referrals, componentUpgrades, userTasks, dailyClaims, powerUpPurchases, lootBoxPurchases, activePowerUps, dailyChallenges, userDailyChallenges, achievements, userAchievements, seasons, cosmeticItems, userCosmetics, userStreaks, dailyLoginRewards, flashSales, userHourlyBonuses, userSpins, spinHistory, jackpotWins, equipmentPresets, priceAlerts, autoUpgradeSettings, packPurchases, userPrestige, prestigeHistory, userSubscriptions, userStatistics, announcements, userAnnouncements, promoCodes, promoCodeRedemptions, insertUserSchema, insertEquipmentTypeSchema, insertOwnedEquipmentSchema, insertComponentUpgradeSchema, insertUserTaskSchema, insertDailyClaimSchema, insertPowerUpPurchaseSchema, insertLootBoxPurchaseSchema, insertActivePowerUpSchema, insertBlockSchema, insertBlockRewardSchema, insertReferralSchema, insertGameSettingSchema, insertDailyChallengeSchema, insertUserDailyChallengeSchema, insertAchievementSchema, insertUserAchievementSchema, insertSeasonSchema, insertCosmeticItemSchema, insertUserCosmeticSchema, insertUserStreakSchema, insertDailyLoginRewardSchema, insertFlashSaleSchema, insertUserHourlyBonusSchema, insertUserSpinSchema, insertSpinHistorySchema, insertJackpotWinSchema, insertEquipmentPresetSchema, insertPriceAlertSchema, insertAutoUpgradeSettingSchema, insertPackPurchaseSchema, insertUserPrestigeSchema, insertPrestigeHistorySchema, insertUserSubscriptionSchema, insertUserStatisticsSchema, insertFeatureFlagSchema, insertAnnouncementSchema, insertUserAnnouncementSchema, insertPromoCodeSchema, insertPromoCodeRedemptionSchema;
 var init_schema = __esm({
   "shared/schema.ts"() {
     "use strict";
@@ -574,6 +578,45 @@ var init_schema = __esm({
       userAnnouncementIdx: index("user_announcements_user_idx").on(table.telegramId),
       announcementIdx: index("user_announcements_announcement_idx").on(table.announcementId)
     }));
+    promoCodes = pgTable("promo_codes", {
+      id: serial("id").primaryKey(),
+      code: varchar("code", { length: 50 }).notNull().unique(),
+      description: text("description"),
+      rewardType: text("reward_type").notNull(),
+      // 'cs', 'ton', 'equipment', 'powerup', 'lootbox', 'bundle'
+      rewardAmount: decimal("reward_amount", { precision: 20, scale: 2 }),
+      rewardData: text("reward_data"),
+      // JSON for complex rewards (equipment ID, etc.)
+      maxUses: integer("max_uses"),
+      // null = unlimited
+      currentUses: integer("current_uses").notNull().default(0),
+      maxUsesPerUser: integer("max_uses_per_user").notNull().default(1),
+      validFrom: timestamp("valid_from").notNull().defaultNow(),
+      validUntil: timestamp("valid_until"),
+      // null = never expires
+      isActive: boolean("is_active").notNull().default(true),
+      createdAt: timestamp("created_at").notNull().defaultNow(),
+      createdBy: text("created_by").notNull().references(() => users.telegramId),
+      targetSegment: text("target_segment").notNull().default("all")
+      // 'all', 'new_users', 'returning_users'
+    }, (table) => ({
+      codeIdx: index("promo_codes_code_idx").on(table.code),
+      activeIdx: index("promo_codes_active_idx").on(table.isActive, table.validUntil),
+      createdByIdx: index("promo_codes_created_by_idx").on(table.createdBy)
+    }));
+    promoCodeRedemptions = pgTable("promo_code_redemptions", {
+      id: serial("id").primaryKey(),
+      promoCodeId: integer("promo_code_id").notNull().references(() => promoCodes.id, { onDelete: "cascade" }),
+      telegramId: text("telegram_id").notNull().references(() => users.telegramId, { onDelete: "cascade" }),
+      redeemedAt: timestamp("redeemed_at").notNull().defaultNow(),
+      rewardGiven: text("reward_given").notNull(),
+      // JSON of what they received
+      ipAddress: varchar("ip_address", { length: 45 })
+    }, (table) => ({
+      userPromoUnique: unique().on(table.promoCodeId, table.telegramId),
+      userIdx: index("promo_code_redemptions_user_idx").on(table.telegramId),
+      promoIdx: index("promo_code_redemptions_promo_idx").on(table.promoCodeId)
+    }));
     insertUserSchema = createInsertSchema(users).omit({
       id: true,
       createdAt: true,
@@ -656,6 +699,8 @@ var init_schema = __esm({
     insertFeatureFlagSchema = createInsertSchema(featureFlags).omit({ id: true, updatedAt: true });
     insertAnnouncementSchema = createInsertSchema(announcements).omit({ id: true, createdAt: true, sentAt: true });
     insertUserAnnouncementSchema = createInsertSchema(userAnnouncements).omit({ id: true, readAt: true });
+    insertPromoCodeSchema = createInsertSchema(promoCodes).omit({ id: true, createdAt: true, currentUses: true });
+    insertPromoCodeRedemptionSchema = createInsertSchema(promoCodeRedemptions).omit({ id: true, redeemedAt: true });
   }
 });
 
@@ -1062,7 +1107,7 @@ init_storage();
 init_schema();
 init_schema();
 import { createServer } from "http";
-import { eq as eq9, and as and6, sql as sql8 } from "drizzle-orm";
+import { eq as eq11, and as and7, sql as sql9 } from "drizzle-orm";
 
 // server/telegram-auth.ts
 import crypto from "crypto";
@@ -2162,6 +2207,358 @@ function registerAnnouncementRoutes(app2) {
   });
 }
 
+// server/routes/promoCodes.routes.ts
+init_storage();
+init_schema();
+import { eq as eq10 } from "drizzle-orm";
+
+// server/services/promoCodes.ts
+init_storage();
+init_schema();
+import { eq as eq9, and as and6, sql as sql8 } from "drizzle-orm";
+function generateUniqueCode(length = 12) {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let code = "";
+  for (let i = 0; i < length; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+async function validatePromoCode(code, telegramId) {
+  try {
+    const promoCode = await db.select().from(promoCodes).where(sql8`UPPER(${promoCodes.code}) = UPPER(${code})`).limit(1);
+    if (promoCode.length === 0) {
+      return { valid: false, error: "Invalid promo code" };
+    }
+    const promo = promoCode[0];
+    if (!promo.isActive) {
+      return { valid: false, error: "This promo code is no longer active" };
+    }
+    if (promo.validUntil && new Date(promo.validUntil) < /* @__PURE__ */ new Date()) {
+      return { valid: false, error: "This promo code has expired" };
+    }
+    if (new Date(promo.validFrom) > /* @__PURE__ */ new Date()) {
+      return { valid: false, error: "This promo code is not yet valid" };
+    }
+    if (promo.maxUses !== null && promo.currentUses >= promo.maxUses) {
+      return { valid: false, error: "This promo code has reached its maximum number of uses" };
+    }
+    const userRedemption = await db.select().from(promoCodeRedemptions).where(
+      and6(
+        eq9(promoCodeRedemptions.promoCodeId, promo.id),
+        eq9(promoCodeRedemptions.telegramId, telegramId)
+      )
+    ).limit(1);
+    if (userRedemption.length > 0) {
+      return { valid: false, error: "You have already used this promo code" };
+    }
+    const userUseCount = await db.select({ count: sql8`COUNT(*)` }).from(promoCodeRedemptions).where(
+      and6(
+        eq9(promoCodeRedemptions.promoCodeId, promo.id),
+        eq9(promoCodeRedemptions.telegramId, telegramId)
+      )
+    );
+    if (userUseCount[0]?.count >= promo.maxUsesPerUser) {
+      return { valid: false, error: "You have reached the maximum number of uses for this promo code" };
+    }
+    return { valid: true, promoCode: promo };
+  } catch (error) {
+    console.error("Validate promo code error:", error);
+    throw error;
+  }
+}
+async function applyPromoReward(tx, userId, telegramId, rewardType, rewardAmount, rewardData) {
+  const reward = {};
+  switch (rewardType) {
+    case "cs":
+      const csAmount = parseFloat(rewardAmount || "0");
+      await tx.update(users).set({ csBalance: sql8`${users.csBalance} + ${csAmount}` }).where(eq9(users.id, userId));
+      reward.cs = csAmount;
+      break;
+    case "chst":
+      const chstAmount = parseFloat(rewardAmount || "0");
+      await tx.update(users).set({ chstBalance: sql8`${users.chstBalance} + ${chstAmount}` }).where(eq9(users.id, userId));
+      reward.chst = chstAmount;
+      break;
+    case "equipment":
+      const equipmentData = rewardData ? JSON.parse(rewardData) : {};
+      const equipmentId = equipmentData.equipmentId;
+      if (equipmentId) {
+        const equipmentType = await tx.select().from(equipmentTypes).where(eq9(equipmentTypes.id, equipmentId)).limit(1);
+        if (equipmentType.length > 0) {
+          const et = equipmentType[0];
+          const existing = await tx.select().from(ownedEquipment).where(
+            and6(
+              eq9(ownedEquipment.userId, userId),
+              eq9(ownedEquipment.equipmentTypeId, equipmentId)
+            )
+          ).limit(1);
+          if (existing.length > 0) {
+            await tx.update(ownedEquipment).set({
+              quantity: sql8`${ownedEquipment.quantity} + 1`,
+              currentHashrate: sql8`${ownedEquipment.currentHashrate} + ${et.baseHashrate}`
+            }).where(eq9(ownedEquipment.id, existing[0].id));
+          } else {
+            await tx.insert(ownedEquipment).values({
+              userId,
+              equipmentTypeId: equipmentId,
+              currentHashrate: et.baseHashrate,
+              quantity: 1
+            });
+          }
+          await tx.update(users).set({ totalHashrate: sql8`${users.totalHashrate} + ${et.baseHashrate}` }).where(eq9(users.id, userId));
+          reward.equipment = {
+            id: equipmentId,
+            name: et.name,
+            hashrate: et.baseHashrate
+          };
+        }
+      }
+      break;
+    case "powerup":
+      const powerupData = rewardData ? JSON.parse(rewardData) : {};
+      const powerupType = powerupData.type || "hashrate-boost";
+      const boostPercentage = powerupData.boost || 50;
+      const durationHours = powerupData.duration || 24;
+      const expiresAt = /* @__PURE__ */ new Date();
+      expiresAt.setHours(expiresAt.getHours() + durationHours);
+      await tx.insert(activePowerUps).values({
+        userId: telegramId,
+        powerUpType: powerupType,
+        boostPercentage,
+        expiresAt,
+        isActive: true
+      });
+      reward.powerup = {
+        type: powerupType,
+        boost: boostPercentage,
+        duration: durationHours
+      };
+      break;
+    case "bundle":
+      const bundleData = rewardData ? JSON.parse(rewardData) : {};
+      reward.bundle = [];
+      if (bundleData.cs) {
+        await tx.update(users).set({ csBalance: sql8`${users.csBalance} + ${bundleData.cs}` }).where(eq9(users.id, userId));
+        reward.bundle.push({ type: "cs", amount: bundleData.cs });
+      }
+      if (bundleData.chst) {
+        await tx.update(users).set({ chstBalance: sql8`${users.chstBalance} + ${bundleData.chst}` }).where(eq9(users.id, userId));
+        reward.bundle.push({ type: "chst", amount: bundleData.chst });
+      }
+      break;
+    default:
+      throw new Error(`Unknown reward type: ${rewardType}`);
+  }
+  return reward;
+}
+async function redeemPromoCode(code, telegramId, ipAddress) {
+  try {
+    const validation = await validatePromoCode(code, telegramId);
+    if (!validation.valid) {
+      return { success: false, reward: null, error: validation.error };
+    }
+    const promo = validation.promoCode;
+    const user = await db.select().from(users).where(eq9(users.telegramId, telegramId)).limit(1);
+    if (user.length === 0) {
+      return { success: false, reward: null, error: "User not found" };
+    }
+    const result = await db.transaction(async (tx) => {
+      const currentUses = await tx.select({ uses: promoCodes.currentUses }).from(promoCodes).where(eq9(promoCodes.id, promo.id)).for("update").limit(1);
+      if (promo.maxUses !== null && currentUses[0].uses >= promo.maxUses) {
+        throw new Error("Promo code max uses reached");
+      }
+      const reward = await applyPromoReward(
+        tx,
+        user[0].id,
+        telegramId,
+        promo.rewardType,
+        promo.rewardAmount,
+        promo.rewardData
+      );
+      await tx.insert(promoCodeRedemptions).values({
+        promoCodeId: promo.id,
+        telegramId,
+        rewardGiven: JSON.stringify(reward),
+        ipAddress: ipAddress || null
+      });
+      await tx.update(promoCodes).set({ currentUses: sql8`${promoCodes.currentUses} + 1` }).where(eq9(promoCodes.id, promo.id));
+      return reward;
+    });
+    return { success: true, reward: result };
+  } catch (error) {
+    console.error("Redeem promo code error:", error);
+    return { success: false, reward: null, error: error.message || "Failed to redeem promo code" };
+  }
+}
+async function getAllPromoCodes(limit = 100) {
+  try {
+    const codes = await db.select().from(promoCodes).orderBy(sql8`${promoCodes.createdAt} DESC`).limit(limit);
+    return codes;
+  } catch (error) {
+    console.error("Get all promo codes error:", error);
+    throw error;
+  }
+}
+async function getPromoCodeRedemptions(promoCodeId) {
+  try {
+    const redemptions = await db.select({
+      id: promoCodeRedemptions.id,
+      telegramId: promoCodeRedemptions.telegramId,
+      username: users.username,
+      redeemedAt: promoCodeRedemptions.redeemedAt,
+      rewardGiven: promoCodeRedemptions.rewardGiven,
+      ipAddress: promoCodeRedemptions.ipAddress
+    }).from(promoCodeRedemptions).leftJoin(users, eq9(users.telegramId, promoCodeRedemptions.telegramId)).where(eq9(promoCodeRedemptions.promoCodeId, promoCodeId)).orderBy(sql8`${promoCodeRedemptions.redeemedAt} DESC`);
+    return redemptions;
+  } catch (error) {
+    console.error("Get promo code redemptions error:", error);
+    throw error;
+  }
+}
+
+// server/routes/promoCodes.routes.ts
+function registerPromoCodeRoutes(app2) {
+  app2.post("/api/admin/promo-codes", validateTelegramAuth, requireAdmin, async (req, res) => {
+    if (!req.telegramUser) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    try {
+      const data = req.body;
+      if (!data.code) {
+        let uniqueCode = generateUniqueCode();
+        let attempts = 0;
+        while (attempts < 10) {
+          const existing = await db.select().from(promoCodes).where(eq10(promoCodes.code, uniqueCode)).limit(1);
+          if (existing.length === 0) break;
+          uniqueCode = generateUniqueCode();
+          attempts++;
+        }
+        data.code = uniqueCode;
+      }
+      data.code = data.code.toUpperCase();
+      const validTypes = ["cs", "chst", "equipment", "powerup", "lootbox", "bundle"];
+      if (!validTypes.includes(data.rewardType)) {
+        return res.status(400).json({ error: `Invalid reward type. Must be one of: ${validTypes.join(", ")}` });
+      }
+      const parsed = insertPromoCodeSchema.safeParse({
+        ...data,
+        createdBy: req.telegramUser.id.toString()
+      });
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: "Invalid promo code data",
+          details: parsed.error.errors
+        });
+      }
+      const [newPromoCode] = await db.insert(promoCodes).values(parsed.data).returning();
+      res.json({
+        success: true,
+        promoCode: newPromoCode
+      });
+    } catch (error) {
+      console.error("Create promo code error:", error);
+      res.status(500).json({ error: error.message || "Failed to create promo code" });
+    }
+  });
+  app2.get("/api/admin/promo-codes", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit) || 100;
+      const codes = await getAllPromoCodes(limit);
+      res.json(codes);
+    } catch (error) {
+      console.error("Get promo codes error:", error);
+      res.status(500).json({ error: "Failed to fetch promo codes" });
+    }
+  });
+  app2.put("/api/admin/promo-codes/:id", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const promoCodeId = parseInt(req.params.id);
+      const existing = await db.select().from(promoCodes).where(eq10(promoCodes.id, promoCodeId)).limit(1);
+      if (existing.length === 0) {
+        return res.status(404).json({ error: "Promo code not found" });
+      }
+      const [updated] = await db.update(promoCodes).set({
+        description: req.body.description !== void 0 ? req.body.description : existing[0].description,
+        maxUses: req.body.maxUses !== void 0 ? req.body.maxUses : existing[0].maxUses,
+        maxUsesPerUser: req.body.maxUsesPerUser !== void 0 ? req.body.maxUsesPerUser : existing[0].maxUsesPerUser,
+        validFrom: req.body.validFrom !== void 0 ? req.body.validFrom : existing[0].validFrom,
+        validUntil: req.body.validUntil !== void 0 ? req.body.validUntil : existing[0].validUntil,
+        isActive: req.body.isActive !== void 0 ? req.body.isActive : existing[0].isActive,
+        targetSegment: req.body.targetSegment !== void 0 ? req.body.targetSegment : existing[0].targetSegment
+      }).where(eq10(promoCodes.id, promoCodeId)).returning();
+      res.json(updated);
+    } catch (error) {
+      console.error("Update promo code error:", error);
+      res.status(500).json({ error: "Failed to update promo code" });
+    }
+  });
+  app2.delete("/api/admin/promo-codes/:id", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const promoCodeId = parseInt(req.params.id);
+      await db.update(promoCodes).set({ isActive: false }).where(eq10(promoCodes.id, promoCodeId));
+      res.json({ success: true, message: "Promo code deactivated" });
+    } catch (error) {
+      console.error("Deactivate promo code error:", error);
+      res.status(500).json({ error: "Failed to deactivate promo code" });
+    }
+  });
+  app2.get("/api/admin/promo-codes/:id/redemptions", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const promoCodeId = parseInt(req.params.id);
+      const redemptions = await getPromoCodeRedemptions(promoCodeId);
+      res.json(redemptions);
+    } catch (error) {
+      console.error("Get redemptions error:", error);
+      res.status(500).json({ error: "Failed to fetch redemptions" });
+    }
+  });
+  app2.get("/api/promo-codes/validate", validateTelegramAuth, async (req, res) => {
+    if (!req.telegramUser) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    try {
+      const code = req.query.code;
+      if (!code) {
+        return res.status(400).json({ error: "Promo code is required" });
+      }
+      const validation = await validatePromoCode(code, req.telegramUser.id.toString());
+      res.json(validation);
+    } catch (error) {
+      console.error("Validate promo code error:", error);
+      res.status(500).json({ error: "Failed to validate promo code" });
+    }
+  });
+  app2.post("/api/promo-codes/redeem", validateTelegramAuth, async (req, res) => {
+    if (!req.telegramUser) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    try {
+      const { code } = req.body;
+      if (!code) {
+        return res.status(400).json({ error: "Promo code is required" });
+      }
+      const ipAddress = req.ip || req.headers["x-forwarded-for"] || req.headers["x-real-ip"];
+      const result = await redeemPromoCode(
+        code,
+        req.telegramUser.id.toString(),
+        typeof ipAddress === "string" ? ipAddress : void 0
+      );
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      res.json({
+        success: true,
+        message: "Promo code redeemed successfully!",
+        reward: result.reward
+      });
+    } catch (error) {
+      console.error("Redeem promo code error:", error);
+      res.status(500).json({ error: error.message || "Failed to redeem promo code" });
+    }
+  });
+}
+
 // server/routes/index.ts
 function registerModularRoutes(app2) {
   registerHealthRoutes(app2);
@@ -2171,6 +2568,7 @@ function registerModularRoutes(app2) {
   registerMiningRoutes(app2);
   registerEquipmentRoutes(app2);
   registerAnnouncementRoutes(app2);
+  registerPromoCodeRoutes(app2);
 }
 
 // server/routes.ts
@@ -2234,7 +2632,7 @@ async function registerRoutes(app2) {
         totalHashrate: users.totalHashrate,
         csBalance: users.csBalance,
         photoUrl: users.photoUrl
-      }).from(users).orderBy(sql8`${users.totalHashrate} DESC`).limit(Math.min(limit, 100));
+      }).from(users).orderBy(sql9`${users.totalHashrate} DESC`).limit(Math.min(limit, 100));
       res.json(topMiners);
     } catch (error) {
       console.error("Leaderboard hashrate error:", error);
@@ -2250,7 +2648,7 @@ async function registerRoutes(app2) {
         csBalance: users.csBalance,
         totalHashrate: users.totalHashrate,
         photoUrl: users.photoUrl
-      }).from(users).orderBy(sql8`${users.csBalance} DESC`).limit(Math.min(limit, 100));
+      }).from(users).orderBy(sql9`${users.csBalance} DESC`).limit(Math.min(limit, 100));
       res.json(topBalances);
     } catch (error) {
       console.error("Leaderboard balance error:", error);
@@ -2264,9 +2662,9 @@ async function registerRoutes(app2) {
         id: users.id,
         username: users.username,
         photoUrl: users.photoUrl,
-        referralCount: sql8`(SELECT COUNT(*) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId})`,
-        totalBonus: sql8`(SELECT COALESCE(SUM(${referrals.bonusEarned}), 0) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId})`
-      }).from(users).orderBy(sql8`(SELECT COUNT(*) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId}) DESC`).limit(Math.min(limit, 100));
+        referralCount: sql9`(SELECT COUNT(*) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId})`,
+        totalBonus: sql9`(SELECT COALESCE(SUM(${referrals.bonusEarned}), 0) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId})`
+      }).from(users).orderBy(sql9`(SELECT COUNT(*) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId}) DESC`).limit(Math.min(limit, 100));
       res.json(topReferrers);
     } catch (error) {
       console.error("Referral leaderboard error:", error);
@@ -2278,9 +2676,9 @@ async function registerRoutes(app2) {
       const { userId } = req.params;
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ error: "User not found" });
-      const hashrateRank = await db.select({ count: sql8`COUNT(*)` }).from(users).where(sql8`${users.totalHashrate} > ${user.totalHashrate}`);
-      const balanceRank = await db.select({ count: sql8`COUNT(*)` }).from(users).where(sql8`${users.csBalance} > ${user.csBalance}`);
-      const totalUsers = await db.select({ count: sql8`COUNT(*)` }).from(users);
+      const hashrateRank = await db.select({ count: sql9`COUNT(*)` }).from(users).where(sql9`${users.totalHashrate} > ${user.totalHashrate}`);
+      const balanceRank = await db.select({ count: sql9`COUNT(*)` }).from(users).where(sql9`${users.csBalance} > ${user.csBalance}`);
+      const totalUsers = await db.select({ count: sql9`COUNT(*)` }).from(users);
       res.json({
         userId,
         hashrateRank: (hashrateRank[0]?.count || 0) + 1,
@@ -2296,7 +2694,7 @@ async function registerRoutes(app2) {
     const { userId } = req.params;
     try {
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
         if (user[0].tutorialCompleted) {
           return {
@@ -2307,8 +2705,8 @@ async function registerRoutes(app2) {
         }
         await tx.update(users).set({
           tutorialCompleted: true,
-          csBalance: sql8`${users.csBalance} + 5000`
-        }).where(eq9(users.id, userId));
+          csBalance: sql9`${users.csBalance} + 5000`
+        }).where(eq11(users.id, userId));
         return {
           success: true,
           message: "Tutorial completed! Earned 5,000 CS bonus",
@@ -2334,10 +2732,10 @@ async function registerRoutes(app2) {
     try {
       const { flashSales: flashSales2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
       const now = /* @__PURE__ */ new Date();
-      const activeSales = await db.select().from(flashSales2).where(and6(
-        eq9(flashSales2.isActive, true),
-        sql8`${flashSales2.startTime} <= ${now}`,
-        sql8`${flashSales2.endTime} > ${now}`
+      const activeSales = await db.select().from(flashSales2).where(and7(
+        eq11(flashSales2.isActive, true),
+        sql9`${flashSales2.startTime} <= ${now}`,
+        sql9`${flashSales2.endTime} > ${now}`
       ));
       res.json(activeSales);
     } catch (error) {
@@ -2374,7 +2772,7 @@ async function registerRoutes(app2) {
     try {
       const { flashSales: flashSales2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
       const { saleId } = req.params;
-      await db.update(flashSales2).set({ isActive: false }).where(eq9(flashSales2.id, parseInt(saleId)));
+      await db.update(flashSales2).set({ isActive: false }).where(eq11(flashSales2.id, parseInt(saleId)));
       res.json({ success: true });
     } catch (error) {
       console.error("End flash sale error:", error);
@@ -2398,13 +2796,13 @@ async function registerRoutes(app2) {
     }
     try {
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
-        const equipmentType = await tx.select().from(equipmentTypes).where(eq9(equipmentTypes.id, equipmentTypeId));
+        const equipmentType = await tx.select().from(equipmentTypes).where(eq11(equipmentTypes.id, equipmentTypeId));
         if (!equipmentType[0]) throw new Error("Equipment type not found");
-        const owned = await tx.select().from(ownedEquipment).where(and6(
-          eq9(ownedEquipment.userId, userId),
-          eq9(ownedEquipment.equipmentTypeId, equipmentTypeId)
+        const owned = await tx.select().from(ownedEquipment).where(and7(
+          eq11(ownedEquipment.userId, userId),
+          eq11(ownedEquipment.equipmentTypeId, equipmentTypeId)
         )).for("update");
         if (!owned[0]) throw new Error("You don't own this equipment");
         const currentLevel = owned[0].upgradeLevel;
@@ -2417,8 +2815,8 @@ async function registerRoutes(app2) {
           throw new Error(`Insufficient Cipher Shards. Need ${upgradeCost} CS`);
         }
         await tx.update(users).set({
-          csBalance: sql8`${users.csBalance} - ${upgradeCost}`
-        }).where(eq9(users.id, userId));
+          csBalance: sql9`${users.csBalance} - ${upgradeCost}`
+        }).where(eq11(users.id, userId));
         const newLevel = currentLevel + 1;
         const hashrateBefore = owned[0].currentHashrate;
         const hashrateIncrease = equipmentType[0].baseHashrate * 0.1 * owned[0].quantity;
@@ -2426,11 +2824,11 @@ async function registerRoutes(app2) {
         await tx.update(ownedEquipment).set({
           upgradeLevel: newLevel,
           currentHashrate: newHashrate
-        }).where(eq9(ownedEquipment.id, owned[0].id));
+        }).where(eq11(ownedEquipment.id, owned[0].id));
         await tx.update(users).set({
-          totalHashrate: sql8`${users.totalHashrate} + ${hashrateIncrease}`
-        }).where(eq9(users.id, userId));
-        const updatedUser = await tx.select().from(users).where(eq9(users.id, userId));
+          totalHashrate: sql9`${users.totalHashrate} + ${hashrateIncrease}`
+        }).where(eq11(users.id, userId));
+        const updatedUser = await tx.select().from(users).where(eq11(users.id, userId));
         return {
           success: true,
           user: updatedUser[0],
@@ -2447,9 +2845,9 @@ async function registerRoutes(app2) {
   app2.get("/api/user/:userId/equipment/:equipmentId/components", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId, equipmentId } = req.params;
     try {
-      const components = await db.select().from(componentUpgrades).innerJoin(ownedEquipment, eq9(componentUpgrades.ownedEquipmentId, ownedEquipment.id)).where(and6(
-        eq9(ownedEquipment.userId, userId),
-        eq9(ownedEquipment.id, equipmentId)
+      const components = await db.select().from(componentUpgrades).innerJoin(ownedEquipment, eq11(componentUpgrades.ownedEquipmentId, ownedEquipment.id)).where(and7(
+        eq11(ownedEquipment.userId, userId),
+        eq11(ownedEquipment.id, equipmentId)
       ));
       res.json(components);
     } catch (error) {
@@ -2467,16 +2865,16 @@ async function registerRoutes(app2) {
     }
     try {
       const result = await db.transaction(async (tx) => {
-        const owned = await tx.select().from(ownedEquipment).innerJoin(equipmentTypes, eq9(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(and6(
-          eq9(ownedEquipment.userId, userId),
-          eq9(ownedEquipment.id, equipmentId)
+        const owned = await tx.select().from(ownedEquipment).innerJoin(equipmentTypes, eq11(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(and7(
+          eq11(ownedEquipment.userId, userId),
+          eq11(ownedEquipment.id, equipmentId)
         ));
         if (!owned[0]) {
           throw new Error("Equipment not found");
         }
-        let component = await tx.select().from(componentUpgrades).where(and6(
-          eq9(componentUpgrades.ownedEquipmentId, equipmentId),
-          eq9(componentUpgrades.componentType, componentType)
+        let component = await tx.select().from(componentUpgrades).where(and7(
+          eq11(componentUpgrades.ownedEquipmentId, equipmentId),
+          eq11(componentUpgrades.componentType, componentType)
         ));
         if (!component[0]) {
           const newComponent = await tx.insert(componentUpgrades).values({
@@ -2519,28 +2917,28 @@ async function registerRoutes(app2) {
             throw new Error("TON transaction verification failed");
           }
         } else {
-          const user = await tx.select().from(users).where(eq9(users.id, userId));
+          const user = await tx.select().from(users).where(eq11(users.id, userId));
           const balanceField = currency === "CS" ? "csBalance" : "chstBalance";
           const currentBalance = user[0][balanceField];
           if (currentBalance < upgradeCost) {
             throw new Error(`Insufficient ${currency} balance. Need ${upgradeCost} ${currency}`);
           }
           await tx.update(users).set({
-            [balanceField]: sql8`${balanceField === "csBalance" ? users.csBalance : users.chstBalance} - ${upgradeCost}`
-          }).where(eq9(users.id, userId));
+            [balanceField]: sql9`${balanceField === "csBalance" ? users.csBalance : users.chstBalance} - ${upgradeCost}`
+          }).where(eq11(users.id, userId));
         }
         const newLevel = currentLevel + 1;
         await tx.update(componentUpgrades).set({
           currentLevel: newLevel,
-          updatedAt: sql8`NOW()`
-        }).where(eq9(componentUpgrades.id, component[0].id));
+          updatedAt: sql9`NOW()`
+        }).where(eq11(componentUpgrades.id, component[0].id));
         const hashrateIncrease = owned[0].equipment_types.baseHashrate * 0.05 * owned[0].owned_equipment.quantity;
         await tx.update(ownedEquipment).set({
-          currentHashrate: sql8`${ownedEquipment.currentHashrate} + ${hashrateIncrease}`
-        }).where(eq9(ownedEquipment.id, equipmentId));
+          currentHashrate: sql9`${ownedEquipment.currentHashrate} + ${hashrateIncrease}`
+        }).where(eq11(ownedEquipment.id, equipmentId));
         await tx.update(users).set({
-          totalHashrate: sql8`${users.totalHashrate} + ${hashrateIncrease}`
-        }).where(eq9(users.id, userId));
+          totalHashrate: sql9`${users.totalHashrate} + ${hashrateIncrease}`
+        }).where(eq11(users.id, userId));
         return {
           success: true,
           componentType,
@@ -2564,18 +2962,18 @@ async function registerRoutes(app2) {
     }
     try {
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
-        const equipmentType = await tx.select().from(equipmentTypes).where(eq9(equipmentTypes.id, parsed.data.equipmentTypeId));
+        const equipmentType = await tx.select().from(equipmentTypes).where(eq11(equipmentTypes.id, parsed.data.equipmentTypeId));
         if (!equipmentType[0]) {
           throw new Error("Equipment type not found");
         }
         const et = equipmentType[0];
-        const categoryEquipment = await tx.select().from(equipmentTypes).where(and6(
-          eq9(equipmentTypes.category, et.category),
-          eq9(equipmentTypes.tier, et.tier)
+        const categoryEquipment = await tx.select().from(equipmentTypes).where(and7(
+          eq11(equipmentTypes.category, et.category),
+          eq11(equipmentTypes.tier, et.tier)
         )).orderBy(equipmentTypes.orderIndex);
-        const userEquipment = await tx.select().from(ownedEquipment).where(eq9(ownedEquipment.userId, userId)).for("update");
+        const userEquipment = await tx.select().from(ownedEquipment).where(eq11(ownedEquipment.userId, userId)).for("update");
         const currentCategoryEquipment = categoryEquipment.filter(
           (e) => e.orderIndex < et.orderIndex
         );
@@ -2603,9 +3001,9 @@ async function registerRoutes(app2) {
         let equipment2;
         if (owned) {
           const updated = await tx.update(ownedEquipment).set({
-            quantity: sql8`${ownedEquipment.quantity} + 1`,
-            currentHashrate: sql8`${ownedEquipment.currentHashrate} + ${et.baseHashrate}`
-          }).where(eq9(ownedEquipment.id, owned.id)).returning();
+            quantity: sql9`${ownedEquipment.quantity} + 1`,
+            currentHashrate: sql9`${ownedEquipment.currentHashrate} + ${et.baseHashrate}`
+          }).where(eq11(ownedEquipment.id, owned.id)).returning();
           equipment2 = updated[0];
         } else {
           const inserted = await tx.insert(ownedEquipment).values({
@@ -2618,15 +3016,15 @@ async function registerRoutes(app2) {
         if (!(isFirstBasicLaptop && isFirstPurchase)) {
           const balanceField = et.currency === "CS" ? "csBalance" : "chstBalance";
           await tx.update(users).set({
-            [balanceField]: sql8`${balanceField === "csBalance" ? users.csBalance : users.chstBalance} - ${et.basePrice}`,
-            totalHashrate: sql8`${users.totalHashrate} + ${et.baseHashrate}`
-          }).where(eq9(users.id, userId));
+            [balanceField]: sql9`${balanceField === "csBalance" ? users.csBalance : users.chstBalance} - ${et.basePrice}`,
+            totalHashrate: sql9`${users.totalHashrate} + ${et.baseHashrate}`
+          }).where(eq11(users.id, userId));
         } else {
           await tx.update(users).set({
-            totalHashrate: sql8`${users.totalHashrate} + ${et.baseHashrate}`
-          }).where(eq9(users.id, userId));
+            totalHashrate: sql9`${users.totalHashrate} + ${et.baseHashrate}`
+          }).where(eq11(users.id, userId));
         }
-        const updatedUser = await tx.select().from(users).where(eq9(users.id, userId));
+        const updatedUser = await tx.select().from(users).where(eq11(users.id, userId));
         return equipment2;
       });
       res.json(result);
@@ -2713,12 +3111,12 @@ async function registerRoutes(app2) {
     }
     try {
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
         if (user[0].referredBy) {
           throw new Error("You have already used a referral code");
         }
-        const referrer = await tx.select().from(users).where(eq9(users.referralCode, referralCode)).for("update");
+        const referrer = await tx.select().from(users).where(eq11(users.referralCode, referralCode)).for("update");
         if (!referrer[0]) throw new Error("Invalid referral code");
         if (referrer[0].id === userId) {
           throw new Error("You cannot use your own referral code");
@@ -2726,11 +3124,11 @@ async function registerRoutes(app2) {
         const bonusAmount = 1e3;
         await tx.update(users).set({
           referredBy: referrer[0].id,
-          csBalance: sql8`${users.csBalance} + ${bonusAmount}`
-        }).where(eq9(users.id, userId));
+          csBalance: sql9`${users.csBalance} + ${bonusAmount}`
+        }).where(eq11(users.id, userId));
         await tx.update(users).set({
-          csBalance: sql8`${users.csBalance} + ${bonusAmount * 2}`
-        }).where(eq9(users.id, referrer[0].id));
+          csBalance: sql9`${users.csBalance} + ${bonusAmount * 2}`
+        }).where(eq11(users.id, referrer[0].id));
         const [referral] = await tx.insert(referrals).values({
           referrerId: referrer[0].id,
           refereeId: userId,
@@ -2786,15 +3184,15 @@ async function registerRoutes(app2) {
     }
     try {
       const result = await db.transaction(async (tx) => {
-        await tx.delete(ownedEquipment).where(eq9(ownedEquipment.userId, userId));
-        await tx.delete(blockRewards).where(eq9(blockRewards.userId, userId));
-        await tx.delete(referrals).where(eq9(referrals.referrerId, userId));
-        await tx.delete(referrals).where(eq9(referrals.refereeId, userId));
+        await tx.delete(ownedEquipment).where(eq11(ownedEquipment.userId, userId));
+        await tx.delete(blockRewards).where(eq11(blockRewards.userId, userId));
+        await tx.delete(referrals).where(eq11(referrals.referrerId, userId));
+        await tx.delete(referrals).where(eq11(referrals.refereeId, userId));
         await tx.update(users).set({
           csBalance: 0,
           chstBalance: 0,
           totalHashrate: 0
-        }).where(eq9(users.id, userId));
+        }).where(eq11(users.id, userId));
         return { success: true, message: "Game data reset successfully" };
       });
       res.json(result);
@@ -2834,7 +3232,7 @@ async function registerRoutes(app2) {
         isEnabled,
         updatedAt: /* @__PURE__ */ new Date(),
         updatedBy: req.telegramUser?.id?.toString() || "unknown"
-      }).where(eq9(featureFlags.featureKey, key)).returning();
+      }).where(eq11(featureFlags.featureKey, key)).returning();
       if (updated.length === 0) {
         return res.status(404).json({ error: "Feature flag not found" });
       }
@@ -2883,7 +3281,7 @@ async function registerRoutes(app2) {
       const updates = {};
       if (csBalance !== void 0) updates.csBalance = Math.max(0, Number(csBalance));
       if (chstBalance !== void 0) updates.chstBalance = Math.max(0, Number(chstBalance));
-      await db.update(users).set(updates).where(eq9(users.id, userId));
+      await db.update(users).set(updates).where(eq11(users.id, userId));
       const updatedUser = await storage.getUser(userId);
       res.json({
         success: true,
@@ -2903,9 +3301,9 @@ async function registerRoutes(app2) {
     try {
       const { userId } = req.params;
       const [powerUps, lootBoxes, packs] = await Promise.all([
-        db.select().from(powerUpPurchases).where(eq9(powerUpPurchases.userId, userId)),
-        db.select().from(lootBoxPurchases).where(eq9(lootBoxPurchases.userId, userId)),
-        db.select().from(packPurchases).where(eq9(packPurchases.userId, userId))
+        db.select().from(powerUpPurchases).where(eq11(powerUpPurchases.userId, userId)),
+        db.select().from(lootBoxPurchases).where(eq11(lootBoxPurchases.userId, userId)),
+        db.select().from(packPurchases).where(eq11(packPurchases.userId, userId))
       ]);
       const powerUpPayments = powerUps.map((p) => ({
         id: `powerup-${p.id}`,
@@ -3089,12 +3487,12 @@ async function registerRoutes(app2) {
         let usersUpdated = 0;
         const updates = [];
         for (const user of allUsers) {
-          const equipment2 = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq9(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(eq9(ownedEquipment.userId, user.telegramId));
+          const equipment2 = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq11(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(eq11(ownedEquipment.userId, user.telegramId));
           const actualHashrate = equipment2.reduce((sum, row) => {
             return sum + (row.owned_equipment?.currentHashrate || 0);
           }, 0);
           if (user.totalHashrate !== actualHashrate) {
-            await tx.update(users).set({ totalHashrate: actualHashrate }).where(eq9(users.telegramId, user.telegramId));
+            await tx.update(users).set({ totalHashrate: actualHashrate }).where(eq11(users.telegramId, user.telegramId));
             usersUpdated++;
             updates.push({
               userId: user.telegramId,
@@ -3126,7 +3524,7 @@ async function registerRoutes(app2) {
   app2.get("/api/admin/jackpots", validateTelegramAuth, requireAdmin, async (req, res) => {
     try {
       const { jackpotWins: jackpotWins2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const allJackpots = await db.select().from(jackpotWins2).orderBy(sql8`${jackpotWins2.wonAt} DESC`);
+      const allJackpots = await db.select().from(jackpotWins2).orderBy(sql9`${jackpotWins2.wonAt} DESC`);
       const unpaidCount = allJackpots.filter((j) => !j.paidOut).length;
       const totalPaidOut = allJackpots.filter((j) => j.paidOut).length;
       res.json({
@@ -3153,7 +3551,7 @@ async function registerRoutes(app2) {
       const { jackpotWins: jackpotWins2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
       const adminUser = req.user;
       const result = await db.transaction(async (tx) => {
-        const jackpot = await tx.select().from(jackpotWins2).where(eq9(jackpotWins2.id, parseInt(jackpotId))).limit(1);
+        const jackpot = await tx.select().from(jackpotWins2).where(eq11(jackpotWins2.id, parseInt(jackpotId))).limit(1);
         if (!jackpot[0]) {
           throw new Error("Jackpot not found");
         }
@@ -3165,8 +3563,8 @@ async function registerRoutes(app2) {
           paidAt: /* @__PURE__ */ new Date(),
           paidByAdmin: adminUser?.telegramId || "unknown",
           notes: notes || null
-        }).where(eq9(jackpotWins2.id, parseInt(jackpotId)));
-        const updated = await tx.select().from(jackpotWins2).where(eq9(jackpotWins2.id, parseInt(jackpotId))).limit(1);
+        }).where(eq11(jackpotWins2.id, parseInt(jackpotId)));
+        const updated = await tx.select().from(jackpotWins2).where(eq11(jackpotWins2.id, parseInt(jackpotId))).limit(1);
         return updated[0];
       });
       console.log(`Jackpot ${jackpotId} marked as paid by admin ${req.user?.telegramId}`);
@@ -3192,7 +3590,7 @@ async function registerRoutes(app2) {
       if (currency !== void 0 && !["CS", "CHST", "TON"].includes(currency)) {
         return res.status(400).json({ error: "Invalid currency. Must be CS, CHST, or TON." });
       }
-      const equipment2 = await db.select().from(equipmentTypes).where(eq9(equipmentTypes.id, equipmentId)).limit(1);
+      const equipment2 = await db.select().from(equipmentTypes).where(eq11(equipmentTypes.id, equipmentId)).limit(1);
       if (!equipment2[0]) {
         return res.status(404).json({ error: "Equipment not found" });
       }
@@ -3202,8 +3600,8 @@ async function registerRoutes(app2) {
       if (Object.keys(updateData).length === 0) {
         return res.status(400).json({ error: "No valid update fields provided" });
       }
-      await db.update(equipmentTypes).set(updateData).where(eq9(equipmentTypes.id, equipmentId));
-      const updatedEquipment = await db.select().from(equipmentTypes).where(eq9(equipmentTypes.id, equipmentId)).limit(1);
+      await db.update(equipmentTypes).set(updateData).where(eq11(equipmentTypes.id, equipmentId));
+      const updatedEquipment = await db.select().from(equipmentTypes).where(eq11(equipmentTypes.id, equipmentId)).limit(1);
       res.json({
         success: true,
         equipment: updatedEquipment[0],
@@ -3217,11 +3615,11 @@ async function registerRoutes(app2) {
   app2.get("/api/user/:userId/tasks/status", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
     try {
-      const user = await db.select().from(users).where(eq9(users.id, userId)).limit(1);
+      const user = await db.select().from(users).where(eq11(users.id, userId)).limit(1);
       if (!user[0]) {
         return res.status(404).json({ error: "User not found" });
       }
-      const completed = await db.select().from(userTasks).where(eq9(userTasks.userId, user[0].telegramId));
+      const completed = await db.select().from(userTasks).where(eq11(userTasks.userId, user[0].telegramId));
       const completedTaskIds = completed.map((c) => c.taskId);
       res.json({
         completed_task_ids: completedTaskIds,
@@ -3240,11 +3638,11 @@ async function registerRoutes(app2) {
     }
     try {
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
-        const existing = await tx.select().from(userTasks).where(and6(
-          eq9(userTasks.userId, user[0].telegramId),
-          eq9(userTasks.taskId, taskId)
+        const existing = await tx.select().from(userTasks).where(and7(
+          eq11(userTasks.userId, user[0].telegramId),
+          eq11(userTasks.taskId, taskId)
         )).limit(1);
         if (existing.length > 0) {
           return res.status(400).json({
@@ -3258,7 +3656,7 @@ async function registerRoutes(app2) {
         let errorMsg = "";
         switch (taskId) {
           case "mine-first-block":
-            const userEquipment = await tx.select().from(ownedEquipment).where(eq9(ownedEquipment.userId, userId));
+            const userEquipment = await tx.select().from(ownedEquipment).where(eq11(ownedEquipment.userId, userId));
             if (userEquipment.length === 0) {
               conditionsMet = false;
               errorMsg = "You need to purchase equipment first to mine blocks";
@@ -3275,9 +3673,9 @@ async function registerRoutes(app2) {
             rewardChst = 20;
             break;
           case "buy-first-asic":
-            const asicEquipment = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq9(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(and6(
-              eq9(ownedEquipment.userId, userId),
-              eq9(equipmentTypes.category, "ASIC Rig")
+            const asicEquipment = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq11(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(and7(
+              eq11(ownedEquipment.userId, userId),
+              eq11(equipmentTypes.category, "ASIC Rig")
             ));
             if (asicEquipment.length === 0) {
               conditionsMet = false;
@@ -3287,7 +3685,7 @@ async function registerRoutes(app2) {
             rewardChst = 30;
             break;
           case "invite-1-friend":
-            const referrals1 = await tx.select().from(referrals).where(eq9(referrals.referrerId, userId));
+            const referrals1 = await tx.select().from(referrals).where(eq11(referrals.referrerId, userId));
             if (referrals1.length === 0) {
               conditionsMet = false;
               errorMsg = "You need to invite at least 1 friend first";
@@ -3296,7 +3694,7 @@ async function registerRoutes(app2) {
             rewardChst = 50;
             break;
           case "invite-5-friends":
-            const referrals5 = await tx.select().from(referrals).where(eq9(referrals.referrerId, userId));
+            const referrals5 = await tx.select().from(referrals).where(eq11(referrals.referrerId, userId));
             if (referrals5.length < 5) {
               conditionsMet = false;
               errorMsg = "You need to invite at least 5 friends first";
@@ -3314,16 +3712,16 @@ async function registerRoutes(app2) {
           });
         }
         await tx.update(users).set({
-          csBalance: sql8`${users.csBalance} + ${rewardCs}`,
-          chstBalance: sql8`${users.chstBalance} + ${rewardChst}`
-        }).where(eq9(users.id, userId));
+          csBalance: sql9`${users.csBalance} + ${rewardCs}`,
+          chstBalance: sql9`${users.chstBalance} + ${rewardChst}`
+        }).where(eq11(users.id, userId));
         await tx.insert(userTasks).values({
           userId: user[0].telegramId,
           taskId,
           rewardCs,
           rewardChst
         });
-        const updatedUser = await tx.select().from(users).where(eq9(users.id, userId));
+        const updatedUser = await tx.select().from(users).where(eq11(users.id, userId));
         return {
           success: true,
           taskId,
@@ -3353,11 +3751,11 @@ async function registerRoutes(app2) {
     }
     try {
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
-        const existing = await tx.select().from(userTasks).where(and6(
-          eq9(userTasks.userId, user[0].telegramId),
-          eq9(userTasks.taskId, taskId)
+        const existing = await tx.select().from(userTasks).where(and7(
+          eq11(userTasks.userId, user[0].telegramId),
+          eq11(userTasks.taskId, taskId)
         )).limit(1);
         if (existing.length > 0) {
           return res.status(400).json({
@@ -3371,7 +3769,7 @@ async function registerRoutes(app2) {
         let errorMsg = "";
         switch (taskId) {
           case "mine-first-block":
-            const userEquipment = await tx.select().from(ownedEquipment).where(eq9(ownedEquipment.userId, userId));
+            const userEquipment = await tx.select().from(ownedEquipment).where(eq11(ownedEquipment.userId, userId));
             if (userEquipment.length === 0) {
               conditionsMet = false;
               errorMsg = "You need to purchase equipment first to mine blocks";
@@ -3388,9 +3786,9 @@ async function registerRoutes(app2) {
             rewardChst = 20;
             break;
           case "buy-first-asic":
-            const asicEquipment = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq9(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(and6(
-              eq9(ownedEquipment.userId, userId),
-              eq9(equipmentTypes.category, "ASIC Rig")
+            const asicEquipment = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq11(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(and7(
+              eq11(ownedEquipment.userId, userId),
+              eq11(equipmentTypes.category, "ASIC Rig")
             ));
             if (asicEquipment.length === 0) {
               conditionsMet = false;
@@ -3400,7 +3798,7 @@ async function registerRoutes(app2) {
             rewardChst = 30;
             break;
           case "invite-1-friend":
-            const referrals1 = await tx.select().from(referrals).where(eq9(referrals.referrerId, userId));
+            const referrals1 = await tx.select().from(referrals).where(eq11(referrals.referrerId, userId));
             if (referrals1.length === 0) {
               conditionsMet = false;
               errorMsg = "You need to invite at least 1 friend first";
@@ -3409,7 +3807,7 @@ async function registerRoutes(app2) {
             rewardChst = 50;
             break;
           case "invite-5-friends":
-            const referrals5 = await tx.select().from(referrals).where(eq9(referrals.referrerId, userId));
+            const referrals5 = await tx.select().from(referrals).where(eq11(referrals.referrerId, userId));
             if (referrals5.length < 5) {
               conditionsMet = false;
               errorMsg = "You need to invite at least 5 friends first";
@@ -3427,16 +3825,16 @@ async function registerRoutes(app2) {
           });
         }
         await tx.update(users).set({
-          csBalance: sql8`${users.csBalance} + ${rewardCs}`,
-          chstBalance: sql8`${users.chstBalance} + ${rewardChst}`
-        }).where(eq9(users.id, userId));
+          csBalance: sql9`${users.csBalance} + ${rewardCs}`,
+          chstBalance: sql9`${users.chstBalance} + ${rewardChst}`
+        }).where(eq11(users.id, userId));
         await tx.insert(userTasks).values({
           userId: user[0].telegramId,
           taskId,
           rewardCs,
           rewardChst
         });
-        const updatedUser = await tx.select().from(users).where(eq9(users.id, userId));
+        const updatedUser = await tx.select().from(users).where(eq11(users.id, userId));
         return {
           success: true,
           taskId,
@@ -3471,16 +3869,16 @@ async function registerRoutes(app2) {
     }
     try {
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
         const now = Date.now();
         const offsetMs = -offset * 60 * 1e3;
         const localTime = now + offsetMs;
         const localDate = new Date(localTime);
         const currentDate = `${localDate.getUTCFullYear()}-${String(localDate.getUTCMonth() + 1).padStart(2, "0")}-${String(localDate.getUTCDate()).padStart(2, "0")}`;
-        const existingClaim = await tx.select().from(dailyClaims).where(and6(
-          eq9(dailyClaims.userId, user[0].telegramId),
-          eq9(dailyClaims.claimType, type)
+        const existingClaim = await tx.select().from(dailyClaims).where(and7(
+          eq11(dailyClaims.userId, user[0].telegramId),
+          eq11(dailyClaims.claimType, type)
         )).limit(1);
         let claimCount = 0;
         let remainingClaims = 0;
@@ -3502,7 +3900,7 @@ async function registerRoutes(app2) {
               lastClaimDate: currentDate,
               userTimezoneOffset: offset,
               updatedAt: /* @__PURE__ */ new Date()
-            }).where(eq9(dailyClaims.id, claim.id));
+            }).where(eq11(dailyClaims.id, claim.id));
             claimCount = 1;
             remainingClaims = 4;
           } else {
@@ -3520,7 +3918,7 @@ async function registerRoutes(app2) {
             await tx.update(dailyClaims).set({
               claimCount: claim.claimCount + 1,
               updatedAt: /* @__PURE__ */ new Date()
-            }).where(eq9(dailyClaims.id, claim.id));
+            }).where(eq11(dailyClaims.id, claim.id));
             claimCount = claim.claimCount + 1;
             remainingClaims = 5 - claimCount;
           }
@@ -3528,11 +3926,11 @@ async function registerRoutes(app2) {
         const reward = type === "cs" ? 5 : 2;
         const currency = type === "cs" ? "CS" : "CHST";
         if (type === "cs") {
-          await tx.update(users).set({ csBalance: sql8`${users.csBalance} + ${reward}` }).where(eq9(users.id, userId));
+          await tx.update(users).set({ csBalance: sql9`${users.csBalance} + ${reward}` }).where(eq11(users.id, userId));
         } else {
-          await tx.update(users).set({ chstBalance: sql8`${users.chstBalance} + ${reward}` }).where(eq9(users.id, userId));
+          await tx.update(users).set({ chstBalance: sql9`${users.chstBalance} + ${reward}` }).where(eq11(users.id, userId));
         }
-        const updatedUser = await tx.select().from(users).where(eq9(users.id, userId));
+        const updatedUser = await tx.select().from(users).where(eq11(users.id, userId));
         const nextDay = new Date(localDate);
         nextDay.setUTCDate(nextDay.getUTCDate() + 1);
         nextDay.setUTCHours(0, 0, 0, 0);
@@ -3587,9 +3985,9 @@ async function registerRoutes(app2) {
     }
     try {
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
-        const existingPurchase = await tx.select().from(powerUpPurchases).where(eq9(powerUpPurchases.tonTransactionHash, tonTransactionHash)).limit(1);
+        const existingPurchase = await tx.select().from(powerUpPurchases).where(eq11(powerUpPurchases.tonTransactionHash, tonTransactionHash)).limit(1);
         if (existingPurchase.length > 0) {
           return res.status(400).json({
             error: "Transaction hash already used. Cannot reuse payment."
@@ -3628,7 +4026,7 @@ async function registerRoutes(app2) {
           rewardChst
         });
         if (rewardCs > 0) {
-          await tx.update(users).set({ csBalance: sql8`${users.csBalance} + ${rewardCs}` }).where(eq9(users.id, userId));
+          await tx.update(users).set({ csBalance: sql9`${users.csBalance} + ${rewardCs}` }).where(eq11(users.id, userId));
         }
         const now = /* @__PURE__ */ new Date();
         const expiresAt = new Date(now.getTime() + duration);
@@ -3640,7 +4038,7 @@ async function registerRoutes(app2) {
           expiresAt,
           isActive: true
         });
-        const updatedUser = await tx.select().from(users).where(eq9(users.id, userId));
+        const updatedUser = await tx.select().from(users).where(eq11(users.id, userId));
         return {
           success: true,
           powerUpType,
@@ -3670,20 +4068,20 @@ async function registerRoutes(app2) {
   app2.get("/api/user/:userId/powerups/active", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
     try {
-      const user = await db.select().from(users).where(eq9(users.id, userId)).limit(1);
+      const user = await db.select().from(users).where(eq11(users.id, userId)).limit(1);
       if (!user[0]) {
         return res.status(404).json({ error: "User not found" });
       }
       const now = /* @__PURE__ */ new Date();
-      const activePowerUpsList = await db.select().from(activePowerUps).where(and6(
-        eq9(activePowerUps.userId, user[0].telegramId),
-        eq9(activePowerUps.isActive, true),
-        sql8`${activePowerUps.expiresAt} > ${now}`
+      const activePowerUpsList = await db.select().from(activePowerUps).where(and7(
+        eq11(activePowerUps.userId, user[0].telegramId),
+        eq11(activePowerUps.isActive, true),
+        sql9`${activePowerUps.expiresAt} > ${now}`
       ));
-      await db.update(activePowerUps).set({ isActive: false }).where(and6(
-        eq9(activePowerUps.userId, user[0].telegramId),
-        eq9(activePowerUps.isActive, true),
-        sql8`${activePowerUps.expiresAt} <= ${now}`
+      await db.update(activePowerUps).set({ isActive: false }).where(and7(
+        eq11(activePowerUps.userId, user[0].telegramId),
+        eq11(activePowerUps.isActive, true),
+        sql9`${activePowerUps.expiresAt} <= ${now}`
       ));
       let totalHashrateBoost = 0;
       let totalLuckBoost = 0;
@@ -3723,7 +4121,7 @@ async function registerRoutes(app2) {
     }
     try {
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
         const boxRewards = {
           "basic": { tonCost: 0.5, minCS: 5e4, maxCS: 55e3 },
@@ -3747,7 +4145,7 @@ async function registerRoutes(app2) {
             throw new Error(`Insufficient TON amount. Required: ${boxConfig.tonCost} TON`);
           }
           const gameWallet = getGameWalletAddress();
-          const existingPurchase = await tx.select().from(lootBoxPurchases).where(eq9(lootBoxPurchases.tonTransactionHash, tonTransactionHash)).limit(1);
+          const existingPurchase = await tx.select().from(lootBoxPurchases).where(eq11(lootBoxPurchases.tonTransactionHash, tonTransactionHash)).limit(1);
           if (existingPurchase.length > 0) {
             throw new Error("This transaction has already been used");
           }
@@ -3778,9 +4176,9 @@ async function registerRoutes(app2) {
           }
         }
         await tx.update(users).set({
-          csBalance: sql8`${users.csBalance} + ${rewards.cs}`,
-          ...rewards.chst && { chstBalance: sql8`${users.chstBalance} + ${rewards.chst}` }
-        }).where(eq9(users.id, userId));
+          csBalance: sql9`${users.csBalance} + ${rewards.cs}`,
+          ...rewards.chst && { chstBalance: sql9`${users.chstBalance} + ${rewards.chst}` }
+        }).where(eq11(users.id, userId));
         if (boxConfig.tonCost > 0) {
           await tx.insert(lootBoxPurchases).values({
             userId: user[0].telegramId,
@@ -3791,7 +4189,7 @@ async function registerRoutes(app2) {
             rewardsJson: JSON.stringify(rewards)
           });
         }
-        const updatedUser = await tx.select().from(users).where(eq9(users.id, userId)).limit(1);
+        const updatedUser = await tx.select().from(users).where(eq11(users.id, userId)).limit(1);
         return {
           success: true,
           rewards,
@@ -3810,7 +4208,7 @@ async function registerRoutes(app2) {
   app2.get("/api/challenges", async (req, res) => {
     try {
       const { dailyChallenges: dailyChallengesTable } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const challenges = await db.select().from(dailyChallengesTable).where(eq9(dailyChallengesTable.isActive, true));
+      const challenges = await db.select().from(dailyChallengesTable).where(eq11(dailyChallengesTable.isActive, true));
       res.json(challenges);
     } catch (error) {
       console.error("Get challenges error:", error);
@@ -3821,15 +4219,15 @@ async function registerRoutes(app2) {
     const { userId } = req.params;
     try {
       const { userDailyChallenges: userDailyChallenges2, dailyChallenges: dailyChallengesTable } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const user = await db.select().from(users).where(eq9(users.id, userId)).limit(1);
+      const user = await db.select().from(users).where(eq11(users.id, userId)).limit(1);
       if (!user[0]) {
         return res.status(404).json({ error: "User not found" });
       }
       const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-      const allChallenges = await db.select().from(dailyChallengesTable).where(eq9(dailyChallengesTable.isActive, true));
-      const completed = await db.select().from(userDailyChallenges2).where(and6(
-        eq9(userDailyChallenges2.userId, user[0].telegramId),
-        eq9(userDailyChallenges2.completedDate, today)
+      const allChallenges = await db.select().from(dailyChallengesTable).where(eq11(dailyChallengesTable.isActive, true));
+      const completed = await db.select().from(userDailyChallenges2).where(and7(
+        eq11(userDailyChallenges2.userId, user[0].telegramId),
+        eq11(userDailyChallenges2.completedDate, today)
       ));
       const completedIds = completed.map((c) => c.challengeId);
       res.json({
@@ -3850,19 +4248,19 @@ async function registerRoutes(app2) {
     try {
       const { userDailyChallenges: userDailyChallenges2, dailyChallenges: dailyChallengesTable, userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
-        const challenge = await tx.select().from(dailyChallengesTable).where(and6(
-          eq9(dailyChallengesTable.challengeId, challengeId),
-          eq9(dailyChallengesTable.isActive, true)
+        const challenge = await tx.select().from(dailyChallengesTable).where(and7(
+          eq11(dailyChallengesTable.challengeId, challengeId),
+          eq11(dailyChallengesTable.isActive, true)
         )).limit(1);
         if (!challenge[0]) {
           throw new Error("Challenge not found");
         }
         const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-        const existing = await tx.select().from(userDailyChallenges2).where(and6(
-          eq9(userDailyChallenges2.userId, user[0].telegramId),
-          eq9(userDailyChallenges2.completedDate, today)
+        const existing = await tx.select().from(userDailyChallenges2).where(and7(
+          eq11(userDailyChallenges2.userId, user[0].telegramId),
+          eq11(userDailyChallenges2.completedDate, today)
         )).limit(1);
         if (existing[0]) {
           throw new Error("Challenge already completed today");
@@ -3874,28 +4272,28 @@ async function registerRoutes(app2) {
           rewardClaimed: true
         });
         if (challenge[0].rewardCs > 0) {
-          await tx.update(users).set({ csBalance: sql8`${users.csBalance} + ${challenge[0].rewardCs}` }).where(eq9(users.id, userId));
+          await tx.update(users).set({ csBalance: sql9`${users.csBalance} + ${challenge[0].rewardCs}` }).where(eq11(users.id, userId));
           await tx.insert(userStatistics3).values({
             userId: user[0].telegramId,
             totalCsEarned: challenge[0].rewardCs
           }).onConflictDoUpdate({
             target: userStatistics3.userId,
             set: {
-              totalCsEarned: sql8`${userStatistics3.totalCsEarned} + ${challenge[0].rewardCs}`,
-              updatedAt: sql8`NOW()`
+              totalCsEarned: sql9`${userStatistics3.totalCsEarned} + ${challenge[0].rewardCs}`,
+              updatedAt: sql9`NOW()`
             }
           });
         }
         if (challenge[0].rewardChst && challenge[0].rewardChst > 0) {
-          await tx.update(users).set({ chstBalance: sql8`${users.chstBalance} + ${challenge[0].rewardChst}` }).where(eq9(users.id, userId));
+          await tx.update(users).set({ chstBalance: sql9`${users.chstBalance} + ${challenge[0].rewardChst}` }).where(eq11(users.id, userId));
           await tx.insert(userStatistics3).values({
             userId: user[0].telegramId,
             totalChstEarned: challenge[0].rewardChst
           }).onConflictDoUpdate({
             target: userStatistics3.userId,
             set: {
-              totalChstEarned: sql8`${userStatistics3.totalChstEarned} + ${challenge[0].rewardChst}`,
-              updatedAt: sql8`NOW()`
+              totalChstEarned: sql9`${userStatistics3.totalChstEarned} + ${challenge[0].rewardChst}`,
+              updatedAt: sql9`NOW()`
             }
           });
         }
@@ -3914,7 +4312,7 @@ async function registerRoutes(app2) {
   app2.get("/api/achievements", async (req, res) => {
     try {
       const { achievements: achievementsTable } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const allAchievements = await db.select().from(achievementsTable).where(eq9(achievementsTable.isActive, true)).orderBy(achievementsTable.orderIndex);
+      const allAchievements = await db.select().from(achievementsTable).where(eq11(achievementsTable.isActive, true)).orderBy(achievementsTable.orderIndex);
       res.json(allAchievements);
     } catch (error) {
       console.error("Get achievements error:", error);
@@ -3925,12 +4323,12 @@ async function registerRoutes(app2) {
     const { userId } = req.params;
     try {
       const { achievements: achievementsTable, userAchievements: userAchievements2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const user = await db.select().from(users).where(eq9(users.id, userId)).limit(1);
+      const user = await db.select().from(users).where(eq11(users.id, userId)).limit(1);
       if (!user[0]) {
         return res.status(404).json({ error: "User not found" });
       }
-      const allAchievements = await db.select().from(achievementsTable).where(eq9(achievementsTable.isActive, true)).orderBy(achievementsTable.orderIndex);
-      const unlocked = await db.select().from(userAchievements2).where(eq9(userAchievements2.userId, user[0].telegramId));
+      const allAchievements = await db.select().from(achievementsTable).where(eq11(achievementsTable.isActive, true)).orderBy(achievementsTable.orderIndex);
+      const unlocked = await db.select().from(userAchievements2).where(eq11(userAchievements2.userId, user[0].telegramId));
       const unlockedIds = unlocked.map((u) => u.achievementId);
       res.json({
         achievements: allAchievements.map((achievement) => ({
@@ -3950,17 +4348,17 @@ async function registerRoutes(app2) {
     const { userId } = req.params;
     try {
       const { achievements: achievementsTable, userAchievements: userAchievements2, userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const user = await db.select().from(users).where(eq9(users.id, userId)).limit(1);
+      const user = await db.select().from(users).where(eq11(users.id, userId)).limit(1);
       if (!user[0]) {
         return res.status(404).json({ error: "User not found" });
       }
-      const stats = await db.select().from(userStatistics3).where(eq9(userStatistics3.userId, user[0].telegramId)).limit(1);
-      const equipment2 = await db.select().from(ownedEquipment).where(eq9(ownedEquipment.userId, userId));
+      const stats = await db.select().from(userStatistics3).where(eq11(userStatistics3.userId, user[0].telegramId)).limit(1);
+      const equipment2 = await db.select().from(ownedEquipment).where(eq11(ownedEquipment.userId, userId));
       const uniqueEquipment = new Set(equipment2.map((e) => e.equipmentTypeId)).size;
-      const refCount = await db.select({ count: sql8`COUNT(*)` }).from(referrals).where(eq9(referrals.referrerId, userId));
+      const refCount = await db.select({ count: sql9`COUNT(*)` }).from(referrals).where(eq11(referrals.referrerId, userId));
       const newlyUnlocked = [];
-      const allAchievements = await db.select().from(achievementsTable).where(eq9(achievementsTable.isActive, true));
-      const existingAchievements = await db.select().from(userAchievements2).where(eq9(userAchievements2.userId, user[0].telegramId));
+      const allAchievements = await db.select().from(achievementsTable).where(eq11(achievementsTable.isActive, true));
+      const existingAchievements = await db.select().from(userAchievements2).where(eq11(userAchievements2.userId, user[0].telegramId));
       const existingIds = existingAchievements.map((a) => a.achievementId);
       for (const achievement of allAchievements) {
         if (existingIds.includes(achievement.achievementId)) continue;
@@ -4014,11 +4412,11 @@ async function registerRoutes(app2) {
     try {
       const { achievements: achievementsTable, userAchievements: userAchievements2, userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
-        const userAchievement = await tx.select().from(userAchievements2).where(and6(
-          eq9(userAchievements2.userId, user[0].telegramId),
-          eq9(userAchievements2.achievementId, achievementId)
+        const userAchievement = await tx.select().from(userAchievements2).where(and7(
+          eq11(userAchievements2.userId, user[0].telegramId),
+          eq11(userAchievements2.achievementId, achievementId)
         )).limit(1);
         if (!userAchievement[0]) {
           throw new Error("Achievement not unlocked");
@@ -4026,26 +4424,26 @@ async function registerRoutes(app2) {
         if (userAchievement[0].rewardClaimed) {
           throw new Error("Reward already claimed");
         }
-        const achievement = await tx.select().from(achievementsTable).where(eq9(achievementsTable.achievementId, achievementId)).limit(1);
+        const achievement = await tx.select().from(achievementsTable).where(eq11(achievementsTable.achievementId, achievementId)).limit(1);
         if (!achievement[0]) {
           throw new Error("Achievement not found");
         }
         if (achievement[0].rewardCs && achievement[0].rewardCs > 0) {
-          await tx.update(users).set({ csBalance: sql8`${users.csBalance} + ${achievement[0].rewardCs}` }).where(eq9(users.id, userId));
+          await tx.update(users).set({ csBalance: sql9`${users.csBalance} + ${achievement[0].rewardCs}` }).where(eq11(users.id, userId));
           await tx.insert(userStatistics3).values({
             userId: user[0].telegramId,
             totalCsEarned: achievement[0].rewardCs
           }).onConflictDoUpdate({
             target: userStatistics3.userId,
             set: {
-              totalCsEarned: sql8`${userStatistics3.totalCsEarned} + ${achievement[0].rewardCs}`,
-              updatedAt: sql8`NOW()`
+              totalCsEarned: sql9`${userStatistics3.totalCsEarned} + ${achievement[0].rewardCs}`,
+              updatedAt: sql9`NOW()`
             }
           });
         }
-        await tx.update(userAchievements2).set({ rewardClaimed: true }).where(and6(
-          eq9(userAchievements2.userId, user[0].telegramId),
-          eq9(userAchievements2.achievementId, achievementId)
+        await tx.update(userAchievements2).set({ rewardClaimed: true }).where(and7(
+          eq11(userAchievements2.userId, user[0].telegramId),
+          eq11(userAchievements2.achievementId, achievementId)
         ));
         return {
           success: true,
@@ -4063,11 +4461,11 @@ async function registerRoutes(app2) {
     const { userId } = req.params;
     try {
       const { userCosmetics: userCosmetics2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const user = await db.select().from(users).where(eq9(users.id, userId)).limit(1);
+      const user = await db.select().from(users).where(eq11(users.id, userId)).limit(1);
       if (!user[0]) {
         return res.status(404).json({ error: "User not found" });
       }
-      const owned = await db.select().from(userCosmetics2).where(eq9(userCosmetics2.userId, user[0].telegramId));
+      const owned = await db.select().from(userCosmetics2).where(eq11(userCosmetics2.userId, user[0].telegramId));
       res.json(owned);
     } catch (error) {
       console.error("Get user cosmetics error:", error);
@@ -4085,18 +4483,18 @@ async function registerRoutes(app2) {
     }
     try {
       const { equipmentPresets: equipmentPresets2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const user = await db.select().from(users).where(eq9(users.id, userId)).limit(1);
+      const user = await db.select().from(users).where(eq11(users.id, userId)).limit(1);
       if (!user[0]) {
         return res.status(404).json({ error: "User not found" });
       }
-      const currentEquipment = await db.select().from(ownedEquipment).where(eq9(ownedEquipment.userId, userId));
+      const currentEquipment = await db.select().from(ownedEquipment).where(eq11(ownedEquipment.userId, userId));
       if (currentEquipment.length === 0) {
         return res.status(400).json({ error: "No equipment to save" });
       }
-      const snapshot = currentEquipment.map((eq12) => ({
-        equipmentTypeId: eq12.equipmentTypeId,
-        quantity: eq12.quantity,
-        upgradeLevel: eq12.upgradeLevel
+      const snapshot = currentEquipment.map((eq14) => ({
+        equipmentTypeId: eq14.equipmentTypeId,
+        quantity: eq14.quantity,
+        upgradeLevel: eq14.upgradeLevel
       }));
       const newPreset = await db.insert(equipmentPresets2).values({
         userId: user[0].telegramId,
@@ -4117,13 +4515,13 @@ async function registerRoutes(app2) {
     const { userId, presetId } = req.params;
     try {
       const { equipmentPresets: equipmentPresets2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const user = await db.select().from(users).where(eq9(users.id, userId)).limit(1);
+      const user = await db.select().from(users).where(eq11(users.id, userId)).limit(1);
       if (!user[0]) {
         return res.status(404).json({ error: "User not found" });
       }
-      const preset = await db.select().from(equipmentPresets2).where(and6(
-        eq9(equipmentPresets2.id, parseInt(presetId)),
-        eq9(equipmentPresets2.userId, user[0].telegramId)
+      const preset = await db.select().from(equipmentPresets2).where(and7(
+        eq11(equipmentPresets2.id, parseInt(presetId)),
+        eq11(equipmentPresets2.userId, user[0].telegramId)
       )).limit(1);
       if (!preset[0]) {
         return res.status(404).json({ error: "Preset not found" });
@@ -4142,18 +4540,18 @@ async function registerRoutes(app2) {
     const { userId, presetId } = req.params;
     try {
       const { equipmentPresets: equipmentPresets2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const user = await db.select().from(users).where(eq9(users.id, userId)).limit(1);
+      const user = await db.select().from(users).where(eq11(users.id, userId)).limit(1);
       if (!user[0]) {
         return res.status(404).json({ error: "User not found" });
       }
-      const preset = await db.select().from(equipmentPresets2).where(and6(
-        eq9(equipmentPresets2.id, parseInt(presetId)),
-        eq9(equipmentPresets2.userId, user[0].telegramId)
+      const preset = await db.select().from(equipmentPresets2).where(and7(
+        eq11(equipmentPresets2.id, parseInt(presetId)),
+        eq11(equipmentPresets2.userId, user[0].telegramId)
       )).limit(1);
       if (!preset[0]) {
         return res.status(404).json({ error: "Preset not found" });
       }
-      await db.delete(equipmentPresets2).where(eq9(equipmentPresets2.id, parseInt(presetId)));
+      await db.delete(equipmentPresets2).where(eq11(equipmentPresets2.id, parseInt(presetId)));
       res.json({
         success: true,
         message: `Preset "${preset[0].presetName}" deleted successfully`
@@ -4170,7 +4568,7 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      const alerts = await db.select().from(priceAlerts).leftJoin(equipmentTypes, eq9(priceAlerts.equipmentTypeId, equipmentTypes.id)).where(eq9(priceAlerts.userId, user.telegramId)).orderBy(priceAlerts.createdAt);
+      const alerts = await db.select().from(priceAlerts).leftJoin(equipmentTypes, eq11(priceAlerts.equipmentTypeId, equipmentTypes.id)).where(eq11(priceAlerts.userId, user.telegramId)).orderBy(priceAlerts.createdAt);
       const alertsWithStatus = alerts.map((row) => ({
         ...row.price_alerts,
         equipment: row.equipment_types,
@@ -4191,18 +4589,18 @@ async function registerRoutes(app2) {
     try {
       const { equipmentTypes: equipmentTypes2, userCosmetics: userCosmetics2, userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
-        const existingAlert = await tx.select().from(priceAlerts).where(and6(
-          eq9(priceAlerts.userId, user[0].telegramId),
-          eq9(priceAlerts.equipmentTypeId, equipmentTypeId)
+        const existingAlert = await tx.select().from(priceAlerts).where(and7(
+          eq11(priceAlerts.userId, user[0].telegramId),
+          eq11(priceAlerts.equipmentTypeId, equipmentTypeId)
         )).limit(1);
         if (existingAlert.length > 0) {
           throw new Error("Alert already exists for this equipment");
         }
-        const equipment2 = await tx.select().from(equipmentTypes2).where(and6(
-          eq9(equipmentTypes2.id, equipmentTypeId),
-          eq9(equipmentTypes2.isActive, true)
+        const equipment2 = await tx.select().from(equipmentTypes2).where(and7(
+          eq11(equipmentTypes2.id, equipmentTypeId),
+          eq11(equipmentTypes2.isActive, true)
         )).limit(1);
         if (!equipment2[0]) {
           throw new Error("Equipment not found");
@@ -4229,18 +4627,18 @@ async function registerRoutes(app2) {
     const { userId, alertId } = req.params;
     try {
       const { equipmentTypes: equipmentTypes2, userCosmetics: userCosmetics2, userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const user = await db.select().from(users).where(eq9(users.id, userId)).limit(1);
+      const user = await db.select().from(users).where(eq11(users.id, userId)).limit(1);
       if (!user[0]) {
         return res.status(404).json({ error: "User not found" });
       }
-      const alert = await db.select().from(priceAlerts).where(and6(
-        eq9(priceAlerts.id, parseInt(alertId)),
-        eq9(priceAlerts.userId, user[0].telegramId)
+      const alert = await db.select().from(priceAlerts).where(and7(
+        eq11(priceAlerts.id, parseInt(alertId)),
+        eq11(priceAlerts.userId, user[0].telegramId)
       )).limit(1);
       if (!alert[0]) {
         return res.status(404).json({ error: "Alert not found" });
       }
-      await db.delete(priceAlerts).where(eq9(priceAlerts.id, parseInt(alertId)));
+      await db.delete(priceAlerts).where(eq11(priceAlerts.id, parseInt(alertId)));
       res.json({
         success: true,
         message: "Alert deleted successfully"
@@ -4257,9 +4655,9 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      const alerts = await db.select().from(priceAlerts).leftJoin(equipmentTypes, eq9(priceAlerts.equipmentTypeId, equipmentTypes.id)).where(and6(
-        eq9(priceAlerts.userId, user.telegramId),
-        eq9(priceAlerts.triggered, false)
+      const alerts = await db.select().from(priceAlerts).leftJoin(equipmentTypes, eq11(priceAlerts.equipmentTypeId, equipmentTypes.id)).where(and7(
+        eq11(priceAlerts.userId, user.telegramId),
+        eq11(priceAlerts.triggered, false)
       ));
       const triggeredAlerts = [];
       for (const row of alerts) {
@@ -4267,7 +4665,7 @@ async function registerRoutes(app2) {
           await db.update(priceAlerts).set({
             triggered: true,
             triggeredAt: /* @__PURE__ */ new Date()
-          }).where(eq9(priceAlerts.id, row.price_alerts.id));
+          }).where(eq11(priceAlerts.id, row.price_alerts.id));
           triggeredAlerts.push({
             ...row.price_alerts,
             equipment: row.equipment_types
@@ -4290,10 +4688,10 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      const settings = await db.select().from(autoUpgradeSettings).leftJoin(ownedEquipment, eq9(autoUpgradeSettings.ownedEquipmentId, ownedEquipment.id)).leftJoin(equipmentTypes, eq9(ownedEquipment.equipmentTypeId, equipmentTypes.id)).leftJoin(componentUpgrades, and6(
-        eq9(componentUpgrades.ownedEquipmentId, autoUpgradeSettings.ownedEquipmentId),
-        eq9(componentUpgrades.componentType, autoUpgradeSettings.componentType)
-      )).where(eq9(autoUpgradeSettings.userId, user.telegramId)).orderBy(autoUpgradeSettings.createdAt);
+      const settings = await db.select().from(autoUpgradeSettings).leftJoin(ownedEquipment, eq11(autoUpgradeSettings.ownedEquipmentId, ownedEquipment.id)).leftJoin(equipmentTypes, eq11(ownedEquipment.equipmentTypeId, equipmentTypes.id)).leftJoin(componentUpgrades, and7(
+        eq11(componentUpgrades.ownedEquipmentId, autoUpgradeSettings.ownedEquipmentId),
+        eq11(componentUpgrades.componentType, autoUpgradeSettings.componentType)
+      )).where(eq11(autoUpgradeSettings.userId, user.telegramId)).orderBy(autoUpgradeSettings.createdAt);
       const settingsWithDetails = settings.map((row) => ({
         ...row.auto_upgrade_settings,
         equipment: row.owned_equipment,
@@ -4320,24 +4718,24 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      const equipment2 = await db.select().from(ownedEquipment).where(and6(
-        eq9(ownedEquipment.id, ownedEquipmentId),
-        eq9(ownedEquipment.userId, userId)
+      const equipment2 = await db.select().from(ownedEquipment).where(and7(
+        eq11(ownedEquipment.id, ownedEquipmentId),
+        eq11(ownedEquipment.userId, userId)
       )).limit(1);
       if (!equipment2[0]) {
         return res.status(404).json({ error: "Equipment not found or not owned" });
       }
-      const existingSetting = await db.select().from(autoUpgradeSettings).where(and6(
-        eq9(autoUpgradeSettings.ownedEquipmentId, ownedEquipmentId),
-        eq9(autoUpgradeSettings.componentType, componentType)
+      const existingSetting = await db.select().from(autoUpgradeSettings).where(and7(
+        eq11(autoUpgradeSettings.ownedEquipmentId, ownedEquipmentId),
+        eq11(autoUpgradeSettings.componentType, componentType)
       )).limit(1);
       let setting;
       if (existingSetting.length > 0) {
         const updated = await db.update(autoUpgradeSettings).set({
           targetLevel,
           enabled: enabled !== void 0 ? enabled : true,
-          updatedAt: sql8`NOW()`
-        }).where(eq9(autoUpgradeSettings.id, existingSetting[0].id)).returning();
+          updatedAt: sql9`NOW()`
+        }).where(eq11(autoUpgradeSettings.id, existingSetting[0].id)).returning();
         setting = updated[0];
       } else {
         const created = await db.insert(autoUpgradeSettings).values({
@@ -4366,14 +4764,14 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      const setting = await db.select().from(autoUpgradeSettings).where(and6(
-        eq9(autoUpgradeSettings.id, parseInt(settingId)),
-        eq9(autoUpgradeSettings.userId, user.telegramId)
+      const setting = await db.select().from(autoUpgradeSettings).where(and7(
+        eq11(autoUpgradeSettings.id, parseInt(settingId)),
+        eq11(autoUpgradeSettings.userId, user.telegramId)
       )).limit(1);
       if (!setting[0]) {
         return res.status(404).json({ error: "Setting not found" });
       }
-      await db.delete(autoUpgradeSettings).where(eq9(autoUpgradeSettings.id, parseInt(settingId)));
+      await db.delete(autoUpgradeSettings).where(eq11(autoUpgradeSettings.id, parseInt(settingId)));
       res.json({
         success: true,
         message: "Auto-upgrade setting deleted"
@@ -4387,14 +4785,14 @@ async function registerRoutes(app2) {
     const { userId } = req.params;
     try {
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
-        const settings = await tx.select().from(autoUpgradeSettings).leftJoin(componentUpgrades, and6(
-          eq9(componentUpgrades.ownedEquipmentId, autoUpgradeSettings.ownedEquipmentId),
-          eq9(componentUpgrades.componentType, autoUpgradeSettings.componentType)
-        )).leftJoin(ownedEquipment, eq9(ownedEquipment.id, autoUpgradeSettings.ownedEquipmentId)).where(and6(
-          eq9(autoUpgradeSettings.userId, user[0].telegramId),
-          eq9(autoUpgradeSettings.enabled, true)
+        const settings = await tx.select().from(autoUpgradeSettings).leftJoin(componentUpgrades, and7(
+          eq11(componentUpgrades.ownedEquipmentId, autoUpgradeSettings.ownedEquipmentId),
+          eq11(componentUpgrades.componentType, autoUpgradeSettings.componentType)
+        )).leftJoin(ownedEquipment, eq11(ownedEquipment.id, autoUpgradeSettings.ownedEquipmentId)).where(and7(
+          eq11(autoUpgradeSettings.userId, user[0].telegramId),
+          eq11(autoUpgradeSettings.enabled, true)
         ));
         const upgrades = [];
         let totalCost = 0;
@@ -4411,7 +4809,7 @@ async function registerRoutes(app2) {
             await tx.update(componentUpgrades).set({
               currentLevel: currentLevel + 1,
               updatedAt: /* @__PURE__ */ new Date()
-            }).where(eq9(componentUpgrades.id, component.id));
+            }).where(eq11(componentUpgrades.id, component.id));
             totalCost += upgradeCost;
             upgrades.push({
               equipmentId: equipment2.id,
@@ -4425,7 +4823,7 @@ async function registerRoutes(app2) {
         if (totalCost > 0) {
           await tx.update(users).set({
             csBalance: user[0].csBalance - totalCost
-          }).where(eq9(users.id, userId));
+          }).where(eq11(users.id, userId));
         }
         return { upgrades, totalCost };
       });
@@ -4444,7 +4842,7 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/seasons", async (req, res) => {
     try {
-      const allSeasons = await db.select().from(seasons).orderBy(sql8`${seasons.startDate} DESC`);
+      const allSeasons = await db.select().from(seasons).orderBy(sql9`${seasons.startDate} DESC`);
       res.json(allSeasons);
     } catch (error) {
       console.error("Get seasons error:", error);
@@ -4454,10 +4852,10 @@ async function registerRoutes(app2) {
   app2.get("/api/seasons/active", async (req, res) => {
     try {
       const now = /* @__PURE__ */ new Date();
-      const activeSeason = await db.select().from(seasons).where(and6(
-        eq9(seasons.isActive, true),
-        sql8`${seasons.startDate} <= ${now}`,
-        sql8`${seasons.endDate} >= ${now}`
+      const activeSeason = await db.select().from(seasons).where(and7(
+        eq11(seasons.isActive, true),
+        sql9`${seasons.startDate} <= ${now}`,
+        sql9`${seasons.endDate} >= ${now}`
       )).limit(1);
       res.json(activeSeason[0] || null);
     } catch (error) {
@@ -4471,7 +4869,7 @@ async function registerRoutes(app2) {
       return res.status(400).json({ error: "Missing required fields" });
     }
     try {
-      const existing = await db.select().from(seasons).where(eq9(seasons.seasonId, seasonId)).limit(1);
+      const existing = await db.select().from(seasons).where(eq11(seasons.seasonId, seasonId)).limit(1);
       if (existing.length > 0) {
         return res.status(400).json({ error: "Season ID already exists" });
       }
@@ -4499,7 +4897,7 @@ async function registerRoutes(app2) {
     const { seasonId } = req.params;
     const { name, description, startDate, endDate, bonusMultiplier, specialRewards } = req.body;
     try {
-      const existing = await db.select().from(seasons).where(eq9(seasons.seasonId, seasonId)).limit(1);
+      const existing = await db.select().from(seasons).where(eq11(seasons.seasonId, seasonId)).limit(1);
       if (existing.length === 0) {
         return res.status(404).json({ error: "Season not found" });
       }
@@ -4510,7 +4908,7 @@ async function registerRoutes(app2) {
       if (endDate !== void 0) updateData.endDate = new Date(endDate);
       if (bonusMultiplier !== void 0) updateData.bonusMultiplier = bonusMultiplier;
       if (specialRewards !== void 0) updateData.specialRewards = specialRewards;
-      const updated = await db.update(seasons).set(updateData).where(eq9(seasons.id, existing[0].id)).returning();
+      const updated = await db.update(seasons).set(updateData).where(eq11(seasons.id, existing[0].id)).returning();
       res.json({
         success: true,
         message: "Season updated successfully",
@@ -4525,14 +4923,14 @@ async function registerRoutes(app2) {
     const { seasonId } = req.params;
     const { isActive } = req.body;
     try {
-      const existing = await db.select().from(seasons).where(eq9(seasons.seasonId, seasonId)).limit(1);
+      const existing = await db.select().from(seasons).where(eq11(seasons.seasonId, seasonId)).limit(1);
       if (existing.length === 0) {
         return res.status(404).json({ error: "Season not found" });
       }
       if (isActive) {
-        await db.update(seasons).set({ isActive: false }).where(eq9(seasons.isActive, true));
+        await db.update(seasons).set({ isActive: false }).where(eq11(seasons.isActive, true));
       }
-      const updated = await db.update(seasons).set({ isActive }).where(eq9(seasons.id, existing[0].id)).returning();
+      const updated = await db.update(seasons).set({ isActive }).where(eq11(seasons.id, existing[0].id)).returning();
       res.json({
         success: true,
         message: isActive ? "Season activated" : "Season deactivated",
@@ -4546,11 +4944,11 @@ async function registerRoutes(app2) {
   app2.delete("/api/admin/seasons/:seasonId", validateTelegramAuth, requireAdmin, async (req, res) => {
     const { seasonId } = req.params;
     try {
-      const existing = await db.select().from(seasons).where(eq9(seasons.seasonId, seasonId)).limit(1);
+      const existing = await db.select().from(seasons).where(eq11(seasons.seasonId, seasonId)).limit(1);
       if (existing.length === 0) {
         return res.status(404).json({ error: "Season not found" });
       }
-      await db.delete(seasons).where(eq9(seasons.id, existing[0].id));
+      await db.delete(seasons).where(eq11(seasons.id, existing[0].id));
       res.json({
         success: true,
         message: "Season deleted successfully"
@@ -4567,7 +4965,7 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      const purchases = await db.select().from(packPurchases).where(eq9(packPurchases.userId, user.telegramId)).orderBy(packPurchases.purchasedAt);
+      const purchases = await db.select().from(packPurchases).where(eq11(packPurchases.userId, user.telegramId)).orderBy(packPurchases.purchasedAt);
       res.json(purchases);
     } catch (error) {
       console.error("Get pack purchases error:", error);
@@ -4586,11 +4984,11 @@ async function registerRoutes(app2) {
     }
     try {
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
-        const existing = await tx.select().from(packPurchases).where(and6(
-          eq9(packPurchases.userId, user[0].telegramId),
-          eq9(packPurchases.packType, packType)
+        const existing = await tx.select().from(packPurchases).where(and7(
+          eq11(packPurchases.userId, user[0].telegramId),
+          eq11(packPurchases.packType, packType)
         )).limit(1);
         if (existing.length > 0) {
           throw new Error("You have already purchased this pack");
@@ -4602,18 +5000,18 @@ async function registerRoutes(app2) {
         };
         const rewards = packRewards[packType];
         await tx.update(users).set({
-          csBalance: sql8`${users.csBalance} + ${rewards.cs}`,
-          chstBalance: sql8`${users.chstBalance} + ${rewards.chst}`
-        }).where(eq9(users.id, userId));
+          csBalance: sql9`${users.csBalance} + ${rewards.cs}`,
+          chstBalance: sql9`${users.chstBalance} + ${rewards.chst}`
+        }).where(eq11(users.id, userId));
         for (const equipId of rewards.equipment) {
-          const equipType = await tx.select().from(equipmentTypes).where(eq9(equipmentTypes.id, equipId)).limit(1);
+          const equipType = await tx.select().from(equipmentTypes).where(eq11(equipmentTypes.id, equipId)).limit(1);
           if (equipType[0]) {
-            const existing2 = await tx.select().from(ownedEquipment).where(and6(
-              eq9(ownedEquipment.userId, userId),
-              eq9(ownedEquipment.equipmentTypeId, equipId)
+            const existing2 = await tx.select().from(ownedEquipment).where(and7(
+              eq11(ownedEquipment.userId, userId),
+              eq11(ownedEquipment.equipmentTypeId, equipId)
             )).limit(1);
             if (existing2.length > 0) {
-              await tx.update(ownedEquipment).set({ quantity: existing2[0].quantity + 1 }).where(eq9(ownedEquipment.id, existing2[0].id));
+              await tx.update(ownedEquipment).set({ quantity: existing2[0].quantity + 1 }).where(eq11(ownedEquipment.id, existing2[0].id));
             } else {
               await tx.insert(ownedEquipment).values({
                 userId,
@@ -4653,7 +5051,7 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      let prestige = await db.select().from(userPrestige).where(eq9(userPrestige.userId, user.telegramId)).limit(1);
+      let prestige = await db.select().from(userPrestige).where(eq11(userPrestige.userId, user.telegramId)).limit(1);
       if (prestige.length === 0) {
         const created = await db.insert(userPrestige).values({
           userId: user.telegramId,
@@ -4662,7 +5060,7 @@ async function registerRoutes(app2) {
         }).returning();
         prestige = created;
       }
-      const history = await db.select().from(prestigeHistory).where(eq9(prestigeHistory.userId, user.telegramId)).orderBy(sql8`${prestigeHistory.prestigedAt} DESC`).limit(10);
+      const history = await db.select().from(prestigeHistory).where(eq11(prestigeHistory.userId, user.telegramId)).orderBy(sql9`${prestigeHistory.prestigedAt} DESC`).limit(10);
       const eligible = user.csBalance >= 1e6 && user.totalHashrate >= 100;
       res.json({
         prestige: prestige[0],
@@ -4680,12 +5078,12 @@ async function registerRoutes(app2) {
     const { userId } = req.params;
     try {
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
         if (user[0].csBalance < 1e6 || user[0].totalHashrate < 100) {
           throw new Error("Not eligible for prestige. Need 1M CS and 100 total hashrate.");
         }
-        let prestige = await tx.select().from(userPrestige).where(eq9(userPrestige.userId, user[0].telegramId)).limit(1);
+        let prestige = await tx.select().from(userPrestige).where(eq11(userPrestige.userId, user[0].telegramId)).limit(1);
         if (prestige.length === 0) {
           const created = await tx.insert(userPrestige).values({
             userId: user[0].telegramId,
@@ -4695,7 +5093,7 @@ async function registerRoutes(app2) {
           prestige = created;
         }
         const currentPrestige = prestige[0];
-        const equipment2 = await tx.select().from(ownedEquipment).where(eq9(ownedEquipment.userId, userId));
+        const equipment2 = await tx.select().from(ownedEquipment).where(eq11(ownedEquipment.userId, userId));
         await tx.insert(prestigeHistory).values({
           userId: user[0].telegramId,
           fromLevel: currentPrestige.prestigeLevel,
@@ -4707,13 +5105,13 @@ async function registerRoutes(app2) {
           prestigeLevel: currentPrestige.prestigeLevel + 1,
           totalPrestiges: currentPrestige.totalPrestiges + 1,
           lastPrestigeAt: /* @__PURE__ */ new Date()
-        }).where(eq9(userPrestige.id, currentPrestige.id));
+        }).where(eq11(userPrestige.id, currentPrestige.id));
         await tx.update(users).set({
           csBalance: 0,
           totalHashrate: 0
-        }).where(eq9(users.id, userId));
-        await tx.delete(ownedEquipment).where(eq9(ownedEquipment.userId, userId));
-        await tx.delete(componentUpgrades).where(sql8`${componentUpgrades.ownedEquipmentId} IN (SELECT id FROM ${ownedEquipment} WHERE user_id = ${userId})`);
+        }).where(eq11(users.id, userId));
+        await tx.delete(ownedEquipment).where(eq11(ownedEquipment.userId, userId));
+        await tx.delete(componentUpgrades).where(sql9`${componentUpgrades.ownedEquipmentId} IN (SELECT id FROM ${ownedEquipment} WHERE user_id = ${userId})`);
         return { newPrestigeLevel: currentPrestige.prestigeLevel + 1 };
       });
       res.json({
@@ -4734,7 +5132,7 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      const subscription = await db.select().from(userSubscriptions).where(eq9(userSubscriptions.userId, user.telegramId)).limit(1);
+      const subscription = await db.select().from(userSubscriptions).where(eq11(userSubscriptions.userId, user.telegramId)).limit(1);
       if (subscription.length === 0) {
         return res.json({ subscribed: false, subscription: null });
       }
@@ -4762,9 +5160,9 @@ async function registerRoutes(app2) {
     }
     try {
       const result = await db.transaction(async (tx) => {
-        const user = await tx.select().from(users).where(eq9(users.id, userId)).for("update");
+        const user = await tx.select().from(users).where(eq11(users.id, userId)).for("update");
         if (!user[0]) throw new Error("User not found");
-        const existing = await tx.select().from(userSubscriptions).where(eq9(userSubscriptions.userId, user[0].telegramId)).limit(1);
+        const existing = await tx.select().from(userSubscriptions).where(eq11(userSubscriptions.userId, user[0].telegramId)).limit(1);
         const now = /* @__PURE__ */ new Date();
         let endDate = null;
         if (subscriptionType === "monthly") {
@@ -4777,7 +5175,7 @@ async function registerRoutes(app2) {
             endDate,
             isActive: true,
             tonTransactionHash
-          }).where(eq9(userSubscriptions.id, existing[0].id)).returning();
+          }).where(eq11(userSubscriptions.id, existing[0].id)).returning();
           return updated[0];
         } else {
           const created = await tx.insert(userSubscriptions).values({
@@ -4808,7 +5206,7 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      await db.update(userSubscriptions).set({ isActive: false, autoRenew: false }).where(eq9(userSubscriptions.userId, user.telegramId));
+      await db.update(userSubscriptions).set({ isActive: false, autoRenew: false }).where(eq11(userSubscriptions.userId, user.telegramId));
       res.json({
         success: true,
         message: "Subscription cancelled"
@@ -4825,13 +5223,13 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      const streakData = await db.select().from(userStreaks).where(eq9(userStreaks.userId, user.telegramId)).limit(1);
+      const streakData = await db.select().from(userStreaks).where(eq11(userStreaks.userId, user.telegramId)).limit(1);
       const currentStreak = streakData.length > 0 ? streakData[0].currentStreak : 0;
       const today = /* @__PURE__ */ new Date();
       today.setHours(0, 0, 0, 0);
-      const todaysClaim = await db.select().from(dailyLoginRewards).where(and6(
-        eq9(dailyLoginRewards.userId, user.telegramId),
-        sql8`DATE(${dailyLoginRewards.claimedAt}) = DATE(${today})`
+      const todaysClaim = await db.select().from(dailyLoginRewards).where(and7(
+        eq11(dailyLoginRewards.userId, user.telegramId),
+        sql9`DATE(${dailyLoginRewards.claimedAt}) = DATE(${today})`
       )).limit(1);
       const canClaim = todaysClaim.length === 0;
       const nextStreakDay = canClaim ? currentStreak + 1 : currentStreak;
@@ -4856,14 +5254,14 @@ async function registerRoutes(app2) {
       }
       const today = /* @__PURE__ */ new Date();
       today.setHours(0, 0, 0, 0);
-      const todaysClaim = await db.select().from(dailyLoginRewards).where(and6(
-        eq9(dailyLoginRewards.userId, user.telegramId),
-        sql8`DATE(${dailyLoginRewards.claimedAt}) = DATE(${today})`
+      const todaysClaim = await db.select().from(dailyLoginRewards).where(and7(
+        eq11(dailyLoginRewards.userId, user.telegramId),
+        sql9`DATE(${dailyLoginRewards.claimedAt}) = DATE(${today})`
       )).limit(1);
       if (todaysClaim.length > 0) {
         return res.status(400).json({ error: "Daily reward already claimed today" });
       }
-      const streakData = await db.select().from(userStreaks).where(eq9(userStreaks.userId, user.telegramId)).limit(1);
+      const streakData = await db.select().from(userStreaks).where(eq11(userStreaks.userId, user.telegramId)).limit(1);
       let currentStreak = 0;
       if (streakData.length > 0) {
         const lastLoginDate = new Date(streakData[0].lastLoginDate);
@@ -4889,15 +5287,15 @@ async function registerRoutes(app2) {
           rewardItem: rewards.item
         });
         await tx.update(users).set({
-          csBalance: sql8`${users.csBalance} + ${rewards.cs}`,
-          chstBalance: sql8`${users.chstBalance} + ${rewards.chst}`
-        }).where(eq9(users.telegramId, user.telegramId));
+          csBalance: sql9`${users.csBalance} + ${rewards.cs}`,
+          chstBalance: sql9`${users.chstBalance} + ${rewards.chst}`
+        }).where(eq11(users.telegramId, user.telegramId));
         if (streakData.length > 0) {
           await tx.update(userStreaks).set({
             currentStreak,
-            longestStreak: sql8`GREATEST(${userStreaks.longestStreak}, ${currentStreak})`,
+            longestStreak: sql9`GREATEST(${userStreaks.longestStreak}, ${currentStreak})`,
             lastLoginDate: loginDateStr
-          }).where(eq9(userStreaks.userId, user.telegramId));
+          }).where(eq11(userStreaks.userId, user.telegramId));
         } else {
           await tx.insert(userStreaks).values({
             userId: user.telegramId,
@@ -5048,7 +5446,7 @@ init_mining();
 // server/seedDatabase.ts
 init_db();
 init_schema();
-import { eq as eq10 } from "drizzle-orm";
+import { eq as eq12 } from "drizzle-orm";
 async function seedDatabase() {
   try {
     console.log("\u{1F331} Starting database seeding...");
@@ -5106,7 +5504,7 @@ async function seedDatabase() {
       { key: "block_interval_seconds", value: "300" }
     ];
     for (const setting of defaultSettings) {
-      const existing = await db.select().from(gameSettings).where(eq10(gameSettings.key, setting.key));
+      const existing = await db.select().from(gameSettings).where(eq12(gameSettings.key, setting.key));
       if (existing.length === 0) {
         await db.insert(gameSettings).values(setting);
       }
@@ -5492,7 +5890,7 @@ async function seedGameContent() {
 // server/seedFeatureFlags.ts
 init_storage();
 init_schema();
-import { eq as eq11 } from "drizzle-orm";
+import { eq as eq13 } from "drizzle-orm";
 var initialFeatureFlags = [
   {
     featureKey: "blocks",
@@ -5559,7 +5957,7 @@ async function seedFeatureFlags() {
   console.log("\u{1F331} Seeding feature flags...");
   try {
     for (const flag of initialFeatureFlags) {
-      const existing = await db.select().from(featureFlags).where(eq11(featureFlags.featureKey, flag.featureKey)).limit(1);
+      const existing = await db.select().from(featureFlags).where(eq13(featureFlags.featureKey, flag.featureKey)).limit(1);
       if (existing.length === 0) {
         await db.insert(featureFlags).values(flag);
         console.log(`\u2705 Created feature flag: ${flag.featureName}`);
@@ -5577,7 +5975,7 @@ async function seedFeatureFlags() {
 
 // server/applyIndexes.ts
 init_db();
-import { sql as sql9 } from "drizzle-orm";
+import { sql as sql10 } from "drizzle-orm";
 import { readFileSync } from "fs";
 import { join } from "path";
 async function applyPerformanceIndexes() {
@@ -5589,7 +5987,7 @@ async function applyPerformanceIndexes() {
     );
     const statements = indexSQL.split(";").map((s) => s.trim()).filter((s) => s.length > 0 && !s.startsWith("--"));
     for (const statement of statements) {
-      await db.execute(sql9.raw(statement));
+      await db.execute(sql10.raw(statement));
     }
     console.log(`\u2705 Applied ${statements.length} performance indexes`);
   } catch (error) {
