@@ -10,14 +10,13 @@ import { queryClient } from "@/lib/queryClient";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 interface EconomyOverview {
-  current: {
-    totalCsInCirculation: string;
-    inflationRatePercent: string;
-    giniCoefficient: string;
-    top10PercentOwnership: string;
-  };
-  alerts: number;
-  status: string;
+  totalCsInCirculation: string;
+  inflationRatePercent: string;
+  giniCoefficient: string;
+  top10PercentOwnership: string;
+  alerts?: number;
+  status?: string;
+  recommendations?: string[];
 }
 
 interface EconomyMetric {
@@ -219,7 +218,7 @@ export default function EconomyAdmin() {
                   <p className="text-xs text-muted-foreground uppercase">Total CS</p>
                 </div>
                 <p className="text-2xl font-bold font-mono text-matrix-green">
-                  {parseFloat(overview.current.totalCsInCirculation).toLocaleString()}
+                  {parseFloat(overview.totalCsInCirculation || '0').toLocaleString()}
                 </p>
               </div>
 
@@ -229,7 +228,7 @@ export default function EconomyAdmin() {
                   <p className="text-xs text-muted-foreground uppercase">Inflation Rate</p>
                 </div>
                 <p className="text-2xl font-bold font-mono text-yellow-500">
-                  {parseFloat(overview.current.inflationRatePercent).toFixed(2)}%
+                  {parseFloat(overview.inflationRatePercent || '0').toFixed(2)}%
                 </p>
               </div>
 
@@ -239,7 +238,7 @@ export default function EconomyAdmin() {
                   <p className="text-xs text-muted-foreground uppercase">Gini Coefficient</p>
                 </div>
                 <p className="text-2xl font-bold font-mono text-purple-500">
-                  {parseFloat(overview.current.giniCoefficient).toFixed(3)}
+                  {parseFloat(overview.giniCoefficient || '0').toFixed(3)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   0 = equal, 1 = unequal
@@ -252,14 +251,14 @@ export default function EconomyAdmin() {
                   <p className="text-xs text-muted-foreground uppercase">Top 10% Own</p>
                 </div>
                 <p className="text-2xl font-bold font-mono text-red-500">
-                  {parseFloat(overview.current.top10PercentOwnership).toFixed(1)}%
+                  {parseFloat(overview.top10PercentOwnership || '0').toFixed(1)}%
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-md">
-              <Badge className={`text-sm ${getStatusColor(overview.status)}`}>
-                {overview.status.toUpperCase()}
+              <Badge className={`text-sm ${getStatusColor(overview.status || 'healthy')}`}>
+                {(overview.status || 'HEALTHY').toUpperCase()}
               </Badge>
               <p className="text-sm text-muted-foreground">
                 {unacknowledgedAlerts.length > 0 ? (
