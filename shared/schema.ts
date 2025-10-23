@@ -591,7 +591,7 @@ export const retentionCohorts = pgTable("retention_cohorts", {
   day0: integer("day0").notNull().default(0), // Users who signed up
   day1: integer("day1").notNull().default(0), // Came back day 1
   day3: integer("day3").notNull().default(0), // Came back day 3
-  day7: integer("day7").notNull().default(0), // Came back day 7
+  day7: integer("day7").notNull().default(0),
   day14: integer("day14").notNull().default(0),
   day30: integer("day30").notNull().default(0),
 }, (table) => ({
@@ -729,7 +729,6 @@ export const insertEquipmentTypeSchema = createInsertSchema(equipmentTypes);
 export const insertOwnedEquipmentSchema = createInsertSchema(ownedEquipment).omit({
   id: true,
   purchasedAt: true,
-  currentHashrate: true,
   quantity: true,
   upgradeLevel: true,
 });
