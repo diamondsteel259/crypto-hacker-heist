@@ -10,6 +10,7 @@ import { registerPromoCodeRoutes } from "./promoCodes.routes";
 import { registerAnalyticsRoutes } from "./analytics.routes";
 import { registerEventsRoutes } from "./events.routes";
 import { registerEconomyRoutes } from "./economy.routes";
+import { registerSegmentationRoutes } from "./segmentation.routes";
 
 /**
  * Register all modularized routes
@@ -49,6 +50,9 @@ export function registerModularRoutes(app: Express): void {
 
   // Economy (NEW - CS inflation monitoring, wealth distribution, alerts)
   registerEconomyRoutes(app);
+
+  // Segmentation (NEW - user classification, targeted offers)
+  registerSegmentationRoutes(app);
 
   // TODO: Migrate remaining routes from routes.ts
   // - shop.routes.ts (flash sales, powerups, lootboxes, packs, price alerts)
