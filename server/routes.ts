@@ -1040,13 +1040,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       let prestige = await db.select().from(userPrestige)
-        .where(eq(userPrestige.userId, user.telegramId))
+        .where(eq(userPrestige.userId, user.telegramId!))
         .limit(1);
 
       if (prestige.length === 0) {
         // Create default prestige record
         const created = await db.insert(userPrestige).values({
-          userId: user.telegramId,
+          userId: user.telegramId!,
           prestigeLevel: 0,
           totalPrestiges: 0,
         }).returning();
@@ -1054,7 +1054,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const history = await db.select().from(prestigeHistory)
-        .where(eq(prestigeHistory.userId, user.telegramId))
+        .where(eq(prestigeHistory.userId, user.telegramId!))
         .orderBy(sql`${prestigeHistory.prestigedAt} DESC`)
         .limit(10);
 
