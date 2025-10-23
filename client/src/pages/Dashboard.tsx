@@ -11,8 +11,10 @@ import MiningCalendar from "@/components/MiningCalendar";
 import PriceAlerts from "@/components/PriceAlerts";
 import ActiveSeason from "@/components/ActiveSeason";
 import PrestigeSystem from "@/components/PrestigeSystem";
+import MetricCard from "@/components/MetricCard";
+import CollapsibleSection from "@/components/CollapsibleSection";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Terminal, Gem, Package, TrendingUp, Zap, Shield, Sparkles, Flame, Clock, Gift, Cpu, Coins, ChevronDown, ChevronUp } from "lucide-react";
+import { Terminal, Gem, Package, TrendingUp, Zap, Shield, Sparkles, Flame, Clock, Gift, Cpu, Coins, ChevronDown, ChevronUp, BarChart3, Activity } from "lucide-react";
 import { initializeUser, getCurrentUserId } from "@/lib/user";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -284,7 +286,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background terminal-scanline">
-      <div className="max-w-7xl mx-auto p-3 md:p-4 space-y-4 md:space-y-6">
+      <div className="max-w-7xl mx-auto p-3 md:p-4 space-y-4">
         {/* Loading Help Message */}
         {showLoadingHelp && userLoading && (
           <Card className="p-4 bg-yellow-500/10 border-yellow-500/30">
@@ -313,114 +315,38 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Welcome Header */}
-        <Card className="p-4 md:p-6 bg-gradient-to-r from-matrix-green/10 to-cyber-blue/10 border-matrix-green/20">
-          <div className="flex items-center justify-between">
-            <div>
-              {userLoading ? (
-                <>
-                  <Skeleton className="h-8 w-48 mb-2" />
-                  <Skeleton className="h-4 w-64" />
-                </>
-              ) : (
-                <>
-                  <h1 className="text-xl md:text-2xl lg:text-3xl font-bold mb-1">
-                    Welcome back, {user?.username || 'Hacker'}!
-                  </h1>
-                  <p className="text-sm md:text-base text-muted-foreground">
-                    Your crypto mining empire at a glance
-                  </p>
-                </>
-              )}
+        {/* HERO SECTION - CS Balance */}
+        <Card className="p-6 md:p-8 bg-gradient-to-br from-matrix-green/20 via-background to-cyber-blue/20 border-matrix-green/30 relative overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,255,65,0.1),transparent_50%)]" />
+          <div className="relative z-10 text-center space-y-2">
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <Coins className="w-6 h-6 md:w-8 md:h-8 text-matrix-green animate-pulse" />
+              <p className="text-sm md:text-base font-medium text-muted-foreground uppercase tracking-widest">
+                Cipher Shards Balance
+              </p>
             </div>
-            <div className="hidden md:flex items-center gap-2">
-              <Cpu className="w-8 h-8 text-matrix-green animate-pulse" />
-            </div>
+            {userLoading ? (
+              <Skeleton className="h-16 w-64 mx-auto" />
+            ) : (
+              <>
+                <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold font-mono text-matrix-green matrix-glow">
+                  {user?.csBalance?.toLocaleString() || 0}
+                </h1>
+                <p className="text-sm md:text-base text-muted-foreground">
+                  Welcome back, <span className="text-matrix-green font-semibold">{user?.username || 'Hacker'}</span>!
+                </p>
+                {userRank && (
+                  <Badge variant="outline" className="text-xs border-matrix-green/50 text-matrix-green">
+                    Rank #{userRank.balanceRank} of {userRank.totalUsers}
+                  </Badge>
+                )}
+              </>
+            )}
           </div>
         </Card>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-          <Card className="p-4 md:p-5 hover:border-matrix-green/50 transition-all stat-glow-green">
-            <div className="flex items-center gap-2 mb-2">
-              <Coins className="w-4 md:w-5 h-4 md:h-5 text-matrix-green" />
-              <p className="text-xs md:text-sm font-medium text-muted-foreground uppercase tracking-wider">CS Balance</p>
-            </div>
-            {userLoading ? (
-              <Skeleton className="h-9 w-32" />
-            ) : (
-              <p className="text-2xl md:text-3xl font-bold font-mono text-matrix-green matrix-glow">
-                {user?.csBalance?.toLocaleString() || 0}
-              </p>
-            )}
-            {userRank && !userLoading && (
-              <p className="text-[10px] md:text-xs text-muted-foreground mt-1">
-                Rank #{userRank.balanceRank} / {userRank.totalUsers}
-              </p>
-            )}
-          </Card>
-
-          <Card className="p-2.5 md:p-4">
-            <div className="flex items-center gap-1 md:gap-2 mb-1 md:mb-2">
-              <Package className="w-3 md:w-4 h-3 md:h-4 text-cyber-blue" />
-              <p className="text-[10px] md:text-xs text-muted-foreground uppercase">Your Rigs</p>
-            </div>
-            {userLoading ? (
-              <Skeleton className="h-8 w-16" />
-            ) : (
-              <p className="text-lg md:text-2xl font-bold font-mono" data-testid="text-rig-count">
-                {equipment?.length || 0}
-              </p>
-            )}
-            <p className="text-[10px] md:text-xs text-muted-foreground">Active</p>
-          </Card>
-
-          <Card className={`p-2.5 md:p-4 relative overflow-hidden ${isMining ? 'border-matrix-green/50 stat-glow-green' : ''}`}>
-            {isMining && (
-              <div className="absolute inset-0 bg-gradient-to-r from-matrix-green/5 via-matrix-green/10 to-matrix-green/5 animate-pulse" />
-            )}
-            <div className="relative z-10">
-              <div className="flex items-center gap-1 md:gap-2 mb-1 md:mb-2">
-                <TrendingUp className={`w-3 md:w-4 h-3 md:h-4 ${isMining ? 'text-matrix-green animate-pulse' : 'text-neon-orange'}`} />
-                <p className="text-[10px] md:text-xs text-muted-foreground uppercase">Your HR</p>
-                {isMining && <Zap className="w-3 h-3 text-matrix-green animate-bounce" />}
-              </div>
-              {userLoading ? (
-                <Skeleton className="h-8 w-20" />
-              ) : (
-                <p className={`text-lg md:text-2xl font-bold font-mono ${isMining ? 'text-matrix-green matrix-glow' : 'text-foreground'}`} data-testid="text-hashrate">
-                  {(user?.totalHashrate ?? 0).toLocaleString()}
-                </p>
-              )}
-              <p className="text-[10px] md:text-xs text-muted-foreground">
-                H/s {isMining && '⚡ Mining'}
-              </p>
-              {userRank && !userLoading && (
-                <p className="text-[10px] md:text-xs text-muted-foreground mt-1">
-                  Rank #{userRank.hashrateRank} / {userRank.totalUsers}
-                </p>
-              )}
-            </div>
-          </Card>
-
-          <Card className="p-2.5 md:p-4 stat-glow-blue">
-            <div className="flex items-center gap-1 md:gap-2 mb-1 md:mb-2">
-              <Terminal className="w-3 md:w-4 h-3 md:h-4 text-chart-2" />
-              <p className="text-[10px] md:text-xs text-muted-foreground uppercase">Network %</p>
-            </div>
-            {userLoading ? (
-              <Skeleton className="h-8 w-16" />
-            ) : (
-              <p className="text-lg md:text-2xl font-bold font-mono text-cyber-blue cyber-glow">
-                {networkStats?.userSharePercentage?.toFixed(2) || '0.00'}%
-              </p>
-            )}
-            <p className="text-[10px] md:text-xs text-muted-foreground">of total</p>
-          </Card>
-        </div>
-
-        {/* Streak & Hourly Bonus */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+        {/* QUICK ACTIONS - Daily Login & Hourly Bonus */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Daily Login Rewards */}
           {dailyLoginStatus && (
             <Card className="p-4 bg-gradient-to-r from-orange-500/10 to-red-500/10 border-orange-500/30">
@@ -532,103 +458,135 @@ export default function Dashboard() {
             </Card>
           )}
         </div>
-        {/* Active Season */}
-        <ActiveSeason />
 
-        {/* Prestige System */}
-        <PrestigeSystem />
-
-        {/* Show More/Less Button */}
-        <div className="flex justify-center">
-          <Button
-            onClick={() => setShowAllCards(!showAllCards)}
-            variant="outline"
-            className="gap-2"
-          >
-            {showAllCards ? (
-              <>
-                <ChevronUp className="w-4 h-4" />
-                Show Less
-              </>
-            ) : (
-              <>
-                <ChevronDown className="w-4 h-4" />
-                Show More Stats
-              </>
-            )}
-          </Button>
+        {/* ESSENTIAL STATS - Hashrate, Rigs, Network % */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <MetricCard
+            icon={TrendingUp}
+            label="Your Hashrate"
+            value={user?.totalHashrate ?? 0}
+            subtitle={`H/s ${isMining ? '⚡ Mining' : ''}`}
+            loading={userLoading}
+            iconColor={isMining ? "text-matrix-green animate-pulse" : "text-neon-orange"}
+            valueColor={isMining ? "text-matrix-green" : "text-foreground"}
+            glow={isMining}
+            size="md"
+          />
+          
+          <MetricCard
+            icon={Package}
+            label="Your Rigs"
+            value={equipment?.length || 0}
+            subtitle="Active"
+            loading={userLoading}
+            iconColor="text-cyber-blue"
+            size="md"
+          />
+          
+          <MetricCard
+            icon={Terminal}
+            label="Network Share"
+            value={`${networkStats?.userSharePercentage?.toFixed(2) || '0.00'}%`}
+            subtitle="of total"
+            loading={userLoading}
+            iconColor="text-chart-2"
+            valueColor="text-cyber-blue"
+            size="md"
+          />
         </div>
 
-        {/* Priority 2/3 Cards - Only show when expanded */}
-        {showAllCards && (
-          <>
-            {/* Active Power-Ups */}
-            {activePowerUps && activePowerUps.active_power_ups && activePowerUps.active_power_ups.length > 0 && (
-              <Card className="p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border-purple-500/30">
-                <div className="flex items-center gap-2 mb-3">
-                  <Zap className="w-4 md:w-5 h-4 md:h-5 text-yellow-500" />
-                  <h3 className="text-sm md:text-base font-semibold">Active Power-Ups</h3>
-                  <Badge variant="secondary" className="text-[10px] md:text-xs">
-                    {activePowerUps.active_power_ups.length} Active
-                  </Badge>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {activePowerUps.active_power_ups.map((powerUp, index) => {
-                    const Icon = powerUp.power_up_type === 'hashrate-boost' ? Shield : Sparkles;
-                    const color = powerUp.power_up_type === 'hashrate-boost' ? 'text-cyan-400' : 'text-pink-400';
-                    const minutes = Math.floor(powerUp.time_remaining_seconds / 60);
-                    const seconds = powerUp.time_remaining_seconds % 60;
-                    
-                    return (
-                      <div key={index} className="p-3 bg-background/50 rounded-lg border border-border">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Icon className={`w-4 h-4 ${color}`} />
-                          <p className="text-xs md:text-sm font-medium">
-                            {powerUp.power_up_type === 'hashrate-boost' ? 'Hashrate Boost' : 'Luck Boost'}
-                          </p>
-                        </div>
-                        <p className="text-lg md:text-2xl font-bold font-mono text-matrix-green">
-                          +{powerUp.boost_percentage}%
-                        </p>
-                        <p className="text-[10px] md:text-xs text-muted-foreground mt-1">
-                          {minutes}m {seconds}s remaining
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-                {activePowerUps.effects && (activePowerUps.effects.total_hashrate_boost > 0 || activePowerUps.effects.total_luck_boost > 0) && (
-                  <div className="mt-3 pt-3 border-t border-border/50">
-                    <p className="text-xs text-muted-foreground">
-                      <span className="font-semibold">Total Effects:</span>{' '}
-                      {activePowerUps.effects.total_hashrate_boost > 0 && `+${activePowerUps.effects.total_hashrate_boost}% Hashrate `}
-                      {activePowerUps.effects.total_luck_boost > 0 && `+${activePowerUps.effects.total_luck_boost}% Luck`}
+        {/* COLLAPSIBLE: Season & Prestige */}
+        <CollapsibleSection
+          icon={Flame}
+          title="Season & Prestige"
+          subtitle="Special events and progression"
+          defaultExpanded={false}
+        >
+          <ActiveSeason />
+          <PrestigeSystem />
+        </CollapsibleSection>
+
+        {/* COLLAPSIBLE: Active Power-Ups */}
+        {activePowerUps && activePowerUps.active_power_ups && activePowerUps.active_power_ups.length > 0 && (
+          <CollapsibleSection
+            icon={Zap}
+            title="Active Power-Ups"
+            subtitle="Currently active boosts"
+            defaultExpanded={true}
+            badge={
+              <Badge variant="secondary" className="text-xs">
+                {activePowerUps.active_power_ups.length} Active
+              </Badge>
+            }
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {activePowerUps.active_power_ups.map((powerUp, index) => {
+                const Icon = powerUp.power_up_type === 'hashrate-boost' ? Shield : Sparkles;
+                const color = powerUp.power_up_type === 'hashrate-boost' ? 'text-cyan-400' : 'text-pink-400';
+                const minutes = Math.floor(powerUp.time_remaining_seconds / 60);
+                const seconds = powerUp.time_remaining_seconds % 60;
+                
+                return (
+                  <Card key={index} className="p-3 bg-background/50 border-border">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Icon className={`w-4 h-4 ${color}`} />
+                      <p className="text-xs md:text-sm font-medium">
+                        {powerUp.power_up_type === 'hashrate-boost' ? 'Hashrate Boost' : 'Luck Boost'}
+                      </p>
+                    </div>
+                    <p className="text-lg md:text-2xl font-bold font-mono text-matrix-green">
+                      +{powerUp.boost_percentage}%
                     </p>
-                  </div>
-                )}
-              </Card>
+                    <p className="text-[10px] md:text-xs text-muted-foreground mt-1">
+                      {minutes}m {seconds}s remaining
+                    </p>
+                  </Card>
+                );
+              })}
+            </div>
+            {activePowerUps.effects && (activePowerUps.effects.total_hashrate_boost > 0 || activePowerUps.effects.total_luck_boost > 0) && (
+              <div className="mt-3 pt-3 border-t border-border/50">
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-semibold">Total Effects:</span>{' '}
+                  {activePowerUps.effects.total_hashrate_boost > 0 && `+${activePowerUps.effects.total_hashrate_boost}% Hashrate `}
+                  {activePowerUps.effects.total_luck_boost > 0 && `+${activePowerUps.effects.total_luck_boost}% Luck`}
+                </p>
+              </div>
             )}
-          </>
+          </CollapsibleSection>
         )}
 
-        {/* Main Grid - Always visible (Priority 1 content) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-          {/* Left Column */}
-          <div className="lg:col-span-2 space-y-4 md:space-y-6">
-            <BlockTimer 
-              userHashrate={user?.totalHashrate || 0}
-            />
-            <HashrateChart />
-            <NetworkStats />
-          </div>
+        {/* COLLAPSIBLE: Mining Stats & Charts */}
+        <CollapsibleSection
+          icon={BarChart3}
+          title="Mining Stats & Analytics"
+          subtitle="Block timer, hashrate chart, and network statistics"
+          defaultExpanded={false}
+        >
+          <BlockTimer userHashrate={user?.totalHashrate || 0} />
+          <HashrateChart />
+          <NetworkStats />
+        </CollapsibleSection>
 
-          {/* Right Column */}
-          <div className="space-y-3 md:space-y-6">
-            <RecentBlocks />
-            <MiningCalendar />
-            <PriceAlerts />
+        {/* COLLAPSIBLE: Activity & History */}
+        <CollapsibleSection
+          icon={Activity}
+          title="Activity & History"
+          subtitle="Recent blocks, mining calendar, and price alerts"
+          defaultExpanded={false}
+        >
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-1">
+              <RecentBlocks />
+            </div>
+            <div className="lg:col-span-1">
+              <MiningCalendar />
+            </div>
+            <div className="lg:col-span-1">
+              <PriceAlerts />
+            </div>
           </div>
-        </div>
+        </CollapsibleSection>
       </div>
     </div>
   );
