@@ -8,7 +8,6 @@ import { validateTelegramAuth, requireAdmin, verifyUserAccess, type AuthRequest 
 import { verifyTONTransaction, getGameWalletAddress, isValidTONAddress } from "./tonVerification";
 import { miningService } from "./mining";
 import { getBotWebhookHandler } from "./bot";
-import { registerEquipmentRoutes } from "./routes/equipment.routes";
 import { registerModularRoutes } from "./routes/index";
 
 // Helper function to calculate daily login rewards based on streak day
@@ -41,11 +40,6 @@ function calculateDailyLoginReward(streakDay: number): { cs: number; chst: numbe
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Health endpoint for Render
-  app.get("/healthz", async (_req, res) => {
-    res.status(200).json({ ok: true });
-  });
-  
   // Telegram bot webhook handler (for production)
   const botWebhook = getBotWebhookHandler();
   if (botWebhook) {
@@ -53,8 +47,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log(`🤖 Telegram webhook registered at ${botWebhook.path}`);
   }
   
-  // Register equipment routes module
-  registerEquipmentRoutes(app);
+  // Register all modular routes (health, auth, user, social, mining, equipment, announcements)
+  registerModularRoutes(app);
+  
+  // Remaining routes that haven't been modularized yet follow below
+  // TODO: Migrate these to separate route modules (shop, achievements, gamification)
   
   // Auth and user routes
   app.post("/api/auth/telegram", validateTelegramAuth, async (req: AuthRequest, res) => {
