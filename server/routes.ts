@@ -1308,7 +1308,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get user's streak data
-      const streakData = await db.select().from(userStreaks).where(eq(userStreaks.userId, user.telegramId)).limit(1);
+      const streakData = await db.select().from(userStreaks).where(eq(userStreaks.userId, user.telegramId!)).limit(1);
       const currentStreak = streakData.length > 0 ? streakData[0].currentStreak : 0;
 
       // Check if user has claimed today
@@ -1317,7 +1317,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const todaysClaim = await db.select().from(dailyLoginRewards)
         .where(and(
-          eq(dailyLoginRewards.userId, user.telegramId),
+          eq(dailyLoginRewards.userId, user.telegramId!),
           sql`DATE(${dailyLoginRewards.claimedAt}) = DATE(${today})`
         ))
         .limit(1);
@@ -1354,7 +1354,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const todaysClaim = await db.select().from(dailyLoginRewards)
         .where(and(
-          eq(dailyLoginRewards.userId, user.telegramId),
+          eq(dailyLoginRewards.userId, user.telegramId!),
           sql`DATE(${dailyLoginRewards.claimedAt}) = DATE(${today})`
         ))
         .limit(1);
@@ -1394,7 +1394,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await db.transaction(async (tx: any) => {
         // Record the claim
         await tx.insert(dailyLoginRewards).values({
-          userId: user.telegramId,
+          userId: user.telegramId!,
           loginDate: loginDateStr,
           streakDay: currentStreak,
           rewardCs: rewards.cs,
@@ -1421,7 +1421,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .where(eq(userStreaks.userId, user.telegramId));
         } else {
           await tx.insert(userStreaks).values({
-            userId: user.telegramId,
+            userId: user.telegramId!,
             currentStreak,
             longestStreak: currentStreak,
             lastLoginDate: loginDateStr,
