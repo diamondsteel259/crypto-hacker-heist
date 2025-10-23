@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toNano } from "@ton/core";
 import { RewardModal } from "@/components/RewardModal";
+import { TransactionConfirmationModal } from "@/components/TransactionConfirmationModal";
 import { useTonPayment } from "./hooks/useTonPayment";
 import { TON_PAYMENT_ADDRESS } from "./types";
 
@@ -19,6 +20,9 @@ export default function LootBoxes({ userId }: LootBoxesProps) {
   const { tonConnectUI, isConnected, tonBalance, refreshBalance } = useTonPayment();
   const [rewardModalOpen, setRewardModalOpen] = useState(false);
   const [rewardModalData, setRewardModalData] = useState<any>(null);
+  const [confirmationModalOpen, setConfirmationModalOpen] = useState(false);
+  const [confirmationStatus, setConfirmationStatus] = useState<"confirming" | "success" | "error" | "idle">("idle");
+  const [confirmationMessage, setConfirmationMessage] = useState("");
 
   const lootBoxOpenMutation = useMutation({
     mutationFn: async ({ boxType, cost }: { boxType: string; cost?: number }) => {
@@ -61,6 +65,11 @@ export default function LootBoxes({ userId }: LootBoxesProps) {
             validUntil: Math.floor(Date.now() / 1000) + 600,
           });
           txHash = result.boc;
+          
+          // Show confirmation modal
+          setConfirmationStatus("confirming");
+          setConfirmationMessage("Verifying your payment on the TON blockchain. This may take 2-5 minutes...");
+          setConfirmationModalOpen(true);
         } catch (txError: any) {
           if (txError.message && txError.message.includes("Transaction was not sent")) {
             throw new Error("Transaction cancelled or rejected by wallet. Please try again.");
@@ -82,6 +91,16 @@ export default function LootBoxes({ userId }: LootBoxesProps) {
       return await response.json();
     },
     onSuccess: (data) => {
+      // Close confirmation modal and show success
+      if (confirmationModalOpen) {
+        setConfirmationStatus("success");
+        setConfirmationMessage("Payment confirmed! Your loot box has been opened.");
+        setTimeout(() => {
+          setConfirmationModalOpen(false);
+          setConfirmationStatus("idle");
+        }, 2000);
+      }
+
       queryClient.invalidateQueries({ queryKey: ["/api/user", userId] });
       refreshBalance();
 
@@ -92,11 +111,17 @@ export default function LootBoxes({ userId }: LootBoxesProps) {
       setRewardModalOpen(true);
     },
     onError: (error: any) => {
-      toast({
-        title: "Failed to open loot box",
-        description: error.message || "Something went wrong",
-        variant: "destructive",
-      });
+      // Show error in confirmation modal if open
+      if (confirmationModalOpen) {
+        setConfirmationStatus("error");
+        setConfirmationMessage(error.message || "Transaction verification failed");
+      } else {
+        toast({
+          title: "Failed to open loot box",
+          description: error.message || "Something went wrong",
+          variant: "destructive",
+        });
+      }
     },
   });
 
