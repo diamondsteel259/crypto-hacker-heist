@@ -5,7 +5,7 @@ import { insertUserSchema, insertOwnedEquipmentSchema } from "@shared/schema";
 import { users, ownedEquipment, equipmentTypes, referrals, componentUpgrades, blockRewards, blocks, dailyClaims, userTasks, powerUpPurchases, lootBoxPurchases, activePowerUps, priceAlerts, autoUpgradeSettings, seasons, packPurchases, userPrestige, prestigeHistory, userSubscriptions, userStatistics, dailyLoginRewards, userStreaks, featureFlags } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { validateTelegramAuth, requireAdmin, verifyUserAccess, type AuthRequest } from "./middleware/auth";
-import { verifyTONTransaction, getGameWalletAddress, isValidTONAddress } from "./tonVerification";
+import { verifyTONTransaction, getGameWalletAddress, isValidTONAddress, pollForTransaction } from "./tonVerification";
 import { miningService } from "./mining";
 import { getBotWebhookHandler } from "./bot";
 import { registerModularRoutes } from "./routes/index";
@@ -1980,8 +1980,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        // Verify transaction on TON blockchain
-        const verification = await verifyTONTransaction(
+        // Verify transaction on TON blockchain with polling (waits up to 3 minutes)
+        console.log(`⏳ Verifying TON transaction ${tonTransactionHash.substring(0, 12)}... (polling up to 3 minutes)`);
+        const verification = await pollForTransaction(
           tonTransactionHash,
           tonAmount,
           gameWallet,
@@ -1991,7 +1992,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!verification.verified) {
           console.error('TON verification failed:', verification.error);
           return res.status(400).json({
-            error: verification.error || "Transaction verification failed",
+            error: verification.error || "Transaction not found on blockchain. It may still be processing or the hash is incorrect.",
+            message: "Please ensure the transaction was sent and wait a moment before trying again.",
           });
         }
 
