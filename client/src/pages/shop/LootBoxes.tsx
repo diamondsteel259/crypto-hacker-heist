@@ -202,6 +202,16 @@ export default function LootBoxes({ userId }: LootBoxesProps) {
         rewards={rewardModalData?.rewards || {}}
         boxType={rewardModalData?.boxType}
       />
+
+      <TransactionConfirmationModal
+        open={confirmationModalOpen}
+        status={confirmationStatus}
+        message={confirmationMessage}
+        onClose={() => {
+          setConfirmationModalOpen(false);
+          setConfirmationStatus("idle");
+        }}
+      />
     </>
   );
 }
