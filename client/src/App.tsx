@@ -1,5 +1,5 @@
-import { Switch, Route } from "wouter";
-import { useState, useEffect, lazy, Suspense } from "react";
+import { Switch, Route, Suspense } from "wouter";
+import { useState, useEffect, lazy } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery, useMutation } from "@tanstack/react-query";
 import { TonConnectUIProvider } from '@tonconnect/ui-react';
@@ -47,26 +47,28 @@ function PageLoadingFallback() {
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/wallet" component={WalletPage} />
-      <Route path="/rigs" component={Rigs} />
-      <Route path="/shop" component={Shop} />
-      <Route path="/blocks" component={BlockExplorer} />
-      <Route path="/referrals" component={Referrals} />
-      <Route path="/leaderboard" component={Leaderboard} />
-      <Route path="/challenges" component={Challenges} />
-      <Route path="/achievements" component={Achievements} />
-      <Route path="/cosmetics" component={Cosmetics} />
-      <Route path="/packs" component={Packs} />
-      <Route path="/subscription" component={Subscription} />
-      <Route path="/statistics" component={Statistics} />
-      <Route path="/spin" component={SpinWheel} />
-      <Route path="/admin" component={Admin} />
-      <Route path="/terms" component={Terms} />
-      <Route path="/privacy" component={Privacy} />
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense fallback={<PageLoadingFallback />}>
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/wallet" component={WalletPage} />
+        <Route path="/rigs" component={Rigs} />
+        <Route path="/shop" component={Shop} />
+        <Route path="/blocks" component={BlockExplorer} />
+        <Route path="/referrals" component={Referrals} />
+        <Route path="/leaderboard" component={Leaderboard} />
+        <Route path="/challenges" component={Challenges} />
+        <Route path="/achievements" component={Achievements} />
+        <Route path="/cosmetics" component={Cosmetics} />
+        <Route path="/packs" component={Packs} />
+        <Route path="/subscription" component={Subscription} />
+        <Route path="/statistics" component={Statistics} />
+        <Route path="/spin" component={SpinWheel} />
+        <Route path="/admin" component={Admin} />
+        <Route path="/terms" component={Terms} />
+        <Route path="/privacy" component={Privacy} />
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 
