@@ -1,5 +1,5 @@
 import { Switch, Route } from "wouter";
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery, useMutation } from "@tanstack/react-query";
 import { TonConnectUIProvider } from '@tonconnect/ui-react';
@@ -10,26 +10,40 @@ import { useToast } from "@/hooks/use-toast";
 import BottomNav from "@/components/BottomNav";
 import MobileHeader from "@/components/MobileHeader";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import Dashboard from "@/pages/Dashboard";
-import WalletPage from "@/pages/Wallet";
-import Rigs from "@/pages/Rigs";
-import Shop from "@/pages/Shop";
-import BlockExplorer from "@/pages/BlockExplorer";
-import Referrals from "@/pages/Referrals";
-import Challenges from "@/pages/Challenges";
-import Achievements from "@/pages/Achievements";
-import Cosmetics from "@/pages/Cosmetics";
-import Statistics from "@/pages/Statistics";
-import SpinWheel from "@/pages/SpinWheel";
-import Admin from "@/pages/Admin";
-import Packs from "@/pages/Packs";
-import Subscription from "@/pages/Subscription";
-import Leaderboard from "@/pages/Leaderboard";
-import Terms from "@/pages/Terms";
-import Privacy from "@/pages/Privacy";
-import NotFound from "@/pages/not-found";
+import Dashboard from "@/pages/Dashboard"; // Keep Dashboard eager - it's the default route
 import { initializeUser } from "@/lib/user";
 import { apiRequest } from "@/lib/queryClient";
+
+// Lazy load all other pages for code splitting
+const WalletPage = lazy(() => import("@/pages/Wallet"));
+const Rigs = lazy(() => import("@/pages/Rigs"));
+const Shop = lazy(() => import("@/pages/Shop"));
+const BlockExplorer = lazy(() => import("@/pages/BlockExplorer"));
+const Referrals = lazy(() => import("@/pages/Referrals"));
+const Challenges = lazy(() => import("@/pages/Challenges"));
+const Achievements = lazy(() => import("@/pages/Achievements"));
+const Cosmetics = lazy(() => import("@/pages/Cosmetics"));
+const Statistics = lazy(() => import("@/pages/Statistics"));
+const SpinWheel = lazy(() => import("@/pages/SpinWheel"));
+const Admin = lazy(() => import("@/pages/Admin"));
+const Packs = lazy(() => import("@/pages/Packs"));
+const Subscription = lazy(() => import("@/pages/Subscription"));
+const Leaderboard = lazy(() => import("@/pages/Leaderboard"));
+const Terms = lazy(() => import("@/pages/Terms"));
+const Privacy = lazy(() => import("@/pages/Privacy"));
+const NotFound = lazy(() => import("@/pages/not-found"));
+
+// Loading fallback component
+function PageLoadingFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="text-center">
+        <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-3"></div>
+        <p className="text-sm text-muted-foreground">Loading page...</p>
+      </div>
+    </div>
+  );
+}
 
 function Router() {
   return (
