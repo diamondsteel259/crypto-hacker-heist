@@ -115,23 +115,49 @@ export async function cleanupTestDatabase() {
 export async function resetTestDatabase() {
   try {
     // Delete in order to respect foreign key constraints
+    // Delete user-related data first
     await testDb.delete(schema.blockRewards);
-    await testDb.delete(schema.blocks);
     await testDb.delete(schema.ownedEquipment);
     await testDb.delete(schema.referrals);
     await testDb.delete(schema.activePowerUps);
     await testDb.delete(schema.userAchievements);
-    await testDb.delete(schema.userChallenges);
-    await testDb.delete(schema.transactions);
-    await testDb.delete(schema.dailyLogins);
-    await testDb.delete(schema.announcements);
-    await testDb.delete(schema.promoCodes);
+    await testDb.delete(schema.userTasks);
+    await testDb.delete(schema.userDailyChallenges);
+    await testDb.delete(schema.dailyLoginRewards);
+    await testDb.delete(schema.dailyClaims);
+    await testDb.delete(schema.userStreaks);
+    await testDb.delete(schema.userHourlyBonuses);
+    await testDb.delete(schema.userCosmetics);
+    await testDb.delete(schema.userPrestige);
+    await testDb.delete(schema.userStatistics);
+    await testDb.delete(schema.userSubscriptions);
+    await testDb.delete(schema.userAnnouncements);
+    await testDb.delete(schema.userSegments);
+    await testDb.delete(schema.userSpins);
+    await testDb.delete(schema.spinHistory);
+    await testDb.delete(schema.jackpotWins);
+    await testDb.delete(schema.lootBoxPurchases);
+    await testDb.delete(schema.powerUpPurchases);
+    await testDb.delete(schema.packPurchases);
+    await testDb.delete(schema.priceAlerts);
+    await testDb.delete(schema.promoCodeRedemptions);
+    await testDb.delete(schema.userSessions);
+    await testDb.delete(schema.eventParticipation);
+    await testDb.delete(schema.componentUpgrades);
+    await testDb.delete(schema.prestigeHistory);
+    await testDb.delete(schema.autoUpgradeSettings);
+    await testDb.delete(schema.equipmentPresets);
+    
+    // Delete blocks after rewards are deleted
+    await testDb.delete(schema.blocks);
+    
+    // Delete users last (has foreign keys from many tables)
     await testDb.delete(schema.users);
 
     console.log('[Test DB] Database reset - all user data cleared');
   } catch (error) {
     console.error('[Test DB] Reset failed:', error);
-    // Some tables might not exist, continue anyway
+    throw error; // Rethrow to see the actual error
   }
 }
 
