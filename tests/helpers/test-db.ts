@@ -56,23 +56,12 @@ export async function setupTestDatabase() {
  */
 export async function seedTestData() {
   try {
-    // Import seed functions from main application
-    const { seedEquipmentTypes } = await import('../../server/seed-equipment.js');
-    const { seedGameSettings } = await import('../../server/seed-game-settings.js');
+    // Import seed function from main application
+    const { seedDatabase } = await import('../../server/seedDatabase.js');
 
-    // Seed equipment types if not already seeded
-    const existingEquipment = await testDb.select().from(schema.equipmentTypes).limit(1);
-    if (existingEquipment.length === 0) {
-      await seedEquipmentTypes();
-      console.log('[Test DB] Equipment types seeded');
-    }
-
-    // Seed game settings if not already seeded
-    const existingSettings = await testDb.select().from(schema.gameSettings).limit(1);
-    if (existingSettings.length === 0) {
-      await seedGameSettings();
-      console.log('[Test DB] Game settings seeded');
-    }
+    // Seed database (equipment and settings)
+    await seedDatabase();
+    console.log('[Test DB] Database seeded with equipment and settings');
   } catch (error) {
     // Seed functions might not exist or fail, that's okay for tests
     console.warn('[Test DB] Seeding completed with warnings:', error instanceof Error ? error.message : String(error));
