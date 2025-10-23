@@ -511,6 +511,42 @@ export const userAnnouncements = pgTable("user_announcements", {
   announcementIdx: index("user_announcements_announcement_idx").on(table.announcementId),
 }));
 
+// Promo Code System
+export const promoCodes = pgTable("promo_codes", {
+  id: serial("id").primaryKey(),
+  code: varchar("code", { length: 50 }).notNull().unique(),
+  description: text("description"),
+  rewardType: text("reward_type").notNull(), // 'cs', 'ton', 'equipment', 'powerup', 'lootbox', 'bundle'
+  rewardAmount: decimal("reward_amount", { precision: 20, scale: 2 }),
+  rewardData: text("reward_data"), // JSON for complex rewards (equipment ID, etc.)
+  maxUses: integer("max_uses"), // null = unlimited
+  currentUses: integer("current_uses").notNull().default(0),
+  maxUsesPerUser: integer("max_uses_per_user").notNull().default(1),
+  validFrom: timestamp("valid_from").notNull().defaultNow(),
+  validUntil: timestamp("valid_until"), // null = never expires
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdBy: text("created_by").notNull().references(() => users.telegramId),
+  targetSegment: text("target_segment").notNull().default('all'), // 'all', 'new_users', 'returning_users'
+}, (table) => ({
+  codeIdx: index("promo_codes_code_idx").on(table.code),
+  activeIdx: index("promo_codes_active_idx").on(table.isActive, table.validUntil),
+  createdByIdx: index("promo_codes_created_by_idx").on(table.createdBy),
+}));
+
+export const promoCodeRedemptions = pgTable("promo_code_redemptions", {
+  id: serial("id").primaryKey(),
+  promoCodeId: integer("promo_code_id").notNull().references(() => promoCodes.id, { onDelete: 'cascade' }),
+  telegramId: text("telegram_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  redeemedAt: timestamp("redeemed_at").notNull().defaultNow(),
+  rewardGiven: text("reward_given").notNull(), // JSON of what they received
+  ipAddress: varchar("ip_address", { length: 45 }),
+}, (table) => ({
+  userPromoUnique: unique().on(table.promoCodeId, table.telegramId),
+  userIdx: index("promo_code_redemptions_user_idx").on(table.telegramId),
+  promoIdx: index("promo_code_redemptions_promo_idx").on(table.promoCodeId),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
