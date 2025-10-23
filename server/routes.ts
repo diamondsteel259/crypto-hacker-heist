@@ -1920,7 +1920,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Get updated balance
-        const updatedUser = await tx.select().from(users).where(eq(users.id, userId));
+        const updatedUser = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
 
         // Calculate next reset
         const nextDay = new Date(localDate);
@@ -2808,7 +2808,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Give rewards
         if (challenge[0].rewardCs > 0) {
           await tx.update(users)
-            .set({ csBalance: sql`${users.csBalance} + ${challenge[0].rewardCs}` })
+            .set({
+              csBalance: sql`${users.csBalance} + ${challenge[0].rewardCs}`,
+            })
             .where(eq(users.id, userId));
 
           // Update statistics
@@ -2828,7 +2830,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (challenge[0].rewardChst && challenge[0].rewardChst > 0) {
           await tx.update(users)
-            .set({ chstBalance: sql`${users.chstBalance} + ${challenge[0].rewardChst}` })
+            .set({
+              chstBalance: sql`${users.chstBalance} + ${challenge[0].rewardChst}`,
+            })
             .where(eq(users.id, userId));
 
           await tx.insert(userStatistics)
@@ -3046,7 +3050,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Give rewards
         if (achievement[0].rewardCs && achievement[0].rewardCs > 0) {
           await tx.update(users)
-            .set({ csBalance: sql`${users.csBalance} + ${achievement[0].rewardCs}` })
+            .set({
+              csBalance: sql`${users.csBalance} + ${achievement[0].rewardCs}`,
+            })
             .where(eq(users.id, userId));
 
           await tx.insert(userStatistics)
@@ -3108,6 +3114,186 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Get user cosmetics error:", error);
       res.status(500).json({ error: "Failed to get user cosmetics" });
+    }
+  });
+
+  // Get all available cosmetic items (catalog)
+  app.get("/api/admin/cosmetics", validateTelegramAuth, async (req, res) => {
+    try {
+      const { cosmeticItems } = await import("@shared/schema");
+
+      const allCosmetics = await db.select().from(cosmeticItems)
+        .where(eq(cosmeticItems.isActive, true))
+        .orderBy(cosmeticItems.category, cosmeticItems.orderIndex);
+
+      res.json({ cosmetics: allCosmetics });
+    } catch (error: any) {
+      console.error("Get cosmetics catalog error:", error);
+      res.status(500).json({ error: "Failed to fetch cosmetics catalog" });
+    }
+  });
+
+  // Purchase a cosmetic item
+  app.post("/api/user/:userId/cosmetics/:cosmeticId/purchase", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId, cosmeticId } = req.params;
+
+    try {
+      const { cosmeticItems, userCosmetics } = await import("@shared/schema");
+
+      // Get user
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Get cosmetic item
+      const cosmetic = await db.select().from(cosmeticItems)
+        .where(eq(cosmeticItems.itemId, cosmeticId))
+        .limit(1);
+
+      if (!cosmetic[0]) {
+        return res.status(404).json({ error: "Cosmetic not found" });
+      }
+
+      if (!cosmetic[0].isActive) {
+        return res.status(400).json({ error: "Cosmetic is not available" });
+      }
+
+      // Check if user already owns this cosmetic
+      const alreadyOwned = await db.select().from(userCosmetics)
+        .where(and(
+          eq(userCosmetics.userId, user[0].telegramId),
+          eq(userCosmetics.cosmeticId, cosmeticId)
+        ))
+        .limit(1);
+
+      if (alreadyOwned.length > 0) {
+        return res.status(400).json({ error: "Already owned" });
+      }
+
+      // Determine price (prioritize CS, then CHST, then TON)
+      const priceCs = cosmetic[0].priceCs || 0;
+      const priceChst = cosmetic[0].priceChst || 0;
+
+      // Check if user has enough balance
+      if (priceCs > 0 && user[0].csBalance < priceCs) {
+        return res.status(400).json({ error: "Insufficient balance" });
+      }
+
+      if (priceChst > 0 && user[0].chstBalance < priceChst) {
+        return res.status(400).json({ error: "Insufficient balance" });
+      }
+
+      // Perform transaction
+      await db.transaction(async (tx: any) => {
+        // Deduct balance
+        if (priceCs > 0) {
+          await tx.update(users)
+            .set({ csBalance: sql`${users.csBalance} - ${priceCs}` })
+            .where(eq(users.id, userId));
+        }
+
+        if (priceChst > 0) {
+          await tx.update(users)
+            .set({ chstBalance: sql`${users.chstBalance} - ${priceChst}` })
+            .where(eq(users.id, userId));
+        }
+
+        // Grant cosmetic to user
+        await tx.insert(userCosmetics).values({
+          userId: user[0].telegramId,
+          cosmeticId: cosmeticId,
+          isEquipped: false,
+        });
+      });
+
+      // Get updated balance
+      const updatedUser = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+
+      res.json({
+        success: true,
+        cosmetic: {
+          id: cosmetic[0].id,
+          name: cosmetic[0].name,
+          category: cosmetic[0].category,
+          imageUrl: cosmetic[0].imageUrl,
+        },
+        newBalance: updatedUser[0].csBalance,
+      });
+    } catch (error: any) {
+      console.error("Purchase cosmetic error:", error);
+      res.status(500).json({ error: "Failed to purchase cosmetic" });
+    }
+  });
+
+  // Equip a cosmetic item
+  app.post("/api/user/:userId/cosmetics/:cosmeticId/equip", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId, cosmeticId } = req.params;
+
+    try {
+      const { cosmeticItems, userCosmetics } = await import("@shared/schema");
+
+      // Get user
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Get cosmetic item
+      const cosmetic = await db.select().from(cosmeticItems)
+        .where(eq(cosmeticItems.itemId, cosmeticId))
+        .limit(1);
+
+      if (!cosmetic[0]) {
+        return res.status(404).json({ error: "Cosmetic not found" });
+      }
+
+      // Check if user owns this cosmetic
+      const ownership = await db.select().from(userCosmetics)
+        .where(and(
+          eq(userCosmetics.userId, user[0].telegramId),
+          eq(userCosmetics.cosmeticId, cosmeticId)
+        ))
+        .limit(1);
+
+      if (ownership.length === 0) {
+        return res.status(403).json({ error: "Cosmetic not owned" });
+      }
+
+      // Equip cosmetic (unequip others of same type first)
+      await db.transaction(async (tx: any) => {
+        // Unequip all cosmetics of the same category for this user
+        await tx.update(userCosmetics)
+          .set({ isEquipped: false })
+          .where(and(
+            eq(userCosmetics.userId, user[0].telegramId),
+            sql`${userCosmetics.cosmeticId} IN (
+              SELECT ${cosmeticItems.itemId} 
+              FROM ${cosmeticItems} 
+              WHERE ${cosmeticItems.category} = ${cosmetic[0].category}
+            )`
+          ));
+
+        // Equip the selected cosmetic
+        await tx.update(userCosmetics)
+          .set({ isEquipped: true })
+          .where(and(
+            eq(userCosmetics.userId, user[0].telegramId),
+            eq(userCosmetics.cosmeticId, cosmeticId)
+          ));
+      });
+
+      res.json({
+        success: true,
+        equipped: {
+          type: cosmetic[0].category,
+          cosmeticId: cosmetic[0].id,
+          name: cosmetic[0].name,
+        },
+      });
+    } catch (error: any) {
+      console.error("Equip cosmetic error:", error);
+      res.status(500).json({ error: "Failed to equip cosmetic" });
     }
   });
 
