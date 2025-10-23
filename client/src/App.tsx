@@ -13,6 +13,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import Dashboard from "@/pages/Dashboard"; // Keep Dashboard eager - it's the default route
 import { initializeUser } from "@/lib/user";
 import { apiRequest } from "@/lib/queryClient";
+import type { User } from "@shared/schema";
 
 // Lazy load all other pages for code splitting
 const WalletPage = lazy(() => import("@/pages/Wallet"));
@@ -117,7 +118,7 @@ function AppContent() {
     initializeApp();
   }, []);
 
-  const { data: userProfile } = useQuery({
+  const { data: userProfile } = useQuery<User>({
     queryKey: ['/api/user', userId],
     enabled: !!userId,
   });
