@@ -632,6 +632,52 @@ export const eventParticipation = pgTable("event_participation", {
   userIdx: index("event_participation_user_idx").on(table.telegramId),
 }));
 
+// Economy Dashboard System
+export const economyMetrics = pgTable("economy_metrics", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull().unique(),
+  totalCsInCirculation: decimal("total_cs_in_circulation", { precision: 20, scale: 2 }).notNull().default('0'),
+  totalCsGenerated: decimal("total_cs_generated", { precision: 20, scale: 2 }).notNull().default('0'), // All-time cumulative
+  csGeneratedToday: decimal("cs_generated_today", { precision: 20, scale: 2 }).notNull().default('0'), // Daily generation
+  csSpentToday: decimal("cs_spent_today", { precision: 20, scale: 2 }).notNull().default('0'), // Daily spending
+  netCsChange: decimal("net_cs_change", { precision: 20, scale: 2 }).notNull().default('0'), // Generated - Spent
+  inflationRatePercent: decimal("inflation_rate_percent", { precision: 10, scale: 4 }).notNull().default('0'), // (Today Gen / Total Circ) * 100
+  avgBalancePerUser: decimal("avg_balance_per_user", { precision: 15, scale: 2 }).notNull().default('0'),
+  medianBalance: decimal("median_balance", { precision: 15, scale: 2 }).notNull().default('0'),
+  top1PercentOwnership: decimal("top1_percent_ownership", { precision: 10, scale: 2 }).notNull().default('0'), // % of total CS held by top 1%
+  top10PercentOwnership: decimal("top10_percent_ownership", { precision: 10, scale: 2 }).notNull().default('0'),
+  giniCoefficient: decimal("gini_coefficient", { precision: 5, scale: 4 }).notNull().default('0'), // Wealth inequality (0=equal, 1=one person has all)
+  activeWallets: integer("active_wallets").notNull().default(0), // Users with balance > 0
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  dateIdx: index("economy_metrics_date_idx").on(table.date),
+}));
+
+export const economySinks = pgTable("economy_sinks", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull(),
+  sinkType: text("sink_type").notNull(), // 'equipment', 'powerups', 'lootboxes', 'packs', 'upgrades', 'cosmetics', 'other'
+  csSpent: decimal("cs_spent", { precision: 20, scale: 2 }).notNull().default('0'),
+  transactionCount: integer("transaction_count").notNull().default(0),
+}, (table) => ({
+  dateSinkIdx: index("economy_sinks_date_sink_idx").on(table.date, table.sinkType),
+}));
+
+export const economyAlerts = pgTable("economy_alerts", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull(),
+  alertType: text("alert_type").notNull(), // 'high_inflation', 'negative_sinks', 'wealth_concentration', 'deflation'
+  severity: text("severity").notNull(), // 'info', 'warning', 'critical'
+  message: text("message").notNull(),
+  metric: text("metric"), // JSON of relevant data
+  acknowledged: boolean("acknowledged").notNull().default(false),
+  acknowledgedBy: text("acknowledged_by").references(() => users.telegramId),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  dateIdx: index("economy_alerts_date_idx").on(table.date),
+  acknowledgedIdx: index("economy_alerts_acknowledged_idx").on(table.acknowledged),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
