@@ -256,6 +256,17 @@ export default function Dashboard() {
     },
   });
 
+  // Auto-show daily login modal if reward is available
+  useEffect(() => {
+    if (dailyLoginStatus && !dailyLoginStatus.alreadyClaimed && !showDailyLoginModal) {
+      // Show modal after 1 second delay for better UX
+      const timer = setTimeout(() => {
+        setShowDailyLoginModal(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [dailyLoginStatus, showDailyLoginModal]);
+
   if (userError) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -590,6 +601,17 @@ export default function Dashboard() {
           </div>
         </CollapsibleSection>
       </div>
+
+      {/* Daily Login Modal - Auto-shows when reward available */}
+      {dailyLoginStatus && !dailyLoginStatus.alreadyClaimed && dailyLoginStatus.nextStreakDay && dailyLoginStatus.nextReward && userId && (
+        <DailyLoginModal
+          open={showDailyLoginModal}
+          onClose={() => setShowDailyLoginModal(false)}
+          userId={userId}
+          streakDay={dailyLoginStatus.nextStreakDay}
+          reward={dailyLoginStatus.nextReward}
+        />
+      )}
     </div>
   );
 }
