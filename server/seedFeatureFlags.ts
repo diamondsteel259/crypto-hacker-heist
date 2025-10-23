@@ -99,12 +99,5 @@ export async function seedFeatureFlags() {
   }
 }
 
-// Run if called directly
-if (require.main === module) {
-  seedFeatureFlags()
-    .then(() => process.exit(0))
-    .catch((error) => {
-      console.error(error);
-      process.exit(1);
-    });
-}
+// Note: This function is called from server/index.ts at startup
+// Direct execution removed to fix ES module compatibility
