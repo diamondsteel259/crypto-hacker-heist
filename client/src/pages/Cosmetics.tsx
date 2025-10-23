@@ -48,7 +48,8 @@ export default function Cosmetics() {
   }, []);
 
   const { data: allCosmetics, isLoading: cosmeticsLoading, refetch: refetchCosmetics } = useQuery<CosmeticItem[]>({
-    queryKey: ['/api/cosmetics'],
+    queryKey: ['/api/admin/cosmetics'],
+    select: (data: any) => data?.cosmetics || [],
   });
 
   const { data: ownedCosmetics, isLoading: ownedLoading } = useQuery<UserCosmetic[]>({
