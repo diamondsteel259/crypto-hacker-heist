@@ -447,7 +447,7 @@ export function registerAdminRoutes(app: Express): void {
    * POST /api/admin/jackpots/:jackpotId/mark-paid
    * Mark a jackpot as paid out
    */
-  app.post("/api/admin/jackpots/:jackpotId/mark-paid", validateTelegramAuth, requireAdmin, async (req, res) => {
+  app.post("/api/admin/jackpots/:jackpotId/mark-paid", validateTelegramAuth, requireAdmin, async (req: AuthRequest, res) => {
     const { jackpotId } = req.params;
     const { notes } = req.body;
     
