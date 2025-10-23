@@ -31,6 +31,7 @@ const Subscription = lazy(() => import("@/pages/Subscription"));
 const Leaderboard = lazy(() => import("@/pages/Leaderboard"));
 const Terms = lazy(() => import("@/pages/Terms"));
 const Privacy = lazy(() => import("@/pages/Privacy"));
+const Settings = lazy(() => import("@/pages/Settings"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
 // Loading fallback component
@@ -64,6 +65,7 @@ function Router() {
         <Route path="/statistics" component={Statistics} />
         <Route path="/spin" component={SpinWheel} />
         <Route path="/admin" component={Admin} />
+        <Route path="/settings" component={Settings} />
         <Route path="/terms" component={Terms} />
         <Route path="/privacy" component={Privacy} />
         <Route component={NotFound} />
