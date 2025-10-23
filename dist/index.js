@@ -6321,6 +6321,238 @@ async function registerRoutes(app2) {
       res.status(400).json({ error: error.message || "Failed to open loot box" });
     }
   });
+  app2.get("/api/user/:userId/spin/status", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const { userSpins: userSpins2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const user = await db.select().from(users).where(eq17(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+      const spinRecord = await db.select().from(userSpins2).where(and12(
+        eq17(userSpins2.userId, user[0].telegramId),
+        eq17(userSpins2.spinDate, today)
+      )).limit(1);
+      if (spinRecord.length === 0) {
+        return res.json({
+          freeSpinAvailable: true,
+          freeSpinUsed: false,
+          paidSpinsCount: 0
+        });
+      }
+      res.json({
+        freeSpinAvailable: !spinRecord[0].freeSpinUsed,
+        freeSpinUsed: spinRecord[0].freeSpinUsed,
+        paidSpinsCount: spinRecord[0].paidSpinsCount
+      });
+    } catch (error) {
+      console.error("Get spin status error:", error);
+      res.status(500).json({ error: "Failed to get spin status" });
+    }
+  });
+  app2.post("/api/user/:userId/spin", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { isFree, quantity, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
+    if (typeof isFree !== "boolean") {
+      return res.status(400).json({ error: "isFree parameter is required" });
+    }
+    const spinQuantity = quantity || 1;
+    if (spinQuantity < 1 || spinQuantity > 20) {
+      return res.status(400).json({ error: "Quantity must be between 1 and 20" });
+    }
+    try {
+      const { userSpins: userSpins2, spinHistory: spinHistory2, jackpotWins: jackpotWins2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const result = await db.transaction(async (tx) => {
+        const user = await tx.select().from(users).where(eq17(users.id, userId)).for("update");
+        if (!user[0]) throw new Error("User not found");
+        const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+        let spinRecord = await tx.select().from(userSpins2).where(and12(
+          eq17(userSpins2.userId, user[0].telegramId),
+          eq17(userSpins2.spinDate, today)
+        )).limit(1);
+        if (isFree) {
+          if (spinRecord.length > 0 && spinRecord[0].freeSpinUsed) {
+            throw new Error("Free spin already used today. Come back tomorrow!");
+          }
+          if (spinRecord.length === 0) {
+            await tx.insert(userSpins2).values({
+              userId: user[0].telegramId,
+              spinDate: today,
+              freeSpinUsed: true,
+              paidSpinsCount: 0
+            });
+          } else {
+            await tx.update(userSpins2).set({ freeSpinUsed: true, lastSpinAt: /* @__PURE__ */ new Date() }).where(and12(
+              eq17(userSpins2.userId, user[0].telegramId),
+              eq17(userSpins2.spinDate, today)
+            ));
+          }
+        } else {
+          if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
+            throw new Error("TON transaction details required for paid spins");
+          }
+          const pricing = {
+            1: 0.1,
+            10: 0.9,
+            20: 1.7
+          };
+          const expectedCost = pricing[spinQuantity];
+          if (!expectedCost) {
+            throw new Error("Invalid spin quantity. Must be 1, 10, or 20");
+          }
+          if (parseFloat(tonAmount) < expectedCost) {
+            throw new Error(`Insufficient TON amount. Required: ${expectedCost} TON`);
+          }
+          const gameWallet = getGameWalletAddress();
+          const existingPurchase = await tx.select().from(spinHistory2).where(sql14`prize_value = ${tonTransactionHash}`).limit(1);
+          if (existingPurchase.length > 0) {
+            throw new Error("This transaction has already been used");
+          }
+          console.log(`\u23F3 Verifying spin wheel transaction ${tonTransactionHash.substring(0, 12)}...`);
+          const verification = await pollForTransaction(
+            tonTransactionHash,
+            tonAmount,
+            gameWallet,
+            userWalletAddress
+          );
+          if (!verification.verified) {
+            throw new Error(verification.error || "Transaction verification failed");
+          }
+          if (spinRecord.length === 0) {
+            await tx.insert(userSpins2).values({
+              userId: user[0].telegramId,
+              spinDate: today,
+              freeSpinUsed: false,
+              paidSpinsCount: spinQuantity
+            });
+          } else {
+            await tx.update(userSpins2).set({
+              paidSpinsCount: spinRecord[0].paidSpinsCount + spinQuantity,
+              lastSpinAt: /* @__PURE__ */ new Date()
+            }).where(and12(
+              eq17(userSpins2.userId, user[0].telegramId),
+              eq17(userSpins2.spinDate, today)
+            ));
+          }
+        }
+        const prizes = [];
+        let totalCs = 0;
+        let totalChst = 0;
+        let jackpotWon = false;
+        for (let i = 0; i < spinQuantity; i++) {
+          const prize = generateSpinPrize(isFree);
+          prizes.push(prize);
+          if (prize.type === "cs") {
+            totalCs += prize.value;
+          } else if (prize.type === "chst") {
+            totalChst += prize.value;
+          } else if (prize.type === "jackpot") {
+            jackpotWon = true;
+            await tx.insert(jackpotWins2).values({
+              userId: user[0].telegramId,
+              username: user[0].username || user[0].telegramId,
+              walletAddress: userWalletAddress || null,
+              amount: "1.0",
+              paidOut: false
+            });
+          } else if (prize.type === "powerup") {
+            const powerUpType = prize.value;
+            const duration = 60 * 60 * 1e3;
+            const expiresAt = new Date(Date.now() + duration);
+            await tx.insert(activePowerUps).values({
+              userId: user[0].telegramId,
+              powerUpType,
+              boostPercentage: 50,
+              expiresAt,
+              isActive: true
+            });
+          } else if (prize.type === "equipment") {
+            const equipmentId = prize.value;
+            const existing = await tx.select().from(ownedEquipment).where(and12(
+              eq17(ownedEquipment.userId, user[0].telegramId),
+              eq17(ownedEquipment.equipmentTypeId, equipmentId)
+            )).limit(1);
+            if (existing.length > 0) {
+              await tx.update(ownedEquipment).set({ quantity: existing[0].quantity + 1 }).where(eq17(ownedEquipment.id, existing[0].id));
+            } else {
+              const equipmentInfo = await tx.select().from(equipmentTypes).where(eq17(equipmentTypes.id, equipmentId)).limit(1);
+              if (equipmentInfo.length > 0) {
+                await tx.insert(ownedEquipment).values({
+                  userId: user[0].telegramId,
+                  equipmentTypeId: equipmentId,
+                  quantity: 1,
+                  upgradeLevel: 0,
+                  currentHashrate: equipmentInfo[0].baseHashrate,
+                  acquiredVia: "spin_wheel"
+                });
+              }
+            }
+          }
+          await tx.insert(spinHistory2).values({
+            userId: user[0].telegramId,
+            prizeType: prize.type,
+            prizeValue: prize.type === "equipment" ? prize.value : prize.value.toString(),
+            wasFree: isFree
+          });
+        }
+        if (totalCs > 0 || totalChst > 0) {
+          await tx.update(users).set({
+            ...totalCs > 0 && { csBalance: sql14`${users.csBalance} + ${totalCs}` },
+            ...totalChst > 0 && { chstBalance: sql14`${users.chstBalance} + ${totalChst}` }
+          }).where(eq17(users.id, userId));
+        }
+        const updatedUser = await tx.select().from(users).where(eq17(users.id, userId)).limit(1);
+        return {
+          success: true,
+          prizes,
+          summary: {
+            total_cs: totalCs,
+            total_chst: totalChst,
+            jackpot_won: jackpotWon,
+            spins_completed: spinQuantity
+          },
+          message: jackpotWon ? `\u{1F3B0} JACKPOT! You won 1 TON! Contact admin for payout. Plus ${totalCs} CS and ${totalChst} CHST!` : `You won ${totalCs} CS and ${totalChst} CHST from ${spinQuantity} spin(s)!`,
+          newBalance: {
+            cs: updatedUser[0].csBalance,
+            chst: updatedUser[0].chstBalance
+          }
+        };
+      });
+      res.json(result);
+    } catch (error) {
+      console.error("Spin wheel error:", error);
+      res.status(400).json({ error: error.message || "Failed to spin wheel" });
+    }
+  });
+  function generateSpinPrize(isFree) {
+    const roll = Math.random() * 100;
+    if (!isFree && roll < 0.1) {
+      return { type: "jackpot", value: 1, display: "1 TON Jackpot!" };
+    }
+    if (roll < 10.1) {
+      const equipmentOptions = [
+        "laptop-lenovo-e14",
+        "laptop-dell-inspiron",
+        "laptop-hp-pavilion",
+        "gaming-acer-predator"
+      ];
+      const equipment2 = equipmentOptions[Math.floor(Math.random() * equipmentOptions.length)];
+      return { type: "equipment", value: equipment2, display: "Equipment" };
+    }
+    if (roll < 30.1) {
+      const powerUpOptions = ["hashrate-boost", "luck-boost", "cs-multiplier"];
+      const powerUp = powerUpOptions[Math.floor(Math.random() * powerUpOptions.length)];
+      return { type: "powerup", value: powerUp, display: "Power-Up Boost" };
+    }
+    if (roll < 60.1) {
+      const chstAmount = Math.floor(50 + Math.random() * 450);
+      return { type: "chst", value: chstAmount, display: `${chstAmount} CHST` };
+    }
+    const csOptions = [1e3, 2500, 5e3, 1e4, 25e3];
+    const csAmount = csOptions[Math.floor(Math.random() * csOptions.length)];
+    return { type: "cs", value: csAmount, display: `${csAmount} CS` };
+  }
   app2.get("/api/challenges", async (req, res) => {
     try {
       const { dailyChallenges: dailyChallengesTable } = await Promise.resolve().then(() => (init_schema(), schema_exports));
@@ -7620,11 +7852,11 @@ async function seedDatabase() {
       { id: "fpga-xilinx-u250", name: "Xilinx Alveo U250", tier: "FPGA", category: "FPGA Miner", baseHashrate: 6e4, basePrice: 6, currency: "TON", maxOwned: 30, orderIndex: 44 },
       { id: "fpga-bittware-xupvv4", name: "BittWare XUPVV4 FPGA Cluster", tier: "FPGA", category: "FPGA Miner", baseHashrate: 8e4, basePrice: 8, currency: "TON", maxOwned: 30, orderIndex: 45 },
       // NEW: CLOUD MINING CONTRACTS - Subscription-based - TON-only - Cap: 100/model/user
-      { id: "cloud-starter-1month", name: "Cloud Mining Starter (30 days)", tier: "Cloud", category: "Cloud Mining", baseHashrate: 1e5, basePrice: 3, currency: "TON", maxOwned: 100, orderIndex: 46 },
-      { id: "cloud-pro-1month", name: "Cloud Mining Pro (30 days)", tier: "Cloud", category: "Cloud Mining", baseHashrate: 25e4, basePrice: 7, currency: "TON", maxOwned: 100, orderIndex: 47 },
-      { id: "cloud-elite-1month", name: "Cloud Mining Elite (30 days)", tier: "Cloud", category: "Cloud Mining", baseHashrate: 5e5, basePrice: 15, currency: "TON", maxOwned: 100, orderIndex: 48 },
-      { id: "cloud-enterprise-1month", name: "Cloud Mining Enterprise (30 days)", tier: "Cloud", category: "Cloud Mining", baseHashrate: 1e6, basePrice: 30, currency: "TON", maxOwned: 100, orderIndex: 49 },
-      { id: "cloud-mega-1month", name: "Cloud Mining Mega (30 days)", tier: "Cloud", category: "Cloud Mining", baseHashrate: 25e5, basePrice: 75, currency: "TON", maxOwned: 100, orderIndex: 50 },
+      { id: "cloud-starter-1month", name: "Cloud Mining Starter (30 days)", tier: "Cloud", category: "Cloud Mining", baseHashrate: 33e3, basePrice: 3, currency: "TON", maxOwned: 100, orderIndex: 46 },
+      { id: "cloud-pro-1month", name: "Cloud Mining Pro (30 days)", tier: "Cloud", category: "Cloud Mining", baseHashrate: 83e3, basePrice: 7, currency: "TON", maxOwned: 100, orderIndex: 47 },
+      { id: "cloud-elite-1month", name: "Cloud Mining Elite (30 days)", tier: "Cloud", category: "Cloud Mining", baseHashrate: 166e3, basePrice: 15, currency: "TON", maxOwned: 100, orderIndex: 48 },
+      { id: "cloud-enterprise-1month", name: "Cloud Mining Enterprise (30 days)", tier: "Cloud", category: "Cloud Mining", baseHashrate: 333e3, basePrice: 30, currency: "TON", maxOwned: 100, orderIndex: 49 },
+      { id: "cloud-mega-1month", name: "Cloud Mining Mega (30 days)", tier: "Cloud", category: "Cloud Mining", baseHashrate: 833e3, basePrice: 75, currency: "TON", maxOwned: 100, orderIndex: 50 },
       // NEW: QUANTUM MINERS - Elite/Legendary tier - TON-only - Cap: 10/model/user (limited!)
       { id: "quantum-ibm-q1", name: "IBM Quantum System Q1", tier: "Quantum", category: "Quantum Miner", baseHashrate: 5e6, basePrice: 250, currency: "TON", maxOwned: 10, orderIndex: 51 },
       { id: "quantum-google-sycamore", name: "Google Sycamore Quantum", tier: "Quantum", category: "Quantum Miner", baseHashrate: 75e5, basePrice: 375, currency: "TON", maxOwned: 10, orderIndex: 52 },
