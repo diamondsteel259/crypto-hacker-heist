@@ -87,10 +87,22 @@ export async function seedTestData() {
  */
 export async function cleanupTestDatabase() {
   try {
-    await testPool.query('DROP SCHEMA public CASCADE;');
-    await testPool.query('CREATE SCHEMA public;');
+    // In CI, don't drop schema (tables from migration should persist)
+    // Only drop locally where each test run creates fresh schema
+    const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+    
+    if (!isCI) {
+      await testPool.query('DROP SCHEMA public CASCADE;');
+      await testPool.query('CREATE SCHEMA public;');
+      console.log('[Test DB] Database cleaned up (schema dropped)');
+    } else {
+      // In CI, just clear data, keep schema
+      await resetTestDatabase();
+      console.log('[Test DB] Database cleaned up (data cleared, schema preserved for CI)');
+    }
+    
+    // Close pool connection
     await testPool.end();
-    console.log('[Test DB] Database cleaned up');
   } catch (error) {
     console.error('[Test DB] Cleanup failed:', error);
     throw error;
