@@ -2359,7 +2359,335 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(400).json({ error: error.message || "Failed to open loot box" });
     }
   });
+  // ==========================================
+  // SPIN WHEEL ROUTES
+  // ==========================================
 
+  // Get user's spin status (free spin available, paid spins count)
+  app.get("/api/user/:userId/spin/status", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      const { userSpins } = await import("@shared/schema");
+      
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+      // Get today's spin record
+      const spinRecord = await db.select().from(userSpins)
+        .where(and(
+          eq(userSpins.userId, user[0].telegramId),
+          eq(userSpins.spinDate, today)
+        ))
+        .limit(1);
+
+      if (spinRecord.length === 0) {
+        // No spins today - free spin available
+        return res.json({
+          freeSpinAvailable: true,
+          freeSpinUsed: false,
+          paidSpinsCount: 0,
+        });
+      }
+
+      res.json({
+        freeSpinAvailable: !spinRecord[0].freeSpinUsed,
+        freeSpinUsed: spinRecord[0].freeSpinUsed,
+        paidSpinsCount: spinRecord[0].paidSpinsCount,
+      });
+    } catch (error: any) {
+      console.error("Get spin status error:", error);
+      res.status(500).json({ error: "Failed to get spin status" });
+    }
+  });
+
+  // Spin the wheel (free or paid)
+  app.post("/api/user/:userId/spin", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    const { isFree, quantity, tonTransactionHash, userWalletAddress, tonAmount } = req.body;
+
+    if (typeof isFree !== 'boolean') {
+      return res.status(400).json({ error: "isFree parameter is required" });
+    }
+
+    const spinQuantity = quantity || 1;
+
+    if (spinQuantity < 1 || spinQuantity > 20) {
+      return res.status(400).json({ error: "Quantity must be between 1 and 20" });
+    }
+
+    try {
+      const { userSpins, spinHistory, jackpotWins } = await import("@shared/schema");
+
+      const result = await db.transaction(async (tx: any) => {
+        const user = await tx.select().from(users).where(eq(users.id, userId)).for('update');
+        if (!user[0]) throw new Error("User not found");
+
+        const today = new Date().toISOString().split('T')[0];
+
+        // Get or create today's spin record
+        let spinRecord = await tx.select().from(userSpins)
+          .where(and(
+            eq(userSpins.userId, user[0].telegramId),
+            eq(userSpins.spinDate, today)
+          ))
+          .limit(1);
+
+        if (isFree) {
+          // Free spin logic
+          if (spinRecord.length > 0 && spinRecord[0].freeSpinUsed) {
+            throw new Error("Free spin already used today. Come back tomorrow!");
+          }
+
+          // Mark free spin as used
+          if (spinRecord.length === 0) {
+            await tx.insert(userSpins).values({
+              userId: user[0].telegramId,
+              spinDate: today,
+              freeSpinUsed: true,
+              paidSpinsCount: 0,
+            });
+          } else {
+            await tx.update(userSpins)
+              .set({ freeSpinUsed: true, lastSpinAt: new Date() })
+              .where(and(
+                eq(userSpins.userId, user[0].telegramId),
+                eq(userSpins.spinDate, today)
+              ));
+          }
+        } else {
+          // Paid spin logic
+          if (!tonTransactionHash || !userWalletAddress || !tonAmount) {
+            throw new Error("TON transaction details required for paid spins");
+          }
+
+          // Validate pricing
+          const pricing: Record<number, number> = {
+            1: 0.1,
+            10: 0.9,
+            20: 1.7,
+          };
+
+          const expectedCost = pricing[spinQuantity];
+          if (!expectedCost) {
+            throw new Error("Invalid spin quantity. Must be 1, 10, or 20");
+          }
+
+          if (parseFloat(tonAmount) < expectedCost) {
+            throw new Error(`Insufficient TON amount. Required: ${expectedCost} TON`);
+          }
+
+          // Get game wallet address
+          const gameWallet = getGameWalletAddress();
+
+          // Check if transaction was already used (prevent double-spend)
+          const existingPurchase = await tx.select().from(spinHistory)
+            .where(sql`prize_value = ${tonTransactionHash}`)
+            .limit(1);
+
+          if (existingPurchase.length > 0) {
+            throw new Error("This transaction has already been used");
+          }
+
+          // Verify TON transaction with polling
+          console.log(`⏳ Verifying spin wheel transaction ${tonTransactionHash.substring(0, 12)}...`);
+          const verification = await pollForTransaction(
+            tonTransactionHash,
+            tonAmount,
+            gameWallet,
+            userWalletAddress
+          );
+
+          if (!verification.verified) {
+            throw new Error(verification.error || "Transaction verification failed");
+          }
+
+          // Update paid spins count
+          if (spinRecord.length === 0) {
+            await tx.insert(userSpins).values({
+              userId: user[0].telegramId,
+              spinDate: today,
+              freeSpinUsed: false,
+              paidSpinsCount: spinQuantity,
+            });
+          } else {
+            await tx.update(userSpins)
+              .set({ 
+                paidSpinsCount: spinRecord[0].paidSpinsCount + spinQuantity,
+                lastSpinAt: new Date(),
+              })
+              .where(and(
+                eq(userSpins.userId, user[0].telegramId),
+                eq(userSpins.spinDate, today)
+              ));
+          }
+        }
+
+        // Execute spins and generate prizes
+        const prizes: any[] = [];
+        let totalCs = 0;
+        let totalChst = 0;
+        let jackpotWon = false;
+
+        for (let i = 0; i < spinQuantity; i++) {
+          const prize = generateSpinPrize(isFree);
+          prizes.push(prize);
+
+          // Apply rewards
+          if (prize.type === 'cs') {
+            totalCs += prize.value;
+          } else if (prize.type === 'chst') {
+            totalChst += prize.value;
+          } else if (prize.type === 'jackpot') {
+            jackpotWon = true;
+            // Record jackpot win
+            await tx.insert(jackpotWins).values({
+              userId: user[0].telegramId,
+              username: user[0].username || user[0].telegramId,
+              walletAddress: userWalletAddress || null,
+              amount: "1.0",
+              paidOut: false,
+            });
+          } else if (prize.type === 'powerup') {
+            // Grant power-up (add to active power-ups)
+            const powerUpType = prize.value;
+            const duration = 60 * 60 * 1000; // 1 hour
+            const expiresAt = new Date(Date.now() + duration);
+            
+            await tx.insert(activePowerUps).values({
+              userId: user[0].telegramId,
+              powerUpType,
+              boostPercentage: 50,
+              expiresAt,
+              isActive: true,
+            });
+          } else if (prize.type === 'equipment') {
+            // Grant random basic equipment
+            const equipmentId = prize.value;
+            
+            // Check if user already owns this equipment
+            const existing = await tx.select().from(ownedEquipment)
+              .where(and(
+                eq(ownedEquipment.userId, user[0].telegramId),
+                eq(ownedEquipment.equipmentTypeId, equipmentId)
+              ))
+              .limit(1);
+
+            if (existing.length > 0) {
+              // Increment quantity
+              await tx.update(ownedEquipment)
+                .set({ quantity: existing[0].quantity + 1 })
+                .where(eq(ownedEquipment.id, existing[0].id));
+            } else {
+              // Add new equipment
+              const equipmentInfo = await tx.select().from(equipmentTypes)
+                .where(eq(equipmentTypes.id, equipmentId))
+                .limit(1);
+
+              if (equipmentInfo.length > 0) {
+                await tx.insert(ownedEquipment).values({
+                  userId: user[0].telegramId,
+                  equipmentTypeId: equipmentId,
+                  quantity: 1,
+                  upgradeLevel: 0,
+                  currentHashrate: equipmentInfo[0].baseHashrate,
+                  acquiredVia: 'spin_wheel',
+                });
+              }
+            }
+          }
+
+          // Record in spin history
+          await tx.insert(spinHistory).values({
+            userId: user[0].telegramId,
+            prizeType: prize.type,
+            prizeValue: prize.type === 'equipment' ? prize.value : prize.value.toString(),
+            wasFree: isFree,
+          });
+        }
+
+        // Update user balances
+        if (totalCs > 0 || totalChst > 0) {
+          await tx.update(users)
+            .set({
+              ...(totalCs > 0 && { csBalance: sql`${users.csBalance} + ${totalCs}` }),
+              ...(totalChst > 0 && { chstBalance: sql`${users.chstBalance} + ${totalChst}` }),
+            })
+            .where(eq(users.id, userId));
+        }
+
+        // Get updated user
+        const updatedUser = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+
+        return {
+          success: true,
+          prizes,
+          summary: {
+            total_cs: totalCs,
+            total_chst: totalChst,
+            jackpot_won: jackpotWon,
+            spins_completed: spinQuantity,
+          },
+          message: jackpotWon 
+            ? `🎰 JACKPOT! You won 1 TON! Contact admin for payout. Plus ${totalCs} CS and ${totalChst} CHST!`
+            : `You won ${totalCs} CS and ${totalChst} CHST from ${spinQuantity} spin(s)!`,
+          newBalance: {
+            cs: updatedUser[0].csBalance,
+            chst: updatedUser[0].chstBalance,
+          },
+        };
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Spin wheel error:", error);
+      res.status(400).json({ error: error.message || "Failed to spin wheel" });
+    }
+  });
+
+  // Helper function to generate spin prizes
+  function generateSpinPrize(isFree: boolean): { type: string; value: any; display: string } {
+    const roll = Math.random() * 100;
+
+    // Jackpot: 0.1% chance (only for paid spins)
+    if (!isFree && roll < 0.1) {
+      return { type: 'jackpot', value: 1.0, display: '1 TON Jackpot!' };
+    }
+
+    // Equipment: 10% chance
+    if (roll < 10.1) {
+      const equipmentOptions = [
+        'laptop-lenovo-e14',
+        'laptop-dell-inspiron',
+        'laptop-hp-pavilion',
+        'gaming-acer-predator',
+      ];
+      const equipment = equipmentOptions[Math.floor(Math.random() * equipmentOptions.length)];
+      return { type: 'equipment', value: equipment, display: 'Equipment' };
+    }
+
+    // Power-up: 20% chance
+    if (roll < 30.1) {
+      const powerUpOptions = ['hashrate-boost', 'luck-boost', 'cs-multiplier'];
+      const powerUp = powerUpOptions[Math.floor(Math.random() * powerUpOptions.length)];
+      return { type: 'powerup', value: powerUp, display: 'Power-Up Boost' };
+    }
+
+    // CHST: 30% chance
+    if (roll < 60.1) {
+      const chstAmount = Math.floor(50 + Math.random() * 450); // 50-500 CHST
+      return { type: 'chst', value: chstAmount, display: `${chstAmount} CHST` };
+    }
+
+    // CS: 40% chance (remaining)
+    const csOptions = [1000, 2500, 5000, 10000, 25000];
+    const csAmount = csOptions[Math.floor(Math.random() * csOptions.length)];
+    return { type: 'cs', value: csAmount, display: `${csAmount} CS` };
+  }
   // ==========================================
   // DAILY CHALLENGES ROUTES
   // ==========================================
