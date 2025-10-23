@@ -1595,7 +1595,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await tx.update(users)
           .set({
             csBalance: sql`${users.csBalance} + ${rewardCs}`,
-            chstBalance: sql`${users.chstBalance} + ${rewardChst}`
+            chstBalance: sql`${users.chstBalance} + ${rewardChst}`,
+            freeLootBoxes: sql`${users.freeLootBoxes} + 1`  // Grant 1 free loot box per task
           })
           .where(eq(users.id, userId));
 
@@ -1616,6 +1617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           reward: {
             cs: rewardCs,
             chst: rewardChst,
+            freeLootBox: 1,
           },
           new_balance: {
             cs: updatedUser[0].csBalance,
