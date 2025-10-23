@@ -131,6 +131,8 @@ var init_schema = __esm({
       totalHashrate: real("total_hashrate").notNull().default(0),
       referralCode: text("referral_code").notNull().unique(),
       referredBy: text("referred_by"),
+      freeLootBoxes: integer("free_loot_boxes").notNull().default(0),
+      inviteLootBoxes: integer("invite_loot_boxes").notNull().default(0),
       isAdmin: boolean("is_admin").notNull().default(false),
       tutorialCompleted: boolean("tutorial_completed").notNull().default(false),
       createdAt: timestamp("created_at").notNull().defaultNow()
@@ -1525,6 +1527,43 @@ function isValidTONAddress(address) {
     return true;
   }
   return false;
+}
+async function pollForTransaction(txHash, expectedAmount, recipientAddress, senderAddress, timeoutMs = 18e4, intervalMs = 1e4) {
+  const startTime = Date.now();
+  const endTime = startTime + timeoutMs;
+  let attempts = 0;
+  const maxAttempts = Math.ceil(timeoutMs / intervalMs);
+  console.log(`\u{1F50D} Polling for TON transaction ${txHash.substring(0, 12)}... (${maxAttempts} attempts over ${timeoutMs / 1e3}s)`);
+  while (Date.now() < endTime) {
+    attempts++;
+    console.log(`\u{1F504} Verification attempt ${attempts}/${maxAttempts}...`);
+    const result = await verifyTONTransaction(
+      txHash,
+      expectedAmount,
+      recipientAddress,
+      senderAddress
+    );
+    if (result.verified) {
+      console.log(`\u2705 Transaction verified on attempt ${attempts} (took ${Math.floor((Date.now() - startTime) / 1e3)}s)`);
+      return result;
+    }
+    if (result.error && !result.error.includes("not found") && !result.error.includes("processing")) {
+      console.log(`\u274C Transaction verification failed with error: ${result.error}`);
+      return result;
+    }
+    if (attempts >= maxAttempts) {
+      console.log(`\u23F1\uFE0F Transaction not confirmed after ${attempts} attempts (${Math.floor((Date.now() - startTime) / 1e3)}s)`);
+      return {
+        verified: false,
+        error: `Transaction not confirmed within ${timeoutMs / 1e3} seconds. Please ensure the transaction was sent and wait a moment before trying again.`
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return {
+    verified: false,
+    error: "Transaction verification timeout"
+  };
 }
 
 // server/routes.ts
@@ -5720,7 +5759,9 @@ async function registerRoutes(app2) {
         }
         await tx.update(users).set({
           csBalance: sql14`${users.csBalance} + ${rewardCs}`,
-          chstBalance: sql14`${users.chstBalance} + ${rewardChst}`
+          chstBalance: sql14`${users.chstBalance} + ${rewardChst}`,
+          freeLootBoxes: sql14`${users.freeLootBoxes} + 1`
+          // Grant 1 free loot box per task
         }).where(eq17(users.id, userId));
         await tx.insert(userTasks).values({
           userId: user[0].telegramId,
@@ -5734,7 +5775,8 @@ async function registerRoutes(app2) {
           taskId,
           reward: {
             cs: rewardCs,
-            chst: rewardChst
+            chst: rewardChst,
+            freeLootBox: 1
           },
           new_balance: {
             cs: updatedUser[0].csBalance,
@@ -6000,7 +6042,8 @@ async function registerRoutes(app2) {
             error: "Transaction hash already used. Cannot reuse payment."
           });
         }
-        const verification = await verifyTONTransaction(
+        console.log(`\u23F3 Verifying TON transaction ${tonTransactionHash.substring(0, 12)}... (polling up to 3 minutes)`);
+        const verification = await pollForTransaction(
           tonTransactionHash,
           tonAmount,
           gameWallet,
@@ -6009,7 +6052,8 @@ async function registerRoutes(app2) {
         if (!verification.verified) {
           console.error("TON verification failed:", verification.error);
           return res.status(400).json({
-            error: verification.error || "Transaction verification failed"
+            error: verification.error || "Transaction not found on blockchain. It may still be processing or the hash is incorrect.",
+            message: "Please ensure the transaction was sent and wait a moment before trying again."
           });
         }
         let rewardCs = 0;
@@ -6156,14 +6200,27 @@ async function registerRoutes(app2) {
           if (existingPurchase.length > 0) {
             throw new Error("This transaction has already been used");
           }
-          const isValid = await verifyTONTransaction(
+          console.log(`\u23F3 Verifying loot box transaction ${tonTransactionHash.substring(0, 12)}...`);
+          const verification = await pollForTransaction(
             tonTransactionHash,
             tonAmount,
             gameWallet,
             userWalletAddress
           );
-          if (!isValid) {
-            throw new Error("TON transaction verification failed");
+          if (!verification.verified) {
+            throw new Error(verification.error || "Transaction verification failed");
+          }
+        } else {
+          if (boxType === "daily-task") {
+            if (user[0].freeLootBoxes <= 0) {
+              throw new Error("No free daily task loot boxes available. Complete tasks to earn more.");
+            }
+            await tx.update(users).set({ freeLootBoxes: user[0].freeLootBoxes - 1 }).where(eq17(users.id, userId));
+          } else if (boxType === "invite-friend") {
+            if (user[0].inviteLootBoxes <= 0) {
+              throw new Error("No invite reward loot boxes available. Invite friends to earn more.");
+            }
+            await tx.update(users).set({ inviteLootBoxes: user[0].inviteLootBoxes - 1 }).where(eq17(users.id, userId));
           }
         }
         const csReward = Math.floor(
