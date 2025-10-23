@@ -953,3 +953,15 @@ export type ScheduledEvent = typeof scheduledEvents.$inferSelect;
 export type InsertScheduledEvent = z.infer<typeof insertScheduledEventSchema>;
 export type EventParticipation = typeof eventParticipation.$inferSelect;
 export type InsertEventParticipation = z.infer<typeof insertEventParticipationSchema>;
+
+// Economy Dashboard schemas and types
+export const insertEconomyMetricsSchema = createInsertSchema(economyMetrics).omit({ id: true, createdAt: true });
+export const insertEconomySinksSchema = createInsertSchema(economySinks).omit({ id: true });
+export const insertEconomyAlertsSchema = createInsertSchema(economyAlerts).omit({ id: true, createdAt: true });
+
+export type EconomyMetrics = typeof economyMetrics.$inferSelect;
+export type InsertEconomyMetrics = z.infer<typeof insertEconomyMetricsSchema>;
+export type EconomySinks = typeof economySinks.$inferSelect;
+export type InsertEconomySinks = z.infer<typeof insertEconomySinksSchema>;
+export type EconomyAlerts = typeof economyAlerts.$inferSelect;
+export type InsertEconomyAlerts = z.infer<typeof insertEconomyAlertsSchema>;
