@@ -1,5 +1,11 @@
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
+  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
+}) : x)(function(x) {
+  if (typeof require !== "undefined") return require.apply(this, arguments);
+  throw Error('Dynamic require of "' + x + '" is not supported');
+});
 var __esm = (fn, res) => function __init() {
   return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
 };
@@ -23,6 +29,7 @@ __export(schema_exports, {
   dailyLoginRewards: () => dailyLoginRewards,
   equipmentPresets: () => equipmentPresets,
   equipmentTypes: () => equipmentTypes,
+  featureFlags: () => featureFlags,
   flashSales: () => flashSales,
   gameSettings: () => gameSettings,
   insertAchievementSchema: () => insertAchievementSchema,
@@ -37,6 +44,7 @@ __export(schema_exports, {
   insertDailyLoginRewardSchema: () => insertDailyLoginRewardSchema,
   insertEquipmentPresetSchema: () => insertEquipmentPresetSchema,
   insertEquipmentTypeSchema: () => insertEquipmentTypeSchema,
+  insertFeatureFlagSchema: () => insertFeatureFlagSchema,
   insertFlashSaleSchema: () => insertFlashSaleSchema,
   insertGameSettingSchema: () => insertGameSettingSchema,
   insertJackpotWinSchema: () => insertJackpotWinSchema,
@@ -85,7 +93,7 @@ __export(schema_exports, {
 import { sql } from "drizzle-orm";
 import { pgTable, varchar, text, integer, real, timestamp, boolean, unique, decimal, index, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-var users, gameSettings, equipmentTypes, ownedEquipment, blocks, blockRewards, referrals, componentUpgrades, userTasks, dailyClaims, powerUpPurchases, lootBoxPurchases, activePowerUps, dailyChallenges, userDailyChallenges, achievements, userAchievements, seasons, cosmeticItems, userCosmetics, userStreaks, dailyLoginRewards, flashSales, userHourlyBonuses, userSpins, spinHistory, jackpotWins, equipmentPresets, priceAlerts, autoUpgradeSettings, packPurchases, userPrestige, prestigeHistory, userSubscriptions, userStatistics, insertUserSchema, insertEquipmentTypeSchema, insertOwnedEquipmentSchema, insertComponentUpgradeSchema, insertUserTaskSchema, insertDailyClaimSchema, insertPowerUpPurchaseSchema, insertLootBoxPurchaseSchema, insertActivePowerUpSchema, insertBlockSchema, insertBlockRewardSchema, insertReferralSchema, insertGameSettingSchema, insertDailyChallengeSchema, insertUserDailyChallengeSchema, insertAchievementSchema, insertUserAchievementSchema, insertSeasonSchema, insertCosmeticItemSchema, insertUserCosmeticSchema, insertUserStreakSchema, insertDailyLoginRewardSchema, insertFlashSaleSchema, insertUserHourlyBonusSchema, insertUserSpinSchema, insertSpinHistorySchema, insertJackpotWinSchema, insertEquipmentPresetSchema, insertPriceAlertSchema, insertAutoUpgradeSettingSchema, insertPackPurchaseSchema, insertUserPrestigeSchema, insertPrestigeHistorySchema, insertUserSubscriptionSchema, insertUserStatisticsSchema;
+var users, gameSettings, featureFlags, equipmentTypes, ownedEquipment, blocks, blockRewards, referrals, componentUpgrades, userTasks, dailyClaims, powerUpPurchases, lootBoxPurchases, activePowerUps, dailyChallenges, userDailyChallenges, achievements, userAchievements, seasons, cosmeticItems, userCosmetics, userStreaks, dailyLoginRewards, flashSales, userHourlyBonuses, userSpins, spinHistory, jackpotWins, equipmentPresets, priceAlerts, autoUpgradeSettings, packPurchases, userPrestige, prestigeHistory, userSubscriptions, userStatistics, insertUserSchema, insertEquipmentTypeSchema, insertOwnedEquipmentSchema, insertComponentUpgradeSchema, insertUserTaskSchema, insertDailyClaimSchema, insertPowerUpPurchaseSchema, insertLootBoxPurchaseSchema, insertActivePowerUpSchema, insertBlockSchema, insertBlockRewardSchema, insertReferralSchema, insertGameSettingSchema, insertDailyChallengeSchema, insertUserDailyChallengeSchema, insertAchievementSchema, insertUserAchievementSchema, insertSeasonSchema, insertCosmeticItemSchema, insertUserCosmeticSchema, insertUserStreakSchema, insertDailyLoginRewardSchema, insertFlashSaleSchema, insertUserHourlyBonusSchema, insertUserSpinSchema, insertSpinHistorySchema, insertJackpotWinSchema, insertEquipmentPresetSchema, insertPriceAlertSchema, insertAutoUpgradeSettingSchema, insertPackPurchaseSchema, insertUserPrestigeSchema, insertPrestigeHistorySchema, insertUserSubscriptionSchema, insertUserStatisticsSchema, insertFeatureFlagSchema;
 var init_schema = __esm({
   "shared/schema.ts"() {
     "use strict";
@@ -112,6 +120,19 @@ var init_schema = __esm({
       key: text("key").notNull().unique(),
       value: text("value").notNull(),
       updatedAt: timestamp("updated_at").notNull().defaultNow()
+    });
+    featureFlags = pgTable("feature_flags", {
+      id: serial("id").primaryKey(),
+      featureKey: text("feature_key").notNull().unique(),
+      // blocks, leaderboard, challenges, etc.
+      featureName: text("feature_name").notNull(),
+      // Display name
+      isEnabled: boolean("is_enabled").notNull().default(true),
+      description: text("description"),
+      // What this feature does
+      updatedAt: timestamp("updated_at").notNull().defaultNow(),
+      updatedBy: text("updated_by")
+      // Admin user ID who made the change
     });
     equipmentTypes = pgTable("equipment_types", {
       id: varchar("id").primaryKey(),
@@ -600,28 +621,50 @@ var init_schema = __esm({
     insertPrestigeHistorySchema = createInsertSchema(prestigeHistory).omit({ id: true, prestigedAt: true });
     insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, startDate: true });
     insertUserStatisticsSchema = createInsertSchema(userStatistics).omit({ id: true, createdAt: true, updatedAt: true });
+    insertFeatureFlagSchema = createInsertSchema(featureFlags).omit({ id: true, updatedAt: true });
   }
 });
 
 // server/db.ts
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
+async function initializeDatabase() {
+  try {
+    if (!process.env.DATABASE_URL) {
+      console.error("[DB] DATABASE_URL not set, skipping database initialization");
+      return false;
+    }
+    await pool.query("CREATE EXTENSION IF NOT EXISTS pgcrypto;");
+    console.log("[DB] Database initialized successfully");
+    return true;
+  } catch (error) {
+    console.error("[DB] Database initialization failed:", error);
+    console.error("[DB] Health endpoint will report unhealthy status");
+    return false;
+  }
+}
+async function checkDatabaseHealth() {
+  try {
+    await pool.query("SELECT 1");
+    return true;
+  } catch (error) {
+    console.error("[DB] Health check failed:", error);
+    return false;
+  }
+}
 var pool, db;
 var init_db = __esm({
-  async "server/db.ts"() {
+  "server/db.ts"() {
     "use strict";
     init_schema();
     if (!process.env.DATABASE_URL) {
-      throw new Error("DATABASE_URL must be set");
+      console.error("DATABASE_URL environment variable is not set. Database will not be available.");
     }
     pool = new pg.Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: {
-        rejectUnauthorized: false
-      }
+      ssl: process.env.DATABASE_URL?.includes("localhost") ? false : { rejectUnauthorized: false }
     });
     db = drizzle(pool, { schema: schema_exports });
-    await pool.query("CREATE EXTENSION IF NOT EXISTS pgcrypto;");
   }
 });
 
@@ -636,11 +679,11 @@ import { eq, desc, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 var DbStorage, storage;
 var init_storage = __esm({
-  async "server/storage.ts"() {
+  "server/storage.ts"() {
     "use strict";
     init_schema();
-    await init_db();
-    await init_db();
+    init_db();
+    init_db();
     DbStorage = class {
       async getUser(id) {
         const result = await db.select().from(users).where(eq(users.id, id));
@@ -783,11 +826,205 @@ var init_storage = __esm({
   }
 });
 
+// server/mining.ts
+var mining_exports = {};
+__export(mining_exports, {
+  MiningService: () => MiningService,
+  getMiningHealth: () => getMiningHealth,
+  miningService: () => miningService
+});
+import { eq as eq2, sql as sql3, and as and2 } from "drizzle-orm";
+function getMiningHealth() {
+  const now = Date.now();
+  const fifteenMinutesAgo = now - 15 * 60 * 1e3;
+  const isHealthy = consecutiveFailures < 3 && (lastSuccessfulMine === null || lastSuccessfulMine.getTime() > fifteenMinutesAgo);
+  return {
+    status: isHealthy ? "healthy" : "degraded",
+    lastSuccessfulMine,
+    consecutiveFailures,
+    message: !isHealthy ? "Mining has failed multiple times or not run recently" : void 0
+  };
+}
+var BLOCK_INTERVAL, BLOCK_REWARD, MAX_CONSECUTIVE_FAILURES, MINING_TIMEOUT, lastSuccessfulMine, consecutiveFailures, MiningService, miningService;
+var init_mining = __esm({
+  "server/mining.ts"() {
+    "use strict";
+    init_storage();
+    init_schema();
+    BLOCK_INTERVAL = 5 * 60 * 1e3;
+    BLOCK_REWARD = 1e5;
+    MAX_CONSECUTIVE_FAILURES = 5;
+    MINING_TIMEOUT = 4 * 60 * 1e3;
+    lastSuccessfulMine = null;
+    consecutiveFailures = 0;
+    MiningService = class {
+      intervalId = null;
+      lastBlockNumber = 0;
+      isMining = false;
+      miningTimeoutId = null;
+      async start() {
+        await this.initializeBlockNumber();
+        await this.recalculateAllHashrates();
+        this.intervalId = setInterval(async () => {
+          try {
+            await this.mineBlock();
+          } catch (error) {
+            console.error("Error mining block:", error);
+          }
+        }, BLOCK_INTERVAL);
+        console.log(`Mining service started. Blocks will be mined every ${BLOCK_INTERVAL / 1e3} seconds.`);
+      }
+      stop() {
+        if (this.intervalId) {
+          clearInterval(this.intervalId);
+          this.intervalId = null;
+          console.log("Mining service stopped.");
+        }
+      }
+      async initializeBlockNumber() {
+        const latestBlock = await storage.getLatestBlock();
+        this.lastBlockNumber = latestBlock?.blockNumber ?? 0;
+      }
+      async recalculateAllHashrates() {
+        console.log("Recalculating all user hashrates from equipment...");
+        try {
+          const result = await db.transaction(async (tx) => {
+            const allUsers = await tx.select().from(users);
+            let usersUpdated = 0;
+            for (const user of allUsers) {
+              const equipment2 = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq2(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(eq2(ownedEquipment.userId, user.telegramId));
+              const actualHashrate = equipment2.reduce((sum, row) => {
+                return sum + (row.owned_equipment?.currentHashrate || 0);
+              }, 0);
+              if (user.totalHashrate !== actualHashrate) {
+                await tx.update(users).set({ totalHashrate: actualHashrate }).where(eq2(users.telegramId, user.telegramId));
+                usersUpdated++;
+              }
+            }
+            return { totalUsers: allUsers.length, usersUpdated };
+          });
+          console.log(`Hashrate recalculation complete: ${result.usersUpdated}/${result.totalUsers} users updated`);
+        } catch (error) {
+          console.error("Hashrate recalculation error:", error);
+        }
+      }
+      async mineBlock() {
+        if (this.isMining) {
+          console.log("Mining already in progress, skipping...");
+          return;
+        }
+        const pauseSetting = await storage.getGameSetting("mining_paused");
+        if (pauseSetting && pauseSetting.value === "true") {
+          console.log("Mining is paused by admin.");
+          return;
+        }
+        this.isMining = true;
+        this.miningTimeoutId = setTimeout(() => {
+          if (this.isMining) {
+            console.error("[MINING] Mining operation timed out, resetting flag");
+            this.isMining = false;
+          }
+        }, MINING_TIMEOUT);
+        try {
+          const blockNumber = this.lastBlockNumber + 1;
+          console.log(`Mining block #${blockNumber}...`);
+          const allUsers = await storage.getAllUsers();
+          const activeMiners = allUsers.filter((user) => user.totalHashrate > 0);
+          console.log(`Total users: ${allUsers.length}, Active miners: ${activeMiners.length}`);
+          if (activeMiners.length === 0) {
+            console.log(`Block #${blockNumber} skipped - no active miners.`);
+            return;
+          }
+          const now = /* @__PURE__ */ new Date();
+          const allActivePowerUps = await db.select().from(activePowerUps).where(and2(
+            eq2(activePowerUps.isActive, true),
+            sql3`${activePowerUps.expiresAt} > ${now}`
+          ));
+          const userPowerUps = /* @__PURE__ */ new Map();
+          for (const powerUp of allActivePowerUps) {
+            const existing = userPowerUps.get(powerUp.userId) || { hashrateBoost: 0, luckBoost: 0 };
+            if (powerUp.powerUpType === "hashrate-boost") {
+              existing.hashrateBoost += powerUp.boostPercentage;
+            } else if (powerUp.powerUpType === "luck-boost") {
+              existing.luckBoost += powerUp.boostPercentage;
+            }
+            userPowerUps.set(powerUp.userId, existing);
+          }
+          let totalNetworkHashrate = 0;
+          const minerData = activeMiners.map((user) => {
+            const boosts = userPowerUps.get(user.telegramId) || { hashrateBoost: 0, luckBoost: 0 };
+            const boostedHashrate = user.totalHashrate * (1 + boosts.hashrateBoost / 100);
+            totalNetworkHashrate += boostedHashrate;
+            return {
+              user,
+              boostedHashrate,
+              luckBoost: boosts.luckBoost
+            };
+          });
+          await db.transaction(async (tx) => {
+            const newBlock = await tx.insert(blocks).values({
+              blockNumber,
+              reward: BLOCK_REWARD,
+              totalHashrate: totalNetworkHashrate,
+              totalMiners: activeMiners.length,
+              difficulty: 1
+            }).returning();
+            const blockId = newBlock[0].id;
+            for (const { user, boostedHashrate, luckBoost } of minerData) {
+              const userShare = boostedHashrate / totalNetworkHashrate;
+              let userReward = BLOCK_REWARD * userShare;
+              if (luckBoost > 0) {
+                userReward = userReward * (1 + luckBoost / 100);
+              }
+              const sharePercent = userShare * 100;
+              await tx.insert(blockRewards).values({
+                userId: user.id,
+                blockId,
+                reward: userReward,
+                hashrate: boostedHashrate,
+                sharePercent
+              });
+              await tx.update(users).set({
+                csBalance: sql3`${users.csBalance} + ${userReward}`
+              }).where(eq2(users.id, user.id));
+            }
+            await tx.update(activePowerUps).set({ isActive: false }).where(and2(
+              eq2(activePowerUps.isActive, true),
+              sql3`${activePowerUps.expiresAt} <= ${now}`
+            ));
+            console.log(
+              `Block #${blockNumber} mined! Reward: ${BLOCK_REWARD} CS distributed to ${activeMiners.length} miners. Total hashrate: ${totalNetworkHashrate.toFixed(2)} H/s (with boosts)`
+            );
+          });
+          this.lastBlockNumber = blockNumber;
+          lastSuccessfulMine = /* @__PURE__ */ new Date();
+          consecutiveFailures = 0;
+          console.log("[MINING] Block mined successfully");
+        } catch (error) {
+          consecutiveFailures++;
+          console.error("[MINING] Failed to mine block:", error);
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            console.error("[MINING CRITICAL] Mining has failed 5 times consecutively");
+          }
+          throw error;
+        } finally {
+          if (this.miningTimeoutId) {
+            clearTimeout(this.miningTimeoutId);
+            this.miningTimeoutId = null;
+          }
+          this.isMining = false;
+        }
+      }
+    };
+    miningService = new MiningService();
+  }
+});
+
 // server/index.ts
 import express2 from "express";
 
 // server/routes.ts
-await init_storage();
+init_storage();
 init_schema();
 init_schema();
 import { createServer } from "http";
@@ -858,7 +1095,7 @@ async function requireAdmin(req, res, next) {
   if (!req.telegramUser) {
     return res.status(401).json({ error: "Authentication required" });
   }
-  const { storage: storage2 } = await init_storage().then(() => storage_exports);
+  const { storage: storage2 } = await Promise.resolve().then(() => (init_storage(), storage_exports));
   const user = await storage2.getUserByTelegramId(String(req.telegramUser.id));
   const whitelist = process.env.ADMIN_WHITELIST || "";
   const isWhitelisted = whitelist.split(",").map((s) => s.trim()).filter(Boolean).includes(String(req.telegramUser.id));
@@ -875,7 +1112,7 @@ async function verifyUserAccess(req, res, next) {
   if (!req.telegramUser) {
     return res.status(401).json({ error: "Authentication required" });
   }
-  const { storage: storage2 } = await init_storage().then(() => storage_exports);
+  const { storage: storage2 } = await Promise.resolve().then(() => (init_storage(), storage_exports));
   const user = await storage2.getUserByTelegramId(String(req.telegramUser.id));
   if (!user) {
     return res.status(404).json({ error: "User not found" });
@@ -976,7 +1213,7 @@ async function verifyTONTransaction(txHash, expectedAmount, recipientAddress, se
   }
 }
 function getGameWalletAddress() {
-  const address = process.env.GAME_TON_WALLET_ADDRESS;
+  const address = process.env.GAME_TON_WALLET_ADDRESS?.trim();
   if (!address) {
     console.warn("\u26A0\uFE0F  GAME_TON_WALLET_ADDRESS not set in environment variables");
     return "EQD0vdSA_NedR9uvbgN9EikRX-suesDxGeFg69XQMavfLqIw";
@@ -984,167 +1221,23 @@ function getGameWalletAddress() {
   return address;
 }
 function isValidTONAddress(address) {
-  if (/^[Ek]Q[A-Za-z0-9_-]{46}$/.test(address)) {
+  if (!address) return false;
+  const trimmedAddress = address.trim();
+  if (/^[EUk0]Q[A-Za-z0-9_-]{46}$/.test(trimmedAddress)) {
     return true;
   }
-  if (/^-?\d+:[a-fA-F0-9]{64}$/.test(address)) {
+  if (/^-?\d+:[a-fA-F0-9]{64}$/.test(trimmedAddress)) {
     return true;
   }
   return false;
 }
 
-// server/mining.ts
-await init_storage();
-init_schema();
-import { eq as eq2, sql as sql3, and as and2 } from "drizzle-orm";
-var BLOCK_INTERVAL = 5 * 60 * 1e3;
-var BLOCK_REWARD = 1e5;
-var MiningService = class {
-  intervalId = null;
-  lastBlockNumber = 0;
-  isMining = false;
-  async start() {
-    await this.initializeBlockNumber();
-    await this.recalculateAllHashrates();
-    this.intervalId = setInterval(async () => {
-      try {
-        await this.mineBlock();
-      } catch (error) {
-        console.error("Error mining block:", error);
-      }
-    }, BLOCK_INTERVAL);
-    console.log(`Mining service started. Blocks will be mined every ${BLOCK_INTERVAL / 1e3} seconds.`);
-  }
-  stop() {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-      console.log("Mining service stopped.");
-    }
-  }
-  async initializeBlockNumber() {
-    const latestBlock = await storage.getLatestBlock();
-    this.lastBlockNumber = latestBlock?.blockNumber ?? 0;
-  }
-  async recalculateAllHashrates() {
-    console.log("Recalculating all user hashrates from equipment...");
-    try {
-      const result = await db.transaction(async (tx) => {
-        const allUsers = await tx.select().from(users);
-        let usersUpdated = 0;
-        for (const user of allUsers) {
-          const equipment2 = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq2(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(eq2(ownedEquipment.userId, user.telegramId));
-          const actualHashrate = equipment2.reduce((sum, row) => {
-            return sum + (row.owned_equipment?.currentHashrate || 0);
-          }, 0);
-          if (user.totalHashrate !== actualHashrate) {
-            await tx.update(users).set({ totalHashrate: actualHashrate }).where(eq2(users.telegramId, user.telegramId));
-            usersUpdated++;
-          }
-        }
-        return { totalUsers: allUsers.length, usersUpdated };
-      });
-      console.log(`Hashrate recalculation complete: ${result.usersUpdated}/${result.totalUsers} users updated`);
-    } catch (error) {
-      console.error("Hashrate recalculation error:", error);
-    }
-  }
-  async mineBlock() {
-    if (this.isMining) {
-      console.log("Mining already in progress, skipping...");
-      return;
-    }
-    const pauseSetting = await storage.getGameSetting("mining_paused");
-    if (pauseSetting && pauseSetting.value === "true") {
-      console.log("Mining is paused by admin.");
-      return;
-    }
-    this.isMining = true;
-    try {
-      const blockNumber = this.lastBlockNumber + 1;
-      console.log(`Mining block #${blockNumber}...`);
-      const allUsers = await storage.getAllUsers();
-      const activeMiners = allUsers.filter((user) => user.totalHashrate > 0);
-      console.log(`Total users: ${allUsers.length}, Active miners: ${activeMiners.length}`);
-      if (activeMiners.length === 0) {
-        console.log(`Block #${blockNumber} skipped - no active miners.`);
-        return;
-      }
-      const now = /* @__PURE__ */ new Date();
-      const allActivePowerUps = await db.select().from(activePowerUps).where(and2(
-        eq2(activePowerUps.isActive, true),
-        sql3`${activePowerUps.expiresAt} > ${now}`
-      ));
-      const userPowerUps = /* @__PURE__ */ new Map();
-      for (const powerUp of allActivePowerUps) {
-        const existing = userPowerUps.get(powerUp.userId) || { hashrateBoost: 0, luckBoost: 0 };
-        if (powerUp.powerUpType === "hashrate-boost") {
-          existing.hashrateBoost += powerUp.boostPercentage;
-        } else if (powerUp.powerUpType === "luck-boost") {
-          existing.luckBoost += powerUp.boostPercentage;
-        }
-        userPowerUps.set(powerUp.userId, existing);
-      }
-      let totalNetworkHashrate = 0;
-      const minerData = activeMiners.map((user) => {
-        const boosts = userPowerUps.get(user.telegramId) || { hashrateBoost: 0, luckBoost: 0 };
-        const boostedHashrate = user.totalHashrate * (1 + boosts.hashrateBoost / 100);
-        totalNetworkHashrate += boostedHashrate;
-        return {
-          user,
-          boostedHashrate,
-          luckBoost: boosts.luckBoost
-        };
-      });
-      await db.transaction(async (tx) => {
-        const newBlock = await tx.insert(blocks).values({
-          blockNumber,
-          reward: BLOCK_REWARD,
-          totalHashrate: totalNetworkHashrate,
-          totalMiners: activeMiners.length,
-          difficulty: 1
-        }).returning();
-        const blockId = newBlock[0].id;
-        for (const { user, boostedHashrate, luckBoost } of minerData) {
-          const userShare = boostedHashrate / totalNetworkHashrate;
-          let userReward = BLOCK_REWARD * userShare;
-          if (luckBoost > 0) {
-            userReward = userReward * (1 + luckBoost / 100);
-          }
-          const sharePercent = userShare * 100;
-          await tx.insert(blockRewards).values({
-            userId: user.id,
-            blockId,
-            reward: userReward,
-            hashrate: boostedHashrate,
-            sharePercent
-          });
-          await tx.update(users).set({
-            csBalance: sql3`${users.csBalance} + ${userReward}`
-          }).where(eq2(users.id, user.id));
-        }
-        await tx.update(activePowerUps).set({ isActive: false }).where(and2(
-          eq2(activePowerUps.isActive, true),
-          sql3`${activePowerUps.expiresAt} <= ${now}`
-        ));
-        console.log(
-          `Block #${blockNumber} mined! Reward: ${BLOCK_REWARD} CS distributed to ${activeMiners.length} miners. Total hashrate: ${totalNetworkHashrate.toFixed(2)} H/s (with boosts)`
-        );
-      });
-      this.lastBlockNumber = blockNumber;
-    } catch (error) {
-      console.error("Error during block mining:", error);
-      throw error;
-    } finally {
-      this.isMining = false;
-    }
-  }
-};
-var miningService = new MiningService();
+// server/routes.ts
+init_mining();
 
 // server/bot.ts
 init_schema();
-await init_db();
+init_db();
 import { Telegraf } from "telegraf";
 import { eq as eq3 } from "drizzle-orm";
 var BOT_TOKEN = process.env.BOT_TOKEN;
@@ -1293,7 +1386,7 @@ function getBotWebhookHandler() {
 }
 
 // server/routes/equipment.routes.ts
-await init_storage();
+init_storage();
 init_schema();
 init_schema();
 import { eq as eq4, sql as sql4 } from "drizzle-orm";
@@ -1336,18 +1429,18 @@ function registerEquipmentRoutes(app2) {
         if (!isFirstBasicLaptop || !isFirstPurchase) {
           const balanceField = et.currency === "CS" ? "csBalance" : "chstBalance";
           if (user[0][balanceField] < et.basePrice) {
-            throw new Error(`Insufficient \${et.currency} balance`);
+            throw new Error(`Insufficient ${et.currency} balance`);
           }
         }
         const owned = userEquipment.find((e) => e.equipmentTypeId === parsed.data.equipmentTypeId);
         if (owned && owned.quantity >= et.maxOwned) {
-          throw new Error(`Maximum owned limit reached (\${et.maxOwned})`);
+          throw new Error(`Maximum owned limit reached (${et.maxOwned})`);
         }
         let equipment2;
         if (owned) {
           const updated = await tx.update(ownedEquipment).set({
-            quantity: sql4`\${ownedEquipment.quantity} + 1`,
-            currentHashrate: sql4`\${ownedEquipment.currentHashrate} + \${et.baseHashrate}`
+            quantity: sql4`${ownedEquipment.quantity} + 1`,
+            currentHashrate: sql4`${ownedEquipment.currentHashrate} + ${et.baseHashrate}`
           }).where(eq4(ownedEquipment.id, owned.id)).returning();
           equipment2 = updated[0];
         } else {
@@ -1361,11 +1454,11 @@ function registerEquipmentRoutes(app2) {
         if (!(isFirstBasicLaptop && isFirstPurchase)) {
           const balanceField = et.currency === "CS" ? "csBalance" : "chstBalance";
           await tx.update(users).set({
-            [balanceField]: sql4`\${balanceField === 'csBalance' ? users.csBalance : users.chstBalance} - \${et.basePrice}`,
-            totalHashrate: sql4`\${users.totalHashrate} + \${et.baseHashrate}`
+            [balanceField]: sql4`${balanceField === "csBalance" ? users.csBalance : users.chstBalance} - ${et.basePrice}`,
+            totalHashrate: sql4`${users.totalHashrate} + ${et.baseHashrate}`
           }).where(eq4(users.id, userId));
         } else {
-          await tx.update(users).set({ totalHashrate: sql4`\${users.totalHashrate} + \${et.baseHashrate}` }).where(eq4(users.id, userId));
+          await tx.update(users).set({ totalHashrate: sql4`${users.totalHashrate} + ${et.baseHashrate}` }).where(eq4(users.id, userId));
         }
         return equipment2;
       });
@@ -2033,6 +2126,52 @@ async function registerRoutes(app2) {
     }
     const setting = await storage.setGameSetting(key, value);
     res.json(setting);
+  });
+  app2.get("/api/admin/feature-flags", validateTelegramAuth, requireAdmin, async (req, res) => {
+    try {
+      const flags = await db.select().from(featureFlags).orderBy(featureFlags.featureName);
+      res.json(flags);
+    } catch (error) {
+      console.error("Error fetching feature flags:", error);
+      res.status(500).json({ error: "Failed to fetch feature flags" });
+    }
+  });
+  app2.post("/api/admin/feature-flags/:key", validateTelegramAuth, requireAdmin, async (req, res) => {
+    const { key } = req.params;
+    const { isEnabled } = req.body;
+    if (typeof isEnabled !== "boolean") {
+      return res.status(400).json({ error: "isEnabled must be a boolean" });
+    }
+    try {
+      const updated = await db.update(featureFlags).set({
+        isEnabled,
+        updatedAt: /* @__PURE__ */ new Date(),
+        updatedBy: req.telegramUser?.id?.toString() || "unknown"
+      }).where(eq5(featureFlags.featureKey, key)).returning();
+      if (updated.length === 0) {
+        return res.status(404).json({ error: "Feature flag not found" });
+      }
+      res.json(updated[0]);
+    } catch (error) {
+      console.error("Error updating feature flag:", error);
+      res.status(500).json({ error: "Failed to update feature flag" });
+    }
+  });
+  app2.get("/api/feature-flags", async (req, res) => {
+    try {
+      const flags = await db.select({
+        featureKey: featureFlags.featureKey,
+        isEnabled: featureFlags.isEnabled
+      }).from(featureFlags);
+      const enabledFeatures = flags.reduce((acc, flag) => {
+        acc[flag.featureKey] = flag.isEnabled;
+        return acc;
+      }, {});
+      res.json(enabledFeatures);
+    } catch (error) {
+      console.error("Error fetching feature flags:", error);
+      res.json({});
+    }
   });
   app2.get("/api/admin/users", validateTelegramAuth, requireAdmin, async (req, res) => {
     const users2 = await storage.getAllUsers();
@@ -2925,7 +3064,7 @@ async function registerRoutes(app2) {
           }
           const gameWallet = getGameWalletAddress();
           const existingPurchase = await tx.select().from(lootBoxPurchases).where(eq5(lootBoxPurchases.tonTransactionHash, tonTransactionHash)).limit(1);
-          if (existingPurchase[0]) {
+          if (existingPurchase.length > 0) {
             throw new Error("This transaction has already been used");
           }
           const isValid = await verifyTONTransaction(
@@ -3271,10 +3410,10 @@ async function registerRoutes(app2) {
       if (currentEquipment.length === 0) {
         return res.status(400).json({ error: "No equipment to save" });
       }
-      const snapshot = currentEquipment.map((eq7) => ({
-        equipmentTypeId: eq7.equipmentTypeId,
-        quantity: eq7.quantity,
-        upgradeLevel: eq7.upgradeLevel
+      const snapshot = currentEquipment.map((eq8) => ({
+        equipmentTypeId: eq8.equipmentTypeId,
+        quantity: eq8.quantity,
+        upgradeLevel: eq8.upgradeLevel
       }));
       const newPreset = await db.insert(equipmentPresets2).values({
         userId: user[0].telegramId,
@@ -4220,8 +4359,11 @@ function serveStatic(app2) {
   });
 }
 
+// server/index.ts
+init_mining();
+
 // server/seedDatabase.ts
-await init_db();
+init_db();
 init_schema();
 import { eq as eq6 } from "drizzle-orm";
 async function seedDatabase() {
@@ -4296,7 +4438,7 @@ async function seedDatabase() {
 }
 
 // server/seedGameContent.ts
-await init_db();
+init_db();
 init_schema();
 var dailyChallengesData = [
   {
@@ -4664,8 +4806,100 @@ async function seedGameContent() {
   }
 }
 
+// server/seedFeatureFlags.ts
+init_storage();
+init_schema();
+import { eq as eq7 } from "drizzle-orm";
+var initialFeatureFlags = [
+  {
+    featureKey: "blocks",
+    featureName: "Block Explorer",
+    description: "View mined blocks and your mining contributions",
+    isEnabled: true
+  },
+  {
+    featureKey: "leaderboard",
+    featureName: "Leaderboard",
+    description: "Compete with other players and see rankings",
+    isEnabled: true
+  },
+  {
+    featureKey: "challenges",
+    featureName: "Challenges",
+    description: "Daily challenges and tasks for rewards",
+    isEnabled: true
+  },
+  {
+    featureKey: "achievements",
+    featureName: "Achievements",
+    description: "Unlock achievements and earn bonuses",
+    isEnabled: true
+  },
+  {
+    featureKey: "cosmetics",
+    featureName: "Cosmetics Shop",
+    description: "Customize your appearance with cosmetic items",
+    isEnabled: true
+  },
+  {
+    featureKey: "statistics",
+    featureName: "Statistics",
+    description: "View detailed stats and analytics",
+    isEnabled: true
+  },
+  {
+    featureKey: "spin",
+    featureName: "Spin Wheel",
+    description: "Spin the wheel for prizes and rewards",
+    isEnabled: true
+  },
+  {
+    featureKey: "referrals",
+    featureName: "Referrals",
+    description: "Invite friends and earn referral bonuses",
+    isEnabled: true
+  },
+  {
+    featureKey: "packs",
+    featureName: "Premium Packs",
+    description: "Purchase starter and premium packs",
+    isEnabled: true
+  },
+  {
+    featureKey: "subscription",
+    featureName: "Subscription",
+    description: "Subscribe for exclusive benefits",
+    isEnabled: true
+  }
+];
+async function seedFeatureFlags() {
+  console.log("\u{1F331} Seeding feature flags...");
+  try {
+    for (const flag of initialFeatureFlags) {
+      const existing = await db.select().from(featureFlags).where(eq7(featureFlags.featureKey, flag.featureKey)).limit(1);
+      if (existing.length === 0) {
+        await db.insert(featureFlags).values(flag);
+        console.log(`\u2705 Created feature flag: ${flag.featureName}`);
+      } else {
+        console.log(`\u23ED\uFE0F  Feature flag already exists: ${flag.featureName}`);
+      }
+    }
+    console.log("\u2705 Feature flags seeded successfully!");
+    return true;
+  } catch (error) {
+    console.error("\u274C Error seeding feature flags:", error);
+    return false;
+  }
+}
+if (__require.main === module) {
+  seedFeatureFlags().then(() => process.exit(0)).catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
 // server/applyIndexes.ts
-await init_db();
+init_db();
 import { sql as sql6 } from "drizzle-orm";
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -4687,8 +4921,10 @@ async function applyPerformanceIndexes() {
 }
 
 // server/index.ts
+init_db();
 import rateLimit from "express-rate-limit";
 var app = express2();
+app.set("trust proxy", 1);
 app.use(express2.json());
 app.use(express2.urlencoded({ extended: false }));
 var apiLimiter = rateLimit({
@@ -4700,7 +4936,7 @@ var apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    return req.path === "/healthz" || !req.path.startsWith("/api/");
+    return req.path === "/healthz" || req.path === "/api/health" || !req.path.startsWith("/api/");
   }
 });
 var strictLimiter = rateLimit({
@@ -4740,13 +4976,52 @@ app.use((req, res, next) => {
   });
   next();
 });
+app.get("/api/health", async (_req, res) => {
+  try {
+    const isDatabaseHealthy = await checkDatabaseHealth();
+    if (isDatabaseHealthy) {
+      res.status(200).json({
+        status: "healthy",
+        database: "connected"
+      });
+    } else {
+      res.status(503).json({
+        status: "degraded",
+        database: "disconnected",
+        message: "Database connection failed"
+      });
+    }
+  } catch (error) {
+    res.status(503).json({
+      status: "degraded",
+      database: "error",
+      message: "Health check failed"
+    });
+  }
+});
+app.get("/api/health/mining", async (_req, res) => {
+  try {
+    const { getMiningHealth: getMiningHealth2 } = await Promise.resolve().then(() => (init_mining(), mining_exports));
+    const miningHealth = getMiningHealth2();
+    if (miningHealth.status === "healthy") {
+      res.status(200).json(miningHealth);
+    } else {
+      res.status(503).json(miningHealth);
+    }
+  } catch (error) {
+    res.status(503).json({
+      status: "degraded",
+      message: "Unable to check mining health"
+    });
+  }
+});
 (async () => {
   const server = await registerRoutes(app);
   app.use((err, _req, res, _next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
     res.status(status).json({ message });
-    throw err;
+    console.error("[ERROR]", err);
   });
   if (app.get("env") === "development") {
     await setupVite(app, server);
@@ -4760,6 +5035,9 @@ app.use((req, res, next) => {
     reusePort: true
   }, async () => {
     log(`serving on port ${port}`);
+    initializeDatabase().catch((err) => {
+      console.error("\u26A0\uFE0F  Database initialization failed (non-fatal):", err.message || err);
+    });
     seedDatabase().catch((err) => {
       console.error("\u26A0\uFE0F  Database seeding failed (non-fatal):", err.message || err);
       console.log("\u2705 Server will continue running. Database will seed when connection is available.");
@@ -4769,6 +5047,9 @@ app.use((req, res, next) => {
     });
     seedGameContent().catch((err) => {
       console.error("\u26A0\uFE0F  Game content seeding failed (non-fatal):", err.message || err);
+    });
+    seedFeatureFlags().catch((err) => {
+      console.error("\u26A0\uFE0F  Feature flags seeding failed (non-fatal):", err.message || err);
     });
     miningService.start().catch((err) => {
       console.error("\u26A0\uFE0F  Mining service failed to start (non-fatal):", err.message || err);
