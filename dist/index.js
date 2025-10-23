@@ -4669,6 +4669,34 @@ async function registerRoutes(app2) {
     if (!user) return res.status(404).json({ message: "User not found" });
     res.json(user);
   });
+  app2.get("/api/user/:userId/statistics", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    try {
+      const { userStatistics: userStatistics3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      let stats = await db.select().from(userStatistics3).where(eq17(userStatistics3.userId, user.telegramId)).limit(1);
+      if (stats.length === 0) {
+        await db.insert(userStatistics3).values({
+          userId: user.telegramId,
+          totalCsEarned: 0,
+          totalChstEarned: 0,
+          totalBlocksMined: 0,
+          bestBlockReward: 0,
+          highestHashrate: user.totalHashrate || 0,
+          totalTonSpent: "0",
+          totalCsSpent: 0,
+          totalReferrals: 0,
+          achievementsUnlocked: 0
+        });
+        stats = await db.select().from(userStatistics3).where(eq17(userStatistics3.userId, user.telegramId)).limit(1);
+      }
+      res.json(stats[0]);
+    } catch (error) {
+      console.error("Get user statistics error:", error);
+      res.status(500).json({ error: "Failed to get user statistics" });
+    }
+  });
   app2.get("/api/leaderboard/hashrate", validateTelegramAuth, async (req, res) => {
     try {
       const limit = parseInt(req.query.limit) || 10;
@@ -4906,8 +4934,8 @@ async function registerRoutes(app2) {
     if (!componentType || !["RAM", "CPU", "Storage", "GPU"].includes(componentType)) {
       return res.status(400).json({ message: "Invalid component type" });
     }
-    if (!["CS", "CHST", "TON"].includes(currency)) {
-      return res.status(400).json({ message: "Invalid currency. Must be CS, CHST, or TON" });
+    if (!["CS", "TON"].includes(currency)) {
+      return res.status(400).json({ message: "Invalid currency. Must be CS or TON" });
     }
     try {
       const result = await db.transaction(async (tx) => {
@@ -4964,13 +4992,12 @@ async function registerRoutes(app2) {
           }
         } else {
           const user = await tx.select().from(users).where(eq17(users.id, userId));
-          const balanceField = currency === "CS" ? "csBalance" : "chstBalance";
-          const currentBalance = user[0][balanceField];
+          const currentBalance = user[0].csBalance;
           if (currentBalance < upgradeCost) {
             throw new Error(`Insufficient ${currency} balance. Need ${upgradeCost} ${currency}`);
           }
           await tx.update(users).set({
-            [balanceField]: sql14`${balanceField === "csBalance" ? users.csBalance : users.chstBalance} - ${upgradeCost}`
+            csBalance: sql14`${users.csBalance} - ${upgradeCost}`
           }).where(eq17(users.id, userId));
         }
         const newLevel = currentLevel + 1;
@@ -5633,8 +5660,8 @@ async function registerRoutes(app2) {
       if (basePrice !== void 0 && (typeof basePrice !== "number" || basePrice < 0)) {
         return res.status(400).json({ error: "Invalid price. Must be a positive number." });
       }
-      if (currency !== void 0 && !["CS", "CHST", "TON"].includes(currency)) {
-        return res.status(400).json({ error: "Invalid currency. Must be CS, CHST, or TON." });
+      if (currency !== void 0 && !["CS", "TON"].includes(currency)) {
+        return res.status(400).json({ error: "Invalid currency. Must be CS or TON." });
       }
       const equipment2 = await db.select().from(equipmentTypes).where(eq17(equipmentTypes.id, equipmentId)).limit(1);
       if (!equipment2[0]) {
@@ -5697,7 +5724,6 @@ async function registerRoutes(app2) {
           });
         }
         let rewardCs = 0;
-        let rewardChst = 0;
         let conditionsMet = true;
         let errorMsg = "";
         switch (taskId) {
@@ -5708,7 +5734,6 @@ async function registerRoutes(app2) {
               errorMsg = "You need to purchase equipment first to mine blocks";
             }
             rewardCs = 1e3;
-            rewardChst = 10;
             break;
           case "reach-1000-hashrate":
             if (user[0].totalHashrate < 1e3) {
@@ -5716,7 +5741,6 @@ async function registerRoutes(app2) {
               errorMsg = "You need at least 1,000 H/s total hashrate";
             }
             rewardCs = 2e3;
-            rewardChst = 20;
             break;
           case "buy-first-asic":
             const asicEquipment = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq17(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(and12(
@@ -5728,7 +5752,6 @@ async function registerRoutes(app2) {
               errorMsg = "You need to purchase an ASIC rig first";
             }
             rewardCs = 3e3;
-            rewardChst = 30;
             break;
           case "invite-1-friend":
             const referrals1 = await tx.select().from(referrals).where(eq17(referrals.referrerId, userId));
@@ -5737,7 +5760,6 @@ async function registerRoutes(app2) {
               errorMsg = "You need to invite at least 1 friend first";
             }
             rewardCs = 5e3;
-            rewardChst = 50;
             break;
           case "invite-5-friends":
             const referrals5 = await tx.select().from(referrals).where(eq17(referrals.referrerId, userId));
@@ -5746,7 +5768,6 @@ async function registerRoutes(app2) {
               errorMsg = "You need to invite at least 5 friends first";
             }
             rewardCs = 15e3;
-            rewardChst = 150;
             break;
           default:
             return res.status(400).json({ error: "Unknown task ID" });
@@ -5758,25 +5779,19 @@ async function registerRoutes(app2) {
           });
         }
         await tx.update(users).set({
-          csBalance: sql14`${users.csBalance} + ${rewardCs}`,
-          chstBalance: sql14`${users.chstBalance} + ${rewardChst}`,
-          freeLootBoxes: sql14`${users.freeLootBoxes} + 1`
-          // Grant 1 free loot box per task
+          csBalance: sql14`${users.csBalance} + ${rewardCs}`
         }).where(eq17(users.id, userId));
         await tx.insert(userTasks).values({
           userId: user[0].telegramId,
           taskId,
-          rewardCs,
-          rewardChst
+          rewardCs
         });
         const updatedUser = await tx.select().from(users).where(eq17(users.id, userId));
         return {
           success: true,
           taskId,
           reward: {
-            cs: rewardCs,
-            chst: rewardChst,
-            freeLootBox: 1
+            cs: rewardCs
           },
           new_balance: {
             cs: updatedUser[0].csBalance,
@@ -5813,7 +5828,6 @@ async function registerRoutes(app2) {
           });
         }
         let rewardCs = 0;
-        let rewardChst = 0;
         let conditionsMet = true;
         let errorMsg = "";
         switch (taskId) {
@@ -5824,7 +5838,6 @@ async function registerRoutes(app2) {
               errorMsg = "You need to purchase equipment first to mine blocks";
             }
             rewardCs = 1e3;
-            rewardChst = 10;
             break;
           case "reach-1000-hashrate":
             if (user[0].totalHashrate < 1e3) {
@@ -5832,7 +5845,6 @@ async function registerRoutes(app2) {
               errorMsg = "You need at least 1,000 H/s total hashrate";
             }
             rewardCs = 2e3;
-            rewardChst = 20;
             break;
           case "buy-first-asic":
             const asicEquipment = await tx.select().from(ownedEquipment).leftJoin(equipmentTypes, eq17(ownedEquipment.equipmentTypeId, equipmentTypes.id)).where(and12(
@@ -5844,7 +5856,6 @@ async function registerRoutes(app2) {
               errorMsg = "You need to purchase an ASIC rig first";
             }
             rewardCs = 3e3;
-            rewardChst = 30;
             break;
           case "invite-1-friend":
             const referrals1 = await tx.select().from(referrals).where(eq17(referrals.referrerId, userId));
@@ -5853,7 +5864,6 @@ async function registerRoutes(app2) {
               errorMsg = "You need to invite at least 1 friend first";
             }
             rewardCs = 5e3;
-            rewardChst = 50;
             break;
           case "invite-5-friends":
             const referrals5 = await tx.select().from(referrals).where(eq17(referrals.referrerId, userId));
@@ -5862,7 +5872,6 @@ async function registerRoutes(app2) {
               errorMsg = "You need to invite at least 5 friends first";
             }
             rewardCs = 15e3;
-            rewardChst = 150;
             break;
           default:
             return res.status(400).json({ error: "Unknown task ID" });
@@ -5874,22 +5883,19 @@ async function registerRoutes(app2) {
           });
         }
         await tx.update(users).set({
-          csBalance: sql14`${users.csBalance} + ${rewardCs}`,
-          chstBalance: sql14`${users.chstBalance} + ${rewardChst}`
+          csBalance: sql14`${users.csBalance} + ${rewardCs}`
         }).where(eq17(users.id, userId));
         await tx.insert(userTasks).values({
           userId: user[0].telegramId,
           taskId,
-          rewardCs,
-          rewardChst
+          rewardCs
         });
         const updatedUser = await tx.select().from(users).where(eq17(users.id, userId));
         return {
           success: true,
           taskId,
           reward: {
-            cs: rewardCs,
-            chst: rewardChst
+            cs: rewardCs
           },
           new_balance: {
             cs: updatedUser[0].csBalance,
@@ -5975,9 +5981,13 @@ async function registerRoutes(app2) {
         const reward = type === "cs" ? 5 : 2;
         const currency = type === "cs" ? "CS" : "CHST";
         if (type === "cs") {
-          await tx.update(users).set({ csBalance: sql14`${users.csBalance} + ${reward}` }).where(eq17(users.id, userId));
+          await tx.update(users).set({
+            csBalance: sql14`${users.csBalance} + ${reward}`
+          }).where(eq17(users.id, userId));
         } else {
-          await tx.update(users).set({ chstBalance: sql14`${users.chstBalance} + ${reward}` }).where(eq17(users.id, userId));
+          await tx.update(users).set({
+            chstBalance: sql14`${users.chstBalance} + ${reward}`
+          }).where(eq17(users.id, userId));
         }
         const updatedUser = await tx.select().from(users).where(eq17(users.id, userId));
         const nextDay = new Date(localDate);
@@ -6438,15 +6448,12 @@ async function registerRoutes(app2) {
         }
         const prizes = [];
         let totalCs = 0;
-        let totalChst = 0;
         let jackpotWon = false;
         for (let i = 0; i < spinQuantity; i++) {
           const prize = generateSpinPrize(isFree);
           prizes.push(prize);
           if (prize.type === "cs") {
             totalCs += prize.value;
-          } else if (prize.type === "chst") {
-            totalChst += prize.value;
           } else if (prize.type === "jackpot") {
             jackpotWon = true;
             await tx.insert(jackpotWins2).values({
@@ -6496,10 +6503,9 @@ async function registerRoutes(app2) {
             wasFree: isFree
           });
         }
-        if (totalCs > 0 || totalChst > 0) {
+        if (totalCs > 0) {
           await tx.update(users).set({
-            ...totalCs > 0 && { csBalance: sql14`${users.csBalance} + ${totalCs}` },
-            ...totalChst > 0 && { chstBalance: sql14`${users.chstBalance} + ${totalChst}` }
+            csBalance: sql14`${users.csBalance} + ${totalCs}`
           }).where(eq17(users.id, userId));
         }
         const updatedUser = await tx.select().from(users).where(eq17(users.id, userId)).limit(1);
@@ -6508,11 +6514,10 @@ async function registerRoutes(app2) {
           prizes,
           summary: {
             total_cs: totalCs,
-            total_chst: totalChst,
             jackpot_won: jackpotWon,
             spins_completed: spinQuantity
           },
-          message: jackpotWon ? `\u{1F3B0} JACKPOT! You won 1 TON! Contact admin for payout. Plus ${totalCs} CS and ${totalChst} CHST!` : `You won ${totalCs} CS and ${totalChst} CHST from ${spinQuantity} spin(s)!`,
+          message: jackpotWon ? `\u{1F3B0} JACKPOT! You won 1 TON! Contact admin for payout. Plus ${totalCs.toLocaleString()} CS!` : `You won ${totalCs.toLocaleString()} CS from ${spinQuantity} spin(s)!`,
           newBalance: {
             cs: updatedUser[0].csBalance,
             chst: updatedUser[0].chstBalance
@@ -6545,11 +6550,7 @@ async function registerRoutes(app2) {
       const powerUp = powerUpOptions[Math.floor(Math.random() * powerUpOptions.length)];
       return { type: "powerup", value: powerUp, display: "Power-Up Boost" };
     }
-    if (roll < 60.1) {
-      const chstAmount = Math.floor(50 + Math.random() * 450);
-      return { type: "chst", value: chstAmount, display: `${chstAmount} CHST` };
-    }
-    const csOptions = [1e3, 2500, 5e3, 1e4, 25e3];
+    const csOptions = [1e3, 2500, 5e3, 1e4, 25e3, 5e4];
     const csAmount = csOptions[Math.floor(Math.random() * csOptions.length)];
     return { type: "cs", value: csAmount, display: `${csAmount} CS` };
   }
@@ -7637,7 +7638,7 @@ async function registerRoutes(app2) {
         await tx.update(users).set({
           csBalance: sql14`${users.csBalance} + ${rewards.cs}`,
           chstBalance: sql14`${users.chstBalance} + ${rewards.chst}`
-        }).where(eq17(users.telegramId, user.telegramId));
+        }).where(eq17(users.id, userId));
         if (streakData.length > 0) {
           await tx.update(userStreaks).set({
             currentStreak,
