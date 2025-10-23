@@ -1175,7 +1175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const subscription = await db.select().from(userSubscriptions)
-        .where(eq(userSubscriptions.userId, user.telegramId))
+        .where(eq(userSubscriptions.userId, user.telegramId!))
         .limit(1);
 
       if (subscription.length === 0) {
@@ -1220,7 +1220,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Check existing subscription
         const existing = await tx.select().from(userSubscriptions)
-          .where(eq(userSubscriptions.userId, user[0].telegramId))
+          .where(eq(userSubscriptions.userId, user[0].telegramId!))
           .limit(1);
 
         const now = new Date();
@@ -1247,7 +1247,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else {
           // Create new
           const created = await tx.insert(userSubscriptions).values({
-            userId: user[0].telegramId,
+            userId: user[0].telegramId!,
             subscriptionType,
             startDate: now,
             endDate,
