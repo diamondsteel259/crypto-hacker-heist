@@ -574,11 +574,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/user/:userId/equipment/purchase", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
-    console.log("Purchase request:", { userId, body: req.body });
     
     const parsed = insertOwnedEquipmentSchema.safeParse({ ...req.body, userId });
     if (!parsed.success) {
-      console.log("Schema validation failed:", parsed.error);
       return res.status(400).json({ message: "Invalid equipment data", errors: parsed.error });
     }
 
@@ -592,12 +590,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const equipmentType = await tx.select().from(equipmentTypes)
           .where(eq(equipmentTypes.id, parsed.data.equipmentTypeId));
         if (!equipmentType[0]) {
-          console.log("Equipment type not found:", parsed.data.equipmentTypeId);
           throw new Error("Equipment type not found");
         }
 
         const et = equipmentType[0];
-        console.log("Equipment type found:", et);
 
         const categoryEquipment = await tx.select().from(equipmentTypes)
           .where(and(
@@ -617,11 +613,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const hasPrevious = currentCategoryEquipment.every((prev: any) => 
           userEquipment.some((owned: any) => owned.equipmentTypeId === prev.id)
         );
-        console.log("Previous equipment check:", { 
-          currentCategoryEquipment: currentCategoryEquipment.length, 
-          hasPrevious, 
-          orderIndex: et.orderIndex 
-        });
 
         // Only enforce progression for Basic and Gaming tiers, not ASIC/Server Farm
         if (!hasPrevious && et.orderIndex > 1 && (et.tier === 'Basic' || et.tier === 'Gaming')) {
@@ -637,13 +628,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!isFirstBasicLaptop || !isFirstPurchase) {
           const balanceField = et.currency === 'CS' ? 'csBalance' : 'chstBalance';
           const currentBalance = user[0][balanceField];
-          console.log("Balance check:", { balanceField, currentBalance, requiredPrice: et.basePrice, currency: et.currency });
 
           if (currentBalance < et.basePrice) {
             throw new Error(`Insufficient ${et.currency} balance`);
           }
         } else {
-          console.log("First Basic Laptop purchase - skipping balance check");
         }
 
         const owned = userEquipment.find((e: any) => e.equipmentTypeId === parsed.data.equipmentTypeId);
@@ -679,7 +668,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               totalHashrate: sql`${users.totalHashrate} + ${et.baseHashrate}`
             })
             .where(eq(users.id, userId));
-          console.log(`Paid purchase: Updated user hashrate by +${et.baseHashrate}, deducted ${et.basePrice} ${et.currency}`);
         } else {
           // Free purchase - only update hashrate
           await tx.update(users)
@@ -687,12 +675,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               totalHashrate: sql`${users.totalHashrate} + ${et.baseHashrate}`
             })
             .where(eq(users.id, userId));
-          console.log(`Free purchase: Updated user hashrate by +${et.baseHashrate}`);
         }
 
         // Verify the user's updated hashrate
         const updatedUser = await tx.select().from(users).where(eq(users.id, userId));
-        console.log(`User ${userId} now has hashrate: ${updatedUser[0]?.totalHashrate}`);
 
         return equipment;
       });
@@ -1625,7 +1611,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Get updated balances
         const updatedUser = await tx.select().from(users).where(eq(users.id, userId));
-        console.log(`User ${userId} now has hashrate: ${updatedUser[0]?.totalHashrate}`);
 
         return {
           success: true,
@@ -1998,7 +1983,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Verify transaction on TON blockchain
-        console.log(`Verifying TON transaction: ${tonTransactionHash} for ${tonAmount} TON`);
         const verification = await verifyTONTransaction(
           tonTransactionHash,
           tonAmount,
@@ -2013,7 +1997,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        console.log('TON transaction verified successfully:', verification.transaction);
 
         // Determine rewards and boost parameters
         let rewardCs = 0;
@@ -2284,7 +2267,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
 
-      console.log(`Loot box opened: ${boxType} for user ${userId}, rewards:`, result.rewards);
       res.json(result);
     } catch (error: any) {
       console.error("Loot box open error:", error);
