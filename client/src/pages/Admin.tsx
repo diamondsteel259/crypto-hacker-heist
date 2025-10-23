@@ -12,6 +12,12 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getTelegramInitData } from "@/lib/user";
 import type { User, GameSetting, EquipmentType, FeatureFlag } from "@shared/schema";
 import SeasonsAdmin from "@/components/SeasonsAdmin";
+import AnnouncementsAdmin from "@/components/AnnouncementsAdmin";
+import PromoCodesAdmin from "@/components/PromoCodesAdmin";
+import AnalyticsAdmin from "@/components/AnalyticsAdmin";
+import EventsAdmin from "@/components/EventsAdmin";
+import EconomyAdmin from "@/components/EconomyAdmin";
+import SegmentationAdmin from "@/components/SegmentationAdmin";
 
 export default function Admin() {
   const { toast } = useToast();
@@ -662,6 +668,14 @@ export default function Admin() {
           </p>
         </Card>
         <SeasonsAdmin />
+
+        {/* New Admin Features */}
+        <AnnouncementsAdmin />
+        <PromoCodesAdmin />
+        <AnalyticsAdmin />
+        <EventsAdmin />
+        <EconomyAdmin />
+        <SegmentationAdmin />
 
         {/* Recalculate Hashrates Section */}
         <Card className="p-6">

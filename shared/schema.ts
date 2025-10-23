@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, varchar, text, integer, real, timestamp, boolean, unique, decimal, index, serial } from "drizzle-orm/pg-core";
+import { pgTable, varchar, text, integer, real, timestamp, boolean, unique, decimal, index, serial, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -171,7 +171,7 @@ export const activePowerUps = pgTable("active_power_ups", {
   userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
   powerUpType: text("power_up_type").notNull(),
   boostPercentage: integer("boost_percentage").notNull(),
-  activatedAt: timestamp("activated_at").notNull().defaultNow(),
+  activatedAt: timestamp("activated_at").notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   isActive: boolean("is_active").notNull().default(true),
 }, (table) => ({
@@ -479,6 +479,237 @@ export const userStatistics = pgTable("user_statistics", {
   userStatsIdx: index("user_statistics_user_idx").on(table.userId),
 }));
 
+// Announcements System
+export const announcements = pgTable("announcements", {
+  id: serial("id").primaryKey(),
+  title: varchar("title", { length: 200 }).notNull(),
+  message: text("message").notNull(),
+  type: text("type").notNull(), // 'info', 'warning', 'success', 'event', 'maintenance'
+  priority: text("priority").notNull().default('normal'), // 'low', 'normal', 'high', 'critical'
+  targetAudience: text("target_audience").notNull().default('all'), // 'all', 'active', 'whales', 'new_users', 'at_risk'
+  scheduledFor: timestamp("scheduled_for"), // null = send immediately
+  expiresAt: timestamp("expires_at"), // null = doesn't expire
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdBy: text("created_by").notNull().references(() => users.telegramId),
+  sentAt: timestamp("sent_at"),
+  isActive: boolean("is_active").notNull().default(true),
+  totalRecipients: integer("total_recipients").notNull().default(0),
+  readCount: integer("read_count").notNull().default(0),
+}, (table) => ({
+  activeIdx: index("announcements_active_idx").on(table.isActive, table.scheduledFor),
+  createdByIdx: index("announcements_created_by_idx").on(table.createdBy),
+}));
+
+export const userAnnouncements = pgTable("user_announcements", {
+  id: serial("id").primaryKey(),
+  announcementId: integer("announcement_id").notNull().references(() => announcements.id, { onDelete: 'cascade' }),
+  telegramId: text("telegram_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  readAt: timestamp("read_at").notNull().defaultNow(),
+}, (table) => ({
+  userAnnouncementUnique: unique().on(table.announcementId, table.telegramId),
+  userAnnouncementIdx: index("user_announcements_user_idx").on(table.telegramId),
+  announcementIdx: index("user_announcements_announcement_idx").on(table.announcementId),
+}));
+
+// Promo Code System
+export const promoCodes = pgTable("promo_codes", {
+  id: serial("id").primaryKey(),
+  code: varchar("code", { length: 50 }).notNull().unique(),
+  description: text("description"),
+  rewardType: text("reward_type").notNull(), // 'cs', 'ton', 'equipment', 'powerup', 'lootbox', 'bundle'
+  rewardAmount: decimal("reward_amount", { precision: 20, scale: 2 }),
+  rewardData: text("reward_data"), // JSON for complex rewards (equipment ID, etc.)
+  maxUses: integer("max_uses"), // null = unlimited
+  currentUses: integer("current_uses").notNull().default(0),
+  maxUsesPerUser: integer("max_uses_per_user").notNull().default(1),
+  validFrom: timestamp("valid_from").notNull().defaultNow(),
+  validUntil: timestamp("valid_until"), // null = never expires
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdBy: text("created_by").notNull().references(() => users.telegramId),
+  targetSegment: text("target_segment").notNull().default('all'), // 'all', 'new_users', 'returning_users'
+}, (table) => ({
+  codeIdx: index("promo_codes_code_idx").on(table.code),
+  activeIdx: index("promo_codes_active_idx").on(table.isActive, table.validUntil),
+  createdByIdx: index("promo_codes_created_by_idx").on(table.createdBy),
+}));
+
+export const promoCodeRedemptions = pgTable("promo_code_redemptions", {
+  id: serial("id").primaryKey(),
+  promoCodeId: integer("promo_code_id").notNull().references(() => promoCodes.id, { onDelete: 'cascade' }),
+  telegramId: text("telegram_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  redeemedAt: timestamp("redeemed_at").notNull().defaultNow(),
+  rewardGiven: text("reward_given").notNull(), // JSON of what they received
+  ipAddress: varchar("ip_address", { length: 45 }),
+}, (table) => ({
+  userPromoUnique: unique().on(table.promoCodeId, table.telegramId),
+  userIdx: index("promo_code_redemptions_user_idx").on(table.telegramId),
+  promoIdx: index("promo_code_redemptions_promo_idx").on(table.promoCodeId),
+}));
+
+// Analytics System
+export const dailyAnalytics = pgTable("daily_analytics", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull().unique(),
+  dau: integer("dau").notNull().default(0), // Daily Active Users
+  newUsers: integer("new_users").notNull().default(0), // New signups
+  returningUsers: integer("returning_users").notNull().default(0), // Users who came back
+  totalUsers: integer("total_users").notNull().default(0), // Cumulative
+  totalCsGenerated: decimal("total_cs_generated", { precision: 20, scale: 2 }).notNull().default('0'),
+  totalCsSpent: decimal("total_cs_spent", { precision: 20, scale: 2 }).notNull().default('0'),
+  totalTonSpent: decimal("total_ton_spent", { precision: 10, scale: 6 }).notNull().default('0'),
+  totalBlocks: integer("total_blocks").notNull().default(0),
+  avgSessionDuration: integer("avg_session_duration").notNull().default(0), // seconds
+  avgCsPerUser: decimal("avg_cs_per_user", { precision: 15, scale: 2 }).notNull().default('0'),
+  totalPowerUpPurchases: integer("total_power_up_purchases").notNull().default(0),
+  totalLootBoxPurchases: integer("total_loot_box_purchases").notNull().default(0),
+  totalPackPurchases: integer("total_pack_purchases").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  dateIdx: index("daily_analytics_date_idx").on(table.date),
+}));
+
+export const userSessions = pgTable("user_sessions", {
+  id: serial("id").primaryKey(),
+  telegramId: text("telegram_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  endedAt: timestamp("ended_at"),
+  durationSeconds: integer("duration_seconds"),
+  actionsPerformed: integer("actions_performed").notNull().default(0),
+}, (table) => ({
+  userSessionIdx: index("user_sessions_user_idx").on(table.telegramId, table.startedAt),
+  startedAtIdx: index("user_sessions_started_at_idx").on(table.startedAt),
+}));
+
+export const retentionCohorts = pgTable("retention_cohorts", {
+  id: serial("id").primaryKey(),
+  cohortDate: date("cohort_date").notNull().unique(), // Signup date
+  day0: integer("day0").notNull().default(0), // Users who signed up
+  day1: integer("day1").notNull().default(0), // Came back day 1
+  day3: integer("day3").notNull().default(0), // Came back day 3
+  day7: integer("day7").notNull().default(0), // Came back day 7
+  day14: integer("day14").notNull().default(0),
+  day30: integer("day30").notNull().default(0),
+}, (table) => ({
+  cohortDateIdx: index("retention_cohorts_date_idx").on(table.cohortDate),
+}));
+
+// Event Scheduler System
+export const scheduledEvents = pgTable("scheduled_events", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 200 }).notNull(),
+  description: text("description"),
+  eventType: text("event_type").notNull(), // 'multiplier', 'flash_sale', 'community_goal', 'tournament', 'custom'
+  eventData: text("event_data").notNull(), // JSON string with type-specific config
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time").notNull(),
+  isActive: boolean("is_active").notNull().default(false), // Auto-toggled by cron
+  isRecurring: boolean("is_recurring").notNull().default(false),
+  recurrenceRule: varchar("recurrence_rule", { length: 100 }), // 'DAILY', 'WEEKLY_FRI', 'MONTHLY_1ST'
+  priority: integer("priority").notNull().default(0), // For UI sorting
+  bannerImage: text("banner_image"), // URL or base64
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdBy: text("created_by").notNull().references(() => users.telegramId),
+  announcementSent: boolean("announcement_sent").notNull().default(false),
+}, (table) => ({
+  activeIdx: index("scheduled_events_active_idx").on(table.isActive),
+  startTimeIdx: index("scheduled_events_start_time_idx").on(table.startTime),
+  endTimeIdx: index("scheduled_events_end_time_idx").on(table.endTime),
+  eventTypeIdx: index("scheduled_events_type_idx").on(table.eventType),
+}));
+
+export const eventParticipation = pgTable("event_participation", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull().references(() => scheduledEvents.id, { onDelete: 'cascade' }),
+  telegramId: text("telegram_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  contribution: decimal("contribution", { precision: 20, scale: 2 }).notNull().default('0'), // For community goals
+  rank: integer("rank"), // For tournaments
+  rewardClaimed: boolean("reward_claimed").notNull().default(false),
+  participatedAt: timestamp("participated_at").notNull().defaultNow(),
+}, (table) => ({
+  userEventUnique: unique().on(table.eventId, table.telegramId),
+  eventIdx: index("event_participation_event_idx").on(table.eventId),
+  userIdx: index("event_participation_user_idx").on(table.telegramId),
+}));
+
+// Economy Dashboard System
+export const economyMetrics = pgTable("economy_metrics", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull().unique(),
+  totalCsInCirculation: decimal("total_cs_in_circulation", { precision: 20, scale: 2 }).notNull().default('0'),
+  totalCsGenerated: decimal("total_cs_generated", { precision: 20, scale: 2 }).notNull().default('0'), // All-time cumulative
+  csGeneratedToday: decimal("cs_generated_today", { precision: 20, scale: 2 }).notNull().default('0'), // Daily generation
+  csSpentToday: decimal("cs_spent_today", { precision: 20, scale: 2 }).notNull().default('0'), // Daily spending
+  netCsChange: decimal("net_cs_change", { precision: 20, scale: 2 }).notNull().default('0'), // Generated - Spent
+  inflationRatePercent: decimal("inflation_rate_percent", { precision: 10, scale: 4 }).notNull().default('0'), // (Today Gen / Total Circ) * 100
+  avgBalancePerUser: decimal("avg_balance_per_user", { precision: 15, scale: 2 }).notNull().default('0'),
+  medianBalance: decimal("median_balance", { precision: 15, scale: 2 }).notNull().default('0'),
+  top1PercentOwnership: decimal("top1_percent_ownership", { precision: 10, scale: 2 }).notNull().default('0'), // % of total CS held by top 1%
+  top10PercentOwnership: decimal("top10_percent_ownership", { precision: 10, scale: 2 }).notNull().default('0'),
+  giniCoefficient: decimal("gini_coefficient", { precision: 5, scale: 4 }).notNull().default('0'), // Wealth inequality (0=equal, 1=one person has all)
+  activeWallets: integer("active_wallets").notNull().default(0), // Users with balance > 0
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  dateIdx: index("economy_metrics_date_idx").on(table.date),
+}));
+
+export const economySinks = pgTable("economy_sinks", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull(),
+  sinkType: text("sink_type").notNull(), // 'equipment', 'powerups', 'lootboxes', 'packs', 'upgrades', 'cosmetics', 'other'
+  csSpent: decimal("cs_spent", { precision: 20, scale: 2 }).notNull().default('0'),
+  transactionCount: integer("transaction_count").notNull().default(0),
+}, (table) => ({
+  dateSinkIdx: index("economy_sinks_date_sink_idx").on(table.date, table.sinkType),
+}));
+
+export const economyAlerts = pgTable("economy_alerts", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull(),
+  alertType: text("alert_type").notNull(), // 'high_inflation', 'negative_sinks', 'wealth_concentration', 'deflation'
+  severity: text("severity").notNull(), // 'info', 'warning', 'critical'
+  message: text("message").notNull(),
+  metric: text("metric"), // JSON of relevant data
+  acknowledged: boolean("acknowledged").notNull().default(false),
+  acknowledgedBy: text("acknowledged_by").references(() => users.telegramId),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  dateIdx: index("economy_alerts_date_idx").on(table.date),
+  acknowledgedIdx: index("economy_alerts_acknowledged_idx").on(table.acknowledged),
+}));
+
+// User Segmentation System
+export const userSegments = pgTable("user_segments", {
+  id: serial("id").primaryKey(),
+  telegramId: text("telegram_id").notNull().unique().references(() => users.telegramId, { onDelete: 'cascade' }),
+  segment: text("segment").notNull(), // 'whale', 'dolphin', 'minnow', 'new_user', 'active', 'at_risk', 'churned', 'returning'
+  lifetimeValue: decimal("lifetime_value", { precision: 15, scale: 2 }).notNull().default('0'), // Total TON spent
+  lastActiveAt: timestamp("last_active_at"),
+  daysSinceLastActive: integer("days_since_last_active").notNull().default(0),
+  totalSessions: integer("total_sessions").notNull().default(0),
+  avgSessionDuration: integer("avg_session_duration").notNull().default(0), // seconds
+  retentionD7: boolean("retention_d7").notNull().default(false), // Came back after 7 days
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  telegramIdIdx: index("user_segments_telegram_id_idx").on(table.telegramId),
+  segmentIdx: index("user_segments_segment_idx").on(table.segment),
+}));
+
+export const segmentTargetedOffers = pgTable("segment_targeted_offers", {
+  id: serial("id").primaryKey(),
+  targetSegment: text("target_segment").notNull(), // 'whale', 'dolphin', 'minnow', 'new_user', 'at_risk', 'churned', 'returning'
+  offerType: text("offer_type").notNull(), // 'promo_code', 'flash_sale', 'bonus_cs', 'exclusive_equipment'
+  offerData: text("offer_data").notNull(), // JSON with offer details
+  validFrom: timestamp("valid_from").notNull().defaultNow(),
+  validUntil: timestamp("valid_until"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdBy: text("created_by").notNull().references(() => users.telegramId),
+}, (table) => ({
+  segmentIdx: index("segment_targeted_offers_segment_idx").on(table.targetSegment),
+  activeIdx: index("segment_targeted_offers_active_idx").on(table.isActive),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -715,3 +946,63 @@ export const insertFeatureFlagSchema = createInsertSchema(featureFlags).omit({ i
 
 export type FeatureFlag = typeof featureFlags.$inferSelect;
 export type InsertFeatureFlag = z.infer<typeof insertFeatureFlagSchema>;
+
+// Announcements schemas and types
+export const insertAnnouncementSchema = createInsertSchema(announcements).omit({ id: true, createdAt: true, sentAt: true });
+export const insertUserAnnouncementSchema = createInsertSchema(userAnnouncements).omit({ id: true, readAt: true });
+
+export type Announcement = typeof announcements.$inferSelect;
+export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
+export type UserAnnouncement = typeof userAnnouncements.$inferSelect;
+export type InsertUserAnnouncement = z.infer<typeof insertUserAnnouncementSchema>;
+
+// Promo Codes schemas and types
+export const insertPromoCodeSchema = createInsertSchema(promoCodes).omit({ id: true, createdAt: true, currentUses: true });
+export const insertPromoCodeRedemptionSchema = createInsertSchema(promoCodeRedemptions).omit({ id: true, redeemedAt: true });
+
+export type PromoCode = typeof promoCodes.$inferSelect;
+export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
+export type PromoCodeRedemption = typeof promoCodeRedemptions.$inferSelect;
+export type InsertPromoCodeRedemption = z.infer<typeof insertPromoCodeRedemptionSchema>;
+
+// Analytics schemas and types
+export const insertDailyAnalyticsSchema = createInsertSchema(dailyAnalytics).omit({ id: true, createdAt: true });
+export const insertUserSessionSchema = createInsertSchema(userSessions).omit({ id: true, startedAt: true });
+export const insertRetentionCohortSchema = createInsertSchema(retentionCohorts).omit({ id: true });
+
+export type DailyAnalytics = typeof dailyAnalytics.$inferSelect;
+export type InsertDailyAnalytics = z.infer<typeof insertDailyAnalyticsSchema>;
+export type UserSession = typeof userSessions.$inferSelect;
+export type InsertUserSession = z.infer<typeof insertUserSessionSchema>;
+export type RetentionCohort = typeof retentionCohorts.$inferSelect;
+export type InsertRetentionCohort = z.infer<typeof insertRetentionCohortSchema>;
+
+// Event Scheduler schemas and types
+export const insertScheduledEventSchema = createInsertSchema(scheduledEvents).omit({ id: true, createdAt: true });
+export const insertEventParticipationSchema = createInsertSchema(eventParticipation).omit({ id: true, participatedAt: true });
+
+export type ScheduledEvent = typeof scheduledEvents.$inferSelect;
+export type InsertScheduledEvent = z.infer<typeof insertScheduledEventSchema>;
+export type EventParticipation = typeof eventParticipation.$inferSelect;
+export type InsertEventParticipation = z.infer<typeof insertEventParticipationSchema>;
+
+// Economy Dashboard schemas and types
+export const insertEconomyMetricsSchema = createInsertSchema(economyMetrics).omit({ id: true, createdAt: true });
+export const insertEconomySinksSchema = createInsertSchema(economySinks).omit({ id: true });
+export const insertEconomyAlertsSchema = createInsertSchema(economyAlerts).omit({ id: true, createdAt: true });
+
+export type EconomyMetrics = typeof economyMetrics.$inferSelect;
+export type InsertEconomyMetrics = z.infer<typeof insertEconomyMetricsSchema>;
+export type EconomySinks = typeof economySinks.$inferSelect;
+export type InsertEconomySinks = z.infer<typeof insertEconomySinksSchema>;
+export type EconomyAlerts = typeof economyAlerts.$inferSelect;
+export type InsertEconomyAlerts = z.infer<typeof insertEconomyAlertsSchema>;
+
+// User Segmentation schemas and types
+export const insertUserSegmentSchema = createInsertSchema(userSegments).omit({ id: true, updatedAt: true });
+export const insertSegmentTargetedOfferSchema = createInsertSchema(segmentTargetedOffers).omit({ id: true, createdAt: true });
+
+export type UserSegment = typeof userSegments.$inferSelect;
+export type InsertUserSegment = z.infer<typeof insertUserSegmentSchema>;
+export type SegmentTargetedOffer = typeof segmentTargetedOffers.$inferSelect;
+export type InsertSegmentTargetedOffer = z.infer<typeof insertSegmentTargetedOfferSchema>;

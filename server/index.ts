@@ -9,6 +9,7 @@ import { seedFeatureFlags } from "./seedFeatureFlags";
 import { initializeBot } from "./bot";
 import { applyPerformanceIndexes } from "./applyIndexes";
 import { initializeDatabase, checkDatabaseHealth } from "./db";
+import { startCronJobs } from "./cron";
 import rateLimit from "express-rate-limit";
 
 const app = express();
@@ -188,6 +189,14 @@ app.get('/api/health/mining', async (_req: Request, res: Response) => {
       console.error("⚠️  Bot initialization failed (non-fatal):", err.message || err);
       console.log("✅ Server will continue running. Bot commands will not be available.");
     });
+    
+    // Start cron jobs for scheduled tasks (announcements, analytics, etc.)
+    try {
+      startCronJobs();
+    } catch (err: any) {
+      console.error("⚠️  Cron jobs failed to start (non-fatal):", err.message || err);
+      console.log("✅ Server will continue running. Scheduled tasks will not be available.");
+    }
     
     console.log("🚀 NEW DEPLOYMENT - " + new Date().toISOString());
   });
