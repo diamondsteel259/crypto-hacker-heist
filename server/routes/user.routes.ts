@@ -20,17 +20,17 @@ export function registerUserRoutes(app: Express): void {
       if (!user) return res.status(404).json({ error: "User not found" });
 
       // Get hashrate rank
-      const hashrateRank = await db.select({ count: sql`COUNT(*)` })
+      const hashrateRank = await db.select({ count: sql<number>`COUNT(*)` })
         .from(users)
         .where(sql`${users.totalHashrate} > ${user.totalHashrate}`);
 
       // Get balance rank
-      const balanceRank = await db.select({ count: sql`COUNT(*)` })
+      const balanceRank = await db.select({ count: sql<number>`COUNT(*)` })
         .from(users)
         .where(sql`${users.csBalance} > ${user.csBalance}`);
 
       // Get total users
-      const totalUsers = await db.select({ count: sql`COUNT(*)` })
+      const totalUsers = await db.select({ count: sql<number>`COUNT(*)` })
         .from(users);
 
       res.json({
