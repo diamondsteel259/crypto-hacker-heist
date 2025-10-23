@@ -304,53 +304,53 @@ export default function Admin() {
             <Shield className="w-6 h-6 text-destructive" />
           </div>
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold">Admin Panel</h1>
+            <h1 className="text-xl md:text-2xl lg:text-3xl font-bold">Admin Panel</h1>
             <p className="text-xs text-muted-foreground uppercase tracking-wider">
               Game Management Console
             </p>
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-4">
-          <Card className="p-4">
+        {/* Stats - Mobile Responsive */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+          <Card className="p-3 md:p-4">
             <div className="flex items-center gap-2 mb-2">
               <Users className="w-4 h-4 text-cyber-blue" />
               <p className="text-xs text-muted-foreground uppercase">Total Users</p>
             </div>
-            <p className="text-2xl font-bold font-mono" data-testid="text-total-users">
+            <p className="text-xl md:text-2xl font-bold font-mono" data-testid="text-total-users">
               {usersLoading ? '...' : totalUsers}
             </p>
           </Card>
 
-          <Card className="p-4">
+          <Card className="p-3 md:p-4">
             <div className="flex items-center gap-2 mb-2">
               <DollarSign className="w-4 h-4 text-matrix-green" />
               <p className="text-xs text-muted-foreground uppercase">Total CS</p>
             </div>
-            <p className="text-2xl font-bold font-mono text-matrix-green" data-testid="text-total-cs">
+            <p className="text-xl md:text-2xl font-bold font-mono text-matrix-green" data-testid="text-total-cs">
               {usersLoading ? '...' : totalBalance.toLocaleString()}
             </p>
           </Card>
 
-          <Card className="p-4">
+          <Card className="p-3 md:p-4">
             <div className="flex items-center gap-2 mb-2">
               <SettingsIcon className="w-4 h-4 text-neon-orange" />
               <p className="text-xs text-muted-foreground uppercase">Total HR</p>
             </div>
-            <p className="text-2xl font-bold font-mono" data-testid="text-total-hashrate">
+            <p className="text-xl md:text-2xl font-bold font-mono" data-testid="text-total-hashrate">
               {usersLoading ? '...' : totalHashrate.toLocaleString()}
             </p>
           </Card>
         </div>
 
         {/* Mining Control */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <SettingsIcon className="w-5 h-5" />
+        <Card className="p-4 md:p-6">
+          <h3 className="text-base md:text-lg font-semibold mb-3 md:mb-4 flex items-center gap-2">
+            <SettingsIcon className="w-4 md:w-5 h-4 md:h-5" />
             Mining Control
           </h3>
-          <div className="flex items-center justify-between p-4 bg-muted/30 rounded-md">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 md:p-4 bg-muted/30 rounded-md">
             <div className="flex items-center gap-3">
               {miningPaused ? (
                 <Pause className="w-5 h-5 text-destructive" />
@@ -375,26 +375,26 @@ export default function Admin() {
         </Card>
 
         {/* Feature Flags Management */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <ToggleLeft className="w-5 h-5 text-purple-500" />
+        <Card className="p-4 md:p-6">
+          <h3 className="text-base md:text-lg font-semibold mb-3 md:mb-4 flex items-center gap-2">
+            <ToggleLeft className="w-4 md:w-5 h-4 md:h-5 text-purple-500" />
             Feature Flags - Enable/Disable Pages
           </h3>
-          <p className="text-sm text-muted-foreground mb-4">
+          <p className="text-xs md:text-sm text-muted-foreground mb-4">
             Control which features and pages are visible to users in navigation
           </p>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
+          <div className="space-y-2 max-h-[60vh] md:max-h-96 overflow-y-auto">
             {flagsLoading ? (
-              <p className="text-sm text-muted-foreground">Loading feature flags...</p>
+              <p className="text-xs md:text-sm text-muted-foreground">Loading feature flags...</p>
             ) : featureFlags && featureFlags.length > 0 ? (
               featureFlags.map((flag) => (
                 <div
                   key={flag.id}
-                  className="flex items-center justify-between p-4 bg-muted/30 rounded-md"
+                  className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 md:p-4 bg-muted/30 rounded-md"
                 >
-                  <div className="flex-1">
+                  <div className="flex-1 w-full sm:w-auto">
                     <div className="flex items-center gap-2 mb-1">
-                      <p className="font-semibold">{flag.featureName}</p>
+                      <p className="font-semibold text-sm md:text-base">{flag.featureName}</p>
                       {flag.isEnabled ? (
                         <Badge className="text-xs bg-matrix-green text-black">Enabled</Badge>
                       ) : (
@@ -402,9 +402,9 @@ export default function Admin() {
                       )}
                     </div>
                     {flag.description && (
-                      <p className="text-xs text-muted-foreground">{flag.description}</p>
+                      <p className="text-xs text-muted-foreground mb-1">{flag.description}</p>
                     )}
-                    <p className="text-xs text-muted-foreground/70 mt-1">
+                    <p className="text-xs text-muted-foreground/70">
                       Key: {flag.featureKey}
                     </p>
                   </div>
@@ -417,13 +417,14 @@ export default function Admin() {
                       })
                     }
                     disabled={toggleFeatureFlagMutation.isPending}
+                    className="flex-shrink-0"
                   />
                 </div>
               ))
             ) : (
               <div className="p-8 text-center">
                 <ToggleLeft className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
-                <p className="text-muted-foreground">No feature flags configured</p>
+                <p className="text-muted-foreground text-sm">No feature flags configured</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   Feature flags will be seeded automatically on first deploy
                 </p>
@@ -433,17 +434,17 @@ export default function Admin() {
         </Card>
 
         {/* Equipment Price Management */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <DollarSign className="w-5 h-5" />
+        <Card className="p-4 md:p-6">
+          <h3 className="text-base md:text-lg font-semibold mb-3 md:mb-4 flex items-center gap-2">
+            <DollarSign className="w-4 md:w-5 h-4 md:h-5" />
             Equipment Price Management
           </h3>
-          <p className="text-sm text-muted-foreground mb-4">
+          <p className="text-xs md:text-sm text-muted-foreground mb-4">
             Modify equipment prices and currency types (CS, CHST, or TON)
           </p>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
+          <div className="space-y-2 max-h-[60vh] md:max-h-96 overflow-y-auto">
             {equipmentLoading ? (
-              <p className="text-sm text-muted-foreground">Loading equipment...</p>
+              <p className="text-xs md:text-sm text-muted-foreground">Loading equipment...</p>
             ) : (
               equipment?.map((item) => (
                 <div
@@ -451,33 +452,35 @@ export default function Admin() {
                   className="flex items-center justify-between p-4 bg-muted/30 rounded-md"
                 >
                   {editingEquipment === item.id ? (
-                    <div className="flex-1 flex items-center gap-3">
-                      <div className="flex-1">
-                        <p className="font-semibold text-sm mb-2">{item.name}</p>
-                        <div className="flex gap-2">
-                          <div className="flex-1">
-                            <Label htmlFor={`price-${item.id}`} className="text-xs">Price</Label>
-                            <Input
-                              id={`price-${item.id}`}
-                              type="number"
-                              value={editPrice}
-                              onChange={(e) => setEditPrice(e.target.value)}
-                              placeholder={item.basePrice.toString()}
-                              className="mt-1"
-                            />
-                          </div>
-                          <div className="w-32">
-                            <Label htmlFor={`currency-${item.id}`} className="text-xs">Currency</Label>
-                            <select
-                              id={`currency-${item.id}`}
-                              value={editCurrency}
-                              onChange={(e) => setEditCurrency(e.target.value)}
-                              className="mt-1 w-full h-10 px-3 rounded-md border border-input bg-background"
-                            >
-                              <option value="CS">CS</option>
-                              <option value="CHST">CHST</option>
-                              <option value="TON">TON</option>
-                            </select>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <p className="font-semibold text-sm mb-2">{item.name}</p>
+                          <div className="flex gap-2">
+                            <div className="flex-1">
+                              <Label htmlFor={`price-${item.id}`} className="text-xs">Price</Label>
+                              <Input
+                                id={`price-${item.id}`}
+                                type="number"
+                                value={editPrice}
+                                onChange={(e) => setEditPrice(e.target.value)}
+                                placeholder={item.basePrice.toString()}
+                                className="mt-1"
+                              />
+                            </div>
+                            <div className="w-32">
+                              <Label htmlFor={`currency-${item.id}`} className="text-xs">Currency</Label>
+                              <select
+                                id={`currency-${item.id}`}
+                                value={editCurrency}
+                                onChange={(e) => setEditCurrency(e.target.value)}
+                                className="mt-1 w-full h-10 px-3 rounded-md border border-input bg-background"
+                              >
+                                <option value="CS">CS</option>
+                                <option value="CHST">CHST</option>
+                                <option value="TON">TON</option>
+                              </select>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -552,30 +555,30 @@ export default function Admin() {
         </Card>
 
         {/* User Management */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Users className="w-5 h-5" />
+        <Card className="p-4 md:p-6">
+          <h3 className="text-base md:text-lg font-semibold mb-3 md:mb-4 flex items-center gap-2">
+            <Users className="w-4 md:w-5 h-4 md:h-5" />
             User Management
           </h3>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
+          <div className="space-y-2 max-h-[60vh] md:max-h-96 overflow-y-auto">
             {usersLoading ? (
-              <p className="text-sm text-muted-foreground">Loading users...</p>
+              <p className="text-xs md:text-sm text-muted-foreground">Loading users...</p>
             ) : (
               users?.map((user) => (
                 <div
                   key={user.id}
-                  className="flex items-center justify-between p-4 bg-muted/30 rounded-md"
+                  className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 md:p-4 bg-muted/30 rounded-md"
                   data-testid={`user-row-${user.id}`}
                 >
                   <div className="flex items-center gap-3">
                     <div>
-                      <p className="font-semibold">{user.username}</p>
+                      <p className="font-semibold text-sm md:text-base">{user.username}</p>
                       <p className="text-xs text-muted-foreground">
                         CS: {user.csBalance.toLocaleString()} | HR: {user.totalHashrate.toFixed(0)}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     {user.isAdmin && (
                       <Badge variant="destructive" className="text-xs">Admin</Badge>
                     )}
