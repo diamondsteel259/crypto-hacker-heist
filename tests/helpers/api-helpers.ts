@@ -35,17 +35,22 @@ export async function createTestUser(overrides?: Partial<TestUserData>): Promise
 
 /**
  * Authenticate test user (simulate Telegram auth)
- * Returns auth token or user ID for API requests
+ * Returns user and request builder with auth headers
  */
 export async function authenticateTestUser(
   app: Application,
   userData?: Partial<TestUserData>
-): Promise<{ user: User; request: supertest.SuperTest<supertest.Test> }> {
+): Promise<{ user: User; request: any }> {
   const user = await createTestUser(userData);
   
-  // Create supertest instance with test auth header
-  const request = supertest(app)
-    .set('x-test-user-id', user.telegramId.toString());
+  // Return request builder that adds auth header to each request
+  const request = {
+    get: (path: string) => supertest(app).get(path).set('x-test-user-id', user.telegramId),
+    post: (path: string) => supertest(app).post(path).set('x-test-user-id', user.telegramId),
+    put: (path: string) => supertest(app).put(path).set('x-test-user-id', user.telegramId),
+    delete: (path: string) => supertest(app).delete(path).set('x-test-user-id', user.telegramId),
+    patch: (path: string) => supertest(app).patch(path).set('x-test-user-id', user.telegramId),
+  };
 
   return { user, request };
 }
