@@ -10,6 +10,53 @@ import { miningService } from "./mining";
 import { getBotWebhookHandler } from "./bot";
 import { registerModularRoutes } from "./routes/index";
 
+/**
+ * ROUTES.TS - Legacy Monolithic Routes File
+ * 
+ * STATUS: In migration to modular routing system
+ * 
+ * MIGRATED ROUTES (now in server/routes/):
+ * ✅ Health checks → health.routes.ts
+ * ✅ Authentication → auth.routes.ts
+ * ✅ User profile routes → user.routes.ts (GET /api/user/:userId, GET /api/user/:userId/rank, POST /api/user/:userId/tutorial/complete, POST /api/user/:userId/reset)
+ * ✅ Admin routes → admin.routes.ts (18 routes: settings, users, mining controls, bulk ops, jackpots, equipment, flash sales, seasons)
+ * ✅ Social features → social.routes.ts
+ * ✅ Mining routes → mining.routes.ts
+ * ✅ Equipment routes → equipment.routes.ts
+ * ✅ Announcements → announcements.routes.ts
+ * ✅ Promo codes → promoCodes.routes.ts
+ * ✅ Analytics → analytics.routes.ts
+ * ✅ Events → events.routes.ts
+ * ✅ Economy → economy.routes.ts
+ * ✅ Segmentation → segmentation.routes.ts
+ * 
+ * REMAINING ROUTES (still in this file):
+ * - Telegram bot authentication (POST /api/auth/telegram)
+ * - User statistics (GET /api/user/:userId/statistics)
+ * - Leaderboard routes (hashrate, balance, referrals)
+ * - Equipment catalog and purchase routes
+ * - Component upgrade routes
+ * - Block and mining calendar routes
+ * - Referral routes
+ * - Network stats
+ * - Cosmetics routes (catalog, purchase, equip)
+ * - Packs routes (starter, pro, whale)
+ * - Prestige system routes
+ * - Subscription routes
+ * - Daily login rewards
+ * 
+ * MIGRATION PLAN:
+ * All modular routes are registered via registerModularRoutes() in routes/index.ts.
+ * As routes are migrated from this file:
+ * 1. Move to appropriate routes/*.routes.ts file
+ * 2. Delete from this file (with comment noting where moved)
+ * 3. Register in routes/index.ts
+ * 4. Update this header documentation
+ * 
+ * GOAL: Eventually this file should only contain registerRoutes() which calls
+ * registerModularRoutes(), with no route definitions of its own.
+ */
+
 // Helper function to calculate daily login rewards based on streak day
 function calculateDailyLoginReward(streakDay: number): { cs: number; chst: number; item: string | null } {
   // Rewards escalate each day, with special bonuses on day 7, 14, 21, etc.
