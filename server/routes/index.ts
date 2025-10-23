@@ -9,6 +9,7 @@ import { registerAnnouncementRoutes } from "./announcements.routes";
 import { registerPromoCodeRoutes } from "./promoCodes.routes";
 import { registerAnalyticsRoutes } from "./analytics.routes";
 import { registerEventsRoutes } from "./events.routes";
+import { registerEconomyRoutes } from "./economy.routes";
 
 /**
  * Register all modularized routes
@@ -45,6 +46,9 @@ export function registerModularRoutes(app: Express): void {
 
   // Events (NEW - automated limited-time events)
   registerEventsRoutes(app);
+
+  // Economy (NEW - CS inflation monitoring, wealth distribution, alerts)
+  registerEconomyRoutes(app);
 
   // TODO: Migrate remaining routes from routes.ts
   // - shop.routes.ts (flash sales, powerups, lootboxes, packs, price alerts)
