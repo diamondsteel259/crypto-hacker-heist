@@ -13,6 +13,7 @@ import ActiveSeason from "@/components/ActiveSeason";
 import PrestigeSystem from "@/components/PrestigeSystem";
 import MetricCard from "@/components/MetricCard";
 import CollapsibleSection from "@/components/CollapsibleSection";
+import { DailyLoginModal } from "@/components/DailyLoginModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Terminal, Gem, Package, TrendingUp, Zap, Shield, Sparkles, Flame, Clock, Gift, Cpu, Coins, ChevronDown, ChevronUp, BarChart3, Activity } from "lucide-react";
 import { initializeUser, getCurrentUserId } from "@/lib/user";
