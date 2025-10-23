@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, varchar, text, integer, real, timestamp, boolean, unique, decimal, index, serial } from "drizzle-orm/pg-core";
+import { pgTable, varchar, text, integer, real, timestamp, boolean, unique, decimal, index, serial, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -171,7 +171,7 @@ export const activePowerUps = pgTable("active_power_ups", {
   userId: text("user_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
   powerUpType: text("power_up_type").notNull(),
   boostPercentage: integer("boost_percentage").notNull(),
-  activatedAt: timestamp("activated_at").notNull().defaultNow(),
+  activatedAt: timestamp("activated_at").notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   isActive: boolean("is_active").notNull().default(true),
 }, (table) => ({
@@ -545,6 +545,53 @@ export const promoCodeRedemptions = pgTable("promo_code_redemptions", {
   userPromoUnique: unique().on(table.promoCodeId, table.telegramId),
   userIdx: index("promo_code_redemptions_user_idx").on(table.telegramId),
   promoIdx: index("promo_code_redemptions_promo_idx").on(table.promoCodeId),
+}));
+
+// Analytics System
+export const dailyAnalytics = pgTable("daily_analytics", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull().unique(),
+  dau: integer("dau").notNull().default(0), // Daily Active Users
+  newUsers: integer("new_users").notNull().default(0), // New signups
+  returningUsers: integer("returning_users").notNull().default(0), // Users who came back
+  totalUsers: integer("total_users").notNull().default(0), // Cumulative
+  totalCsGenerated: decimal("total_cs_generated", { precision: 20, scale: 2 }).notNull().default('0'),
+  totalCsSpent: decimal("total_cs_spent", { precision: 20, scale: 2 }).notNull().default('0'),
+  totalTonSpent: decimal("total_ton_spent", { precision: 10, scale: 6 }).notNull().default('0'),
+  totalBlocks: integer("total_blocks").notNull().default(0),
+  avgSessionDuration: integer("avg_session_duration").notNull().default(0), // seconds
+  avgCsPerUser: decimal("avg_cs_per_user", { precision: 15, scale: 2 }).notNull().default('0'),
+  totalPowerUpPurchases: integer("total_power_up_purchases").notNull().default(0),
+  totalLootBoxPurchases: integer("total_loot_box_purchases").notNull().default(0),
+  totalPackPurchases: integer("total_pack_purchases").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  dateIdx: index("daily_analytics_date_idx").on(table.date),
+}));
+
+export const userSessions = pgTable("user_sessions", {
+  id: serial("id").primaryKey(),
+  telegramId: text("telegram_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  endedAt: timestamp("ended_at"),
+  durationSeconds: integer("duration_seconds"),
+  actionsPerformed: integer("actions_performed").notNull().default(0),
+}, (table) => ({
+  userSessionIdx: index("user_sessions_user_idx").on(table.telegramId, table.startedAt),
+  startedAtIdx: index("user_sessions_started_at_idx").on(table.startedAt),
+}));
+
+export const retentionCohorts = pgTable("retention_cohorts", {
+  id: serial("id").primaryKey(),
+  cohortDate: date("cohort_date").notNull().unique(), // Signup date
+  day0: integer("day0").notNull().default(0), // Users who signed up
+  day1: integer("day1").notNull().default(0), // Came back day 1
+  day3: integer("day3").notNull().default(0), // Came back day 3
+  day7: integer("day7").notNull().default(0), // Came back day 7
+  day14: integer("day14").notNull().default(0),
+  day30: integer("day30").notNull().default(0),
+}, (table) => ({
+  cohortDateIdx: index("retention_cohorts_date_idx").on(table.cohortDate),
 }));
 
 // Insert schemas
