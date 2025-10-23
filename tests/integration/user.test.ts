@@ -176,7 +176,7 @@ describe('User Endpoints', () => {
 
       const checkInResponse = await api.post(`/api/user/${user.id}/streak/checkin`).send({});
 
-      expect(checkInResponse.status).toBeOneOf([200, 201]);
+      expect([200, 201]).toContain(checkInResponse.status);
 
       const streakResponse = await api.get(`/api/user/${user.id}/streak`);
       expect(streakResponse.body.currentStreak).toBeGreaterThanOrEqual(1);
