@@ -479,6 +479,38 @@ export const userStatistics = pgTable("user_statistics", {
   userStatsIdx: index("user_statistics_user_idx").on(table.userId),
 }));
 
+// Announcements System
+export const announcements = pgTable("announcements", {
+  id: serial("id").primaryKey(),
+  title: varchar("title", { length: 200 }).notNull(),
+  message: text("message").notNull(),
+  type: text("type").notNull(), // 'info', 'warning', 'success', 'event', 'maintenance'
+  priority: text("priority").notNull().default('normal'), // 'low', 'normal', 'high', 'critical'
+  targetAudience: text("target_audience").notNull().default('all'), // 'all', 'active', 'whales', 'new_users', 'at_risk'
+  scheduledFor: timestamp("scheduled_for"), // null = send immediately
+  expiresAt: timestamp("expires_at"), // null = doesn't expire
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdBy: text("created_by").notNull().references(() => users.telegramId),
+  sentAt: timestamp("sent_at"),
+  isActive: boolean("is_active").notNull().default(true),
+  totalRecipients: integer("total_recipients").notNull().default(0),
+  readCount: integer("read_count").notNull().default(0),
+}, (table) => ({
+  activeIdx: index("announcements_active_idx").on(table.isActive, table.scheduledFor),
+  createdByIdx: index("announcements_created_by_idx").on(table.createdBy),
+}));
+
+export const userAnnouncements = pgTable("user_announcements", {
+  id: serial("id").primaryKey(),
+  announcementId: integer("announcement_id").notNull().references(() => announcements.id, { onDelete: 'cascade' }),
+  telegramId: text("telegram_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  readAt: timestamp("read_at").notNull().defaultNow(),
+}, (table) => ({
+  userAnnouncementUnique: unique().on(table.announcementId, table.telegramId),
+  userAnnouncementIdx: index("user_announcements_user_idx").on(table.telegramId),
+  announcementIdx: index("user_announcements_announcement_idx").on(table.announcementId),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
