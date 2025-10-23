@@ -747,3 +747,12 @@ export const insertFeatureFlagSchema = createInsertSchema(featureFlags).omit({ i
 
 export type FeatureFlag = typeof featureFlags.$inferSelect;
 export type InsertFeatureFlag = z.infer<typeof insertFeatureFlagSchema>;
+
+// Announcements schemas and types
+export const insertAnnouncementSchema = createInsertSchema(announcements).omit({ id: true, createdAt: true, sentAt: true });
+export const insertUserAnnouncementSchema = createInsertSchema(userAnnouncements).omit({ id: true, readAt: true });
+
+export type Announcement = typeof announcements.$inferSelect;
+export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
+export type UserAnnouncement = typeof userAnnouncements.$inferSelect;
+export type InsertUserAnnouncement = z.infer<typeof insertUserAnnouncementSchema>;
