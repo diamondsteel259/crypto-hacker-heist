@@ -908,7 +908,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const purchases = await db.select().from(packPurchases)
-        .where(eq(packPurchases.userId, user.telegramId))
+        .where(eq(packPurchases.userId, user.telegramId!))
         .orderBy(packPurchases.purchasedAt);
 
       res.json(purchases);
@@ -943,7 +943,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Check if pack already purchased
         const existing = await tx.select().from(packPurchases)
           .where(and(
-            eq(packPurchases.userId, user[0].telegramId),
+            eq(packPurchases.userId, user[0].telegramId!),
             eq(packPurchases.packType, packType)
           ))
           .limit(1);
