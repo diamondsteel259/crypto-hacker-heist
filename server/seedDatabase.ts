@@ -36,7 +36,7 @@ export async function seedDatabase() {
       { id: 'server-custom-rack-1u', name: 'Custom 1U Rack Server', tier: 'Server', category: 'Server Farm', baseHashrate: 15000, basePrice: 2.0, currency: 'TON', maxOwned: 25, orderIndex: 19 },
       { id: 'server-custom-rack-2u', name: 'Custom 2U Rack Server', tier: 'Server', category: 'Server Farm', baseHashrate: 20000, basePrice: 3.0, currency: 'TON', maxOwned: 25, orderIndex: 20 },
       
-      // ASIC RIGS - TON-only - 10 Models - Cap: 50/model/user
+      // ASIC RIGS - TON-only - Cap: 50/model/user
       { id: 'asic-bitmain-s21-pro', name: 'Bitmain Antminer S21 Pro', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 50000, basePrice: 5.0, currency: 'TON', maxOwned: 50, orderIndex: 21 },
       { id: 'asic-whatsminer-m60s', name: 'WhatsMiner M60S', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 75000, basePrice: 7.5, currency: 'TON', maxOwned: 50, orderIndex: 22 },
       { id: 'asic-bitmain-s21-xp', name: 'Bitmain Antminer S21 XP', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 100000, basePrice: 10.0, currency: 'TON', maxOwned: 50, orderIndex: 23 },
@@ -47,6 +47,39 @@ export async function seedDatabase() {
       { id: 'asic-canaan-avalon-q', name: 'Canaan Avalon Q', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 250000, basePrice: 25.0, currency: 'TON', maxOwned: 50, orderIndex: 28 },
       { id: 'asic-bitmain-s21e-xp-hydro', name: 'Bitmain Antminer S21e XP Hydro', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 300000, basePrice: 30.0, currency: 'TON', maxOwned: 50, orderIndex: 29 },
       { id: 'asic-whatsminer-m63s-hydro', name: 'WhatsMiner M63S Hydro', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 500000, basePrice: 50.0, currency: 'TON', maxOwned: 50, orderIndex: 30 },
+      
+      // NEW: MORE ASIC RIGS - Premium Models - TON-only - Cap: 50/model/user
+      { id: 'asic-bitmain-s25-pro', name: 'Bitmain Antminer S25 Pro', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 600000, basePrice: 60.0, currency: 'TON', maxOwned: 50, orderIndex: 31 },
+      { id: 'asic-whatsminer-m70s', name: 'WhatsMiner M70S', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 700000, basePrice: 70.0, currency: 'TON', maxOwned: 50, orderIndex: 32 },
+      { id: 'asic-microbt-m63', name: 'MicroBT WhatsMiner M63', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 750000, basePrice: 75.0, currency: 'TON', maxOwned: 50, orderIndex: 33 },
+      { id: 'asic-canaan-avalon-ultra', name: 'Canaan Avalon Ultra', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 800000, basePrice: 80.0, currency: 'TON', maxOwned: 50, orderIndex: 34 },
+      { id: 'asic-bitmain-s26-hydro', name: 'Bitmain Antminer S26 Hydro', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 900000, basePrice: 90.0, currency: 'TON', maxOwned: 50, orderIndex: 35 },
+      { id: 'asic-whatsminer-m80s-elite', name: 'WhatsMiner M80S Elite', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 1000000, basePrice: 100.0, currency: 'TON', maxOwned: 50, orderIndex: 36 },
+      { id: 'asic-microbt-m70-turbo', name: 'MicroBT M70 Turbo', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 1100000, basePrice: 110.0, currency: 'TON', maxOwned: 50, orderIndex: 37 },
+      { id: 'asic-bitmain-s27-pro-hydro', name: 'Bitmain Antminer S27 Pro Hydro', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 1250000, basePrice: 125.0, currency: 'TON', maxOwned: 50, orderIndex: 38 },
+      { id: 'asic-whatsminer-m90s-max', name: 'WhatsMiner M90S Max', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 1500000, basePrice: 150.0, currency: 'TON', maxOwned: 50, orderIndex: 39 },
+      { id: 'asic-axionminer-2000-ultra', name: 'AxionMiner 2000 Ultra', tier: 'ASIC', category: 'ASIC Rig', baseHashrate: 2000000, basePrice: 200.0, currency: 'TON', maxOwned: 50, orderIndex: 40 },
+      
+      // NEW: FPGA MINERS - Mid-tier between GPU and ASIC - TON-only - Cap: 30/model/user
+      { id: 'fpga-xilinx-vcu1525', name: 'Xilinx VCU1525 FPGA', tier: 'FPGA', category: 'FPGA Miner', baseHashrate: 25000, basePrice: 2.5, currency: 'TON', maxOwned: 30, orderIndex: 41 },
+      { id: 'fpga-bittware-cvp13', name: 'BittWare CVP-13 FPGA', tier: 'FPGA', category: 'FPGA Miner', baseHashrate: 35000, basePrice: 3.5, currency: 'TON', maxOwned: 30, orderIndex: 42 },
+      { id: 'fpga-intel-stratix-10', name: 'Intel Stratix 10 FPGA', tier: 'FPGA', category: 'FPGA Miner', baseHashrate: 45000, basePrice: 4.5, currency: 'TON', maxOwned: 30, orderIndex: 43 },
+      { id: 'fpga-xilinx-u250', name: 'Xilinx Alveo U250', tier: 'FPGA', category: 'FPGA Miner', baseHashrate: 60000, basePrice: 6.0, currency: 'TON', maxOwned: 30, orderIndex: 44 },
+      { id: 'fpga-bittware-xupvv4', name: 'BittWare XUPVV4 FPGA Cluster', tier: 'FPGA', category: 'FPGA Miner', baseHashrate: 80000, basePrice: 8.0, currency: 'TON', maxOwned: 30, orderIndex: 45 },
+      
+      // NEW: CLOUD MINING CONTRACTS - Subscription-based - TON-only - Cap: 100/model/user
+      { id: 'cloud-starter-1month', name: 'Cloud Mining Starter (30 days)', tier: 'Cloud', category: 'Cloud Mining', baseHashrate: 100000, basePrice: 3.0, currency: 'TON', maxOwned: 100, orderIndex: 46 },
+      { id: 'cloud-pro-1month', name: 'Cloud Mining Pro (30 days)', tier: 'Cloud', category: 'Cloud Mining', baseHashrate: 250000, basePrice: 7.0, currency: 'TON', maxOwned: 100, orderIndex: 47 },
+      { id: 'cloud-elite-1month', name: 'Cloud Mining Elite (30 days)', tier: 'Cloud', category: 'Cloud Mining', baseHashrate: 500000, basePrice: 15.0, currency: 'TON', maxOwned: 100, orderIndex: 48 },
+      { id: 'cloud-enterprise-1month', name: 'Cloud Mining Enterprise (30 days)', tier: 'Cloud', category: 'Cloud Mining', baseHashrate: 1000000, basePrice: 30.0, currency: 'TON', maxOwned: 100, orderIndex: 49 },
+      { id: 'cloud-mega-1month', name: 'Cloud Mining Mega (30 days)', tier: 'Cloud', category: 'Cloud Mining', baseHashrate: 2500000, basePrice: 75.0, currency: 'TON', maxOwned: 100, orderIndex: 50 },
+      
+      // NEW: QUANTUM MINERS - Elite/Legendary tier - TON-only - Cap: 10/model/user (limited!)
+      { id: 'quantum-ibm-q1', name: 'IBM Quantum System Q1', tier: 'Quantum', category: 'Quantum Miner', baseHashrate: 5000000, basePrice: 250.0, currency: 'TON', maxOwned: 10, orderIndex: 51 },
+      { id: 'quantum-google-sycamore', name: 'Google Sycamore Quantum', tier: 'Quantum', category: 'Quantum Miner', baseHashrate: 7500000, basePrice: 375.0, currency: 'TON', maxOwned: 10, orderIndex: 52 },
+      { id: 'quantum-rigetti-aspen', name: 'Rigetti Aspen Quantum', tier: 'Quantum', category: 'Quantum Miner', baseHashrate: 10000000, basePrice: 500.0, currency: 'TON', maxOwned: 10, orderIndex: 53 },
+      { id: 'quantum-ionq-forte', name: 'IonQ Forte Quantum', tier: 'Quantum', category: 'Quantum Miner', baseHashrate: 15000000, basePrice: 750.0, currency: 'TON', maxOwned: 10, orderIndex: 54 },
+      { id: 'quantum-atom-prime', name: 'Atom Computing Prime Quantum', tier: 'Quantum', category: 'Quantum Miner', baseHashrate: 25000000, basePrice: 1000.0, currency: 'TON', maxOwned: 10, orderIndex: 55 },
     ];
 
     // Check if equipment types already exist - ONLY seed if empty
