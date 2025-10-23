@@ -1,5 +1,6 @@
 import { processScheduledAnnouncements } from "./services/announcements";
 import { generateDailyReport, updateRetentionCohorts } from "./services/analytics";
+import { processScheduledEvents } from "./services/events";
 
 /**
  * Cron job scheduler for background tasks
@@ -10,6 +11,7 @@ let announcementInterval: NodeJS.Timeout | null = null;
 let dailyAnalyticsInterval: NodeJS.Timeout | null = null;
 let retentionCohortsInterval: NodeJS.Timeout | null = null;
 let hourlyDauInterval: NodeJS.Timeout | null = null;
+let eventSchedulerInterval: NodeJS.Timeout | null = null;
 
 /**
  * Start all cron jobs
@@ -23,6 +25,15 @@ export function startCronJobs(): void {
       await processScheduledAnnouncements();
     } catch (error) {
       console.error("Announcement cron error:", error);
+    }
+  }, 60 * 1000); // Every 1 minute
+
+  // Check for scheduled events every minute
+  eventSchedulerInterval = setInterval(async () => {
+    try {
+      await processScheduledEvents();
+    } catch (error) {
+      console.error("Event scheduler cron error:", error);
     }
   }, 60 * 1000); // Every 1 minute
 
@@ -75,6 +86,7 @@ export function startCronJobs(): void {
 
   console.log("✅ Cron jobs started:");
   console.log("  - Scheduled announcements: Every 1 minute");
+  console.log("  - Event scheduler: Every 1 minute");
   console.log("  - Daily analytics report: Daily at midnight UTC");
   console.log("  - Retention cohorts: Daily at 1am UTC");
   console.log("  - Hourly DAU update: Every hour");
@@ -82,7 +94,6 @@ export function startCronJobs(): void {
   // TODO: Add more cron jobs as features are implemented:
   // - Economy metrics calculation (daily at 2am UTC)
   // - User segmentation refresh (daily at 4am UTC)
-  // - Event scheduler checks (every minute)
 }
 
 /**
@@ -94,6 +105,11 @@ export function stopCronJobs(): void {
   if (announcementInterval) {
     clearInterval(announcementInterval);
     announcementInterval = null;
+  }
+
+  if (eventSchedulerInterval) {
+    clearInterval(eventSchedulerInterval);
+    eventSchedulerInterval = null;
   }
 
   if (dailyAnalyticsInterval) {
