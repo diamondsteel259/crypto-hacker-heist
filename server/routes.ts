@@ -141,13 +141,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get or create statistics record
       let stats = await db.select().from(userStatistics)
-        .where(eq(userStatistics.userId, user.telegramId))
+        .where(eq(userStatistics.userId, user.telegramId!))
         .limit(1);
 
       if (stats.length === 0) {
         // Create default statistics record
         await db.insert(userStatistics).values({
-          userId: user.telegramId,
+          userId: user.telegramId!,
           totalCsEarned: 0,
           totalChstEarned: 0,
           totalBlocksMined: 0,
@@ -160,7 +160,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         stats = await db.select().from(userStatistics)
-          .where(eq(userStatistics.userId, user.telegramId))
+          .where(eq(userStatistics.userId, user.telegramId!))
           .limit(1);
       }
 
