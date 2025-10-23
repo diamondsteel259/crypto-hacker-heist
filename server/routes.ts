@@ -2194,16 +2194,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
             throw new Error("This transaction has already been used");
           }
 
-          // Verify TON transaction
-          const isValid = await verifyTONTransaction(
+          // Verify TON transaction with polling (wait up to 3 minutes)
+          console.log(`⏳ Verifying loot box transaction ${tonTransactionHash.substring(0, 12)}...`);
+          const verification = await pollForTransaction(
             tonTransactionHash,
             tonAmount,
             gameWallet,
             userWalletAddress
           );
 
-          if (!isValid) {
-            throw new Error("TON transaction verification failed");
+          if (!verification.verified) {
+            throw new Error(verification.error || "Transaction verification failed");
+          }
+        } else {
+          // Free boxes - check if user has available boxes to open
+          if (boxType === 'daily-task') {
+            if (user[0].freeLootBoxes <= 0) {
+              throw new Error("No free daily task loot boxes available. Complete tasks to earn more.");
+            }
+            // Decrement free loot box count
+            await tx.update(users)
+              .set({ freeLootBoxes: user[0].freeLootBoxes - 1 })
+              .where(eq(users.id, userId));
+          } else if (boxType === 'invite-friend') {
+            if (user[0].inviteLootBoxes <= 0) {
+              throw new Error("No invite reward loot boxes available. Invite friends to earn more.");
+            }
+            // Decrement invite loot box count
+            await tx.update(users)
+              .set({ inviteLootBoxes: user[0].inviteLootBoxes - 1 })
+              .where(eq(users.id, userId));
           }
         }
 
