@@ -183,7 +183,7 @@ export function registerAnnouncementRoutes(app: Express): void {
     }
 
     try {
-      const activeAnnouncements = await getActiveAnnouncementsForUser(req.telegramUser.id.toString());
+      const activeAnnouncements = await getActiveAnnouncementsForUser(req.telegramUser!.id.toString());
       res.json(activeAnnouncements);
     } catch (error: any) {
       console.error("Get active announcements error:", error);
@@ -199,7 +199,7 @@ export function registerAnnouncementRoutes(app: Express): void {
 
     try {
       const announcementId = parseInt(req.params.id);
-      await markAnnouncementAsRead(announcementId, req.telegramUser.id.toString());
+      await markAnnouncementAsRead(announcementId, req.telegramUser!.id.toString());
       res.json({ success: true, message: "Announcement marked as read" });
     } catch (error: any) {
       console.error("Mark announcement as read error:", error);
