@@ -141,9 +141,9 @@ export default function AnalyticsAdmin() {
 
   const retentionChartData = retention?.slice(0, 10).map(r => ({
     date: new Date(r.cohortDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    d1: parseFloat(r.d1Percent.toFixed(1)),
-    d7: parseFloat(r.d7Percent.toFixed(1)),
-    d30: parseFloat(r.d30Percent.toFixed(1)),
+    d1: parseFloat((r.d1Percent ?? 0).toFixed(1)),
+    d7: parseFloat((r.d7Percent ?? 0).toFixed(1)),
+    d30: parseFloat((r.d30Percent ?? 0).toFixed(1)),
   })).reverse() || [];
 
   return (
