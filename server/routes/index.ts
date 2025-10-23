@@ -8,6 +8,7 @@ import { registerEquipmentRoutes } from "./equipment.routes";
 import { registerAnnouncementRoutes } from "./announcements.routes";
 import { registerPromoCodeRoutes } from "./promoCodes.routes";
 import { registerAnalyticsRoutes } from "./analytics.routes";
+import { registerEventsRoutes } from "./events.routes";
 
 /**
  * Register all modularized routes
@@ -41,6 +42,9 @@ export function registerModularRoutes(app: Express): void {
 
   // Analytics (NEW - DAU/MAU tracking, retention, revenue metrics)
   registerAnalyticsRoutes(app);
+
+  // Events (NEW - automated limited-time events)
+  registerEventsRoutes(app);
 
   // TODO: Migrate remaining routes from routes.ts
   // - shop.routes.ts (flash sales, powerups, lootboxes, packs, price alerts)
