@@ -1,5 +1,5 @@
-import { Switch, Route, Suspense } from "wouter";
-import { useState, useEffect, lazy } from "react";
+import { Switch, Route } from "wouter";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery, useMutation } from "@tanstack/react-query";
 import { TonConnectUIProvider } from '@tonconnect/ui-react';
