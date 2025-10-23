@@ -7,6 +7,7 @@ import { registerMiningRoutes } from "./mining.routes";
 import { registerEquipmentRoutes } from "./equipment.routes";
 import { registerAnnouncementRoutes } from "./announcements.routes";
 import { registerPromoCodeRoutes } from "./promoCodes.routes";
+import { registerAnalyticsRoutes } from "./analytics.routes";
 
 /**
  * Register all modularized routes
@@ -37,6 +38,9 @@ export function registerModularRoutes(app: Express): void {
 
   // Promo Codes (NEW - marketing codes with rewards)
   registerPromoCodeRoutes(app);
+
+  // Analytics (NEW - DAU/MAU tracking, retention, revenue metrics)
+  registerAnalyticsRoutes(app);
 
   // TODO: Migrate remaining routes from routes.ts
   // - shop.routes.ts (flash sales, powerups, lootboxes, packs, price alerts)
