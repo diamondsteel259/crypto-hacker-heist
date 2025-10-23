@@ -428,8 +428,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ message: "Invalid component type" });
     }
 
-    if (!["CS", "CHST", "TON"].includes(currency)) {
-      return res.status(400).json({ message: "Invalid currency. Must be CS, CHST, or TON" });
+    if (!["CS", "TON"].includes(currency)) {
+      return res.status(400).json({ message: "Invalid currency. Must be CS or TON" });
     }
 
     try {
@@ -510,10 +510,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             throw new Error("TON transaction verification failed");
           }
         } else {
-          // Handle CS/CHST payment
+          // Handle CS payment
           const user = await tx.select().from(users).where(eq(users.id, userId));
-          const balanceField = currency === "CS" ? "csBalance" : "chstBalance";
-          const currentBalance = user[0][balanceField];
+          const currentBalance = user[0].csBalance;
 
           if (currentBalance < upgradeCost) {
             throw new Error(`Insufficient ${currency} balance. Need ${upgradeCost} ${currency}`);
@@ -522,7 +521,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Deduct balance
           await tx.update(users)
             .set({
-              [balanceField]: sql`${balanceField === "csBalance" ? users.csBalance : users.chstBalance} - ${upgradeCost}`
+              csBalance: sql`${users.csBalance} - ${upgradeCost}`
             })
             .where(eq(users.id, userId));
         }
@@ -820,7 +819,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const bonusAmount = 1000;
 
         await tx.update(users)
-          .set({ 
+          .set({
             referredBy: referrer[0].id,
             csBalance: sql`${users.csBalance} + ${bonusAmount}`
           })
@@ -1419,8 +1418,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid price. Must be a positive number." });
       }
 
-      if (currency !== undefined && !["CS", "CHST", "TON"].includes(currency)) {
-        return res.status(400).json({ error: "Invalid currency. Must be CS, CHST, or TON." });
+      if (currency !== undefined && !["CS", "TON"].includes(currency)) {
+        return res.status(400).json({ error: "Invalid currency. Must be CS or TON." });
       }
 
       // Check if equipment exists
@@ -1517,7 +1516,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         let rewardCs = 0;
-        let rewardChst = 0;
         let conditionsMet = true;
         let errorMsg = "";
 
@@ -1530,7 +1528,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               errorMsg = "You need to purchase equipment first to mine blocks";
             }
             rewardCs = 1000;
-            rewardChst = 10;
             break;
           
           case "reach-1000-hashrate":
@@ -1539,7 +1536,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               errorMsg = "You need at least 1,000 H/s total hashrate";
             }
             rewardCs = 2000;
-            rewardChst = 20;
             break;
           
           case "buy-first-asic":
@@ -1555,7 +1551,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               errorMsg = "You need to purchase an ASIC rig first";
             }
             rewardCs = 3000;
-            rewardChst = 30;
             break;
           
           case "invite-1-friend":
@@ -1566,7 +1561,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               errorMsg = "You need to invite at least 1 friend first";
             }
             rewardCs = 5000;
-            rewardChst = 50;
             break;
           
           case "invite-5-friends":
@@ -1577,7 +1571,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               errorMsg = "You need to invite at least 5 friends first";
             }
             rewardCs = 15000;
-            rewardChst = 150;
             break;
           
           default:
@@ -1595,8 +1588,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await tx.update(users)
           .set({
             csBalance: sql`${users.csBalance} + ${rewardCs}`,
-            chstBalance: sql`${users.chstBalance} + ${rewardChst}`,
-            freeLootBoxes: sql`${users.freeLootBoxes} + 1`  // Grant 1 free loot box per task
           })
           .where(eq(users.id, userId));
 
@@ -1605,7 +1596,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: user[0].telegramId,
           taskId,
           rewardCs,
-          rewardChst,
         });
 
         // Get updated balances
@@ -1616,8 +1606,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           taskId,
           reward: {
             cs: rewardCs,
-            chst: rewardChst,
-            freeLootBox: 1,
           },
           new_balance: {
             cs: updatedUser[0].csBalance,
@@ -1667,7 +1655,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         let rewardCs = 0;
-        let rewardChst = 0;
         let conditionsMet = true;
         let errorMsg = "";
 
@@ -1680,7 +1667,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               errorMsg = "You need to purchase equipment first to mine blocks";
             }
             rewardCs = 1000;
-            rewardChst = 10;
             break;
           
           case "reach-1000-hashrate":
@@ -1689,7 +1675,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               errorMsg = "You need at least 1,000 H/s total hashrate";
             }
             rewardCs = 2000;
-            rewardChst = 20;
             break;
           
           case "buy-first-asic":
@@ -1705,7 +1690,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               errorMsg = "You need to purchase an ASIC rig first";
             }
             rewardCs = 3000;
-            rewardChst = 30;
             break;
           
           case "invite-1-friend":
@@ -1716,7 +1700,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               errorMsg = "You need to invite at least 1 friend first";
             }
             rewardCs = 5000;
-            rewardChst = 50;
             break;
           
           case "invite-5-friends":
@@ -1727,7 +1710,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               errorMsg = "You need to invite at least 5 friends first";
             }
             rewardCs = 15000;
-            rewardChst = 150;
             break;
           
           default:
@@ -1745,7 +1727,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await tx.update(users)
           .set({
             csBalance: sql`${users.csBalance} + ${rewardCs}`,
-            chstBalance: sql`${users.chstBalance} + ${rewardChst}`
           })
           .where(eq(users.id, userId));
 
@@ -1754,7 +1735,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: user[0].telegramId,
           taskId,
           rewardCs,
-          rewardChst,
         });
 
         // Get updated balances
@@ -1765,7 +1745,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           taskId,
           reward: {
             cs: rewardCs,
-            chst: rewardChst,
           },
           new_balance: {
             cs: updatedUser[0].csBalance,
@@ -2530,7 +2509,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Execute spins and generate prizes
         const prizes: any[] = [];
         let totalCs = 0;
-        let totalChst = 0;
         let jackpotWon = false;
 
         for (let i = 0; i < spinQuantity; i++) {
@@ -2540,8 +2518,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Apply rewards
           if (prize.type === 'cs') {
             totalCs += prize.value;
-          } else if (prize.type === 'chst') {
-            totalChst += prize.value;
           } else if (prize.type === 'jackpot') {
             jackpotWon = true;
             // Record jackpot win
@@ -2611,11 +2587,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Update user balances
-        if (totalCs > 0 || totalChst > 0) {
+        if (totalCs > 0) {
           await tx.update(users)
             .set({
-              ...(totalCs > 0 && { csBalance: sql`${users.csBalance} + ${totalCs}` }),
-              ...(totalChst > 0 && { chstBalance: sql`${users.chstBalance} + ${totalChst}` }),
+              csBalance: sql`${users.csBalance} + ${totalCs}`,
             })
             .where(eq(users.id, userId));
         }
@@ -2628,13 +2603,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           prizes,
           summary: {
             total_cs: totalCs,
-            total_chst: totalChst,
             jackpot_won: jackpotWon,
             spins_completed: spinQuantity,
           },
           message: jackpotWon 
-            ? `🎰 JACKPOT! You won 1 TON! Contact admin for payout. Plus ${totalCs} CS and ${totalChst} CHST!`
-            : `You won ${totalCs} CS and ${totalChst} CHST from ${spinQuantity} spin(s)!`,
+            ? `🎰 JACKPOT! You won 1 TON! Contact admin for payout. Plus ${totalCs.toLocaleString()} CS!`
+            : `You won ${totalCs.toLocaleString()} CS from ${spinQuantity} spin(s)!`,
           newBalance: {
             cs: updatedUser[0].csBalance,
             chst: updatedUser[0].chstBalance,
@@ -2677,14 +2651,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return { type: 'powerup', value: powerUp, display: 'Power-Up Boost' };
     }
 
-    // CHST: 30% chance
-    if (roll < 60.1) {
-      const chstAmount = Math.floor(50 + Math.random() * 450); // 50-500 CHST
-      return { type: 'chst', value: chstAmount, display: `${chstAmount} CHST` };
-    }
-
-    // CS: 40% chance (remaining)
-    const csOptions = [1000, 2500, 5000, 10000, 25000];
+    // CS: 70% chance (remaining) - CHST will only appear after halving event
+    const csOptions = [1000, 2500, 5000, 10000, 25000, 50000];
     const csAmount = csOptions[Math.floor(Math.random() * csOptions.length)];
     return { type: 'cs', value: csAmount, display: `${csAmount} CS` };
   }
@@ -4335,7 +4303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             csBalance: sql`${users.csBalance} + ${rewards.cs}`,
             chstBalance: sql`${users.chstBalance} + ${rewards.chst}`,
           })
-          .where(eq(users.telegramId, user.telegramId));
+          .where(eq(users.id, userId));
 
         // Update or insert streak data
         if (streakData.length > 0) {
