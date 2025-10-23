@@ -1092,12 +1092,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Get prestige record
         let prestige = await tx.select().from(userPrestige)
-          .where(eq(userPrestige.userId, user[0].telegramId))
+          .where(eq(userPrestige.userId, user[0].telegramId!))
           .limit(1);
 
         if (prestige.length === 0) {
           const created = await tx.insert(userPrestige).values({
-            userId: user[0].telegramId,
+            userId: user[0].telegramId!,
             prestigeLevel: 0,
             totalPrestiges: 0,
           }).returning();
@@ -1112,7 +1112,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Record history
         await tx.insert(prestigeHistory).values({
-          userId: user[0].telegramId,
+          userId: user[0].telegramId!,
           fromLevel: currentPrestige.prestigeLevel,
           toLevel: currentPrestige.prestigeLevel + 1,
           csBalanceReset: user[0].csBalance,
