@@ -355,13 +355,13 @@ export default function AnalyticsAdmin() {
                   </div>
                   <div className="font-mono">{r.day0}</div>
                   <div className="font-mono">
-                    {r.day1} <span className="text-xs text-muted-foreground">({r.d1Percent.toFixed(1)}%)</span>
+                    {r.day1} <span className="text-xs text-muted-foreground">({(r.d1Percent ?? 0).toFixed(1)}%)</span>
                   </div>
                   <div className="font-mono">
-                    {r.day7} <span className="text-xs text-muted-foreground">({r.d7Percent.toFixed(1)}%)</span>
+                    {r.day7} <span className="text-xs text-muted-foreground">({(r.d7Percent ?? 0).toFixed(1)}%)</span>
                   </div>
                   <div className="font-mono">
-                    {r.day30} <span className="text-xs text-muted-foreground">({r.d30Percent.toFixed(1)}%)</span>
+                    {r.day30} <span className="text-xs text-muted-foreground">({(r.d30Percent ?? 0).toFixed(1)}%)</span>
                   </div>
                 </div>
               ))}
