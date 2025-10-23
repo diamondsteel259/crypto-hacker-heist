@@ -731,6 +731,7 @@ export const insertOwnedEquipmentSchema = createInsertSchema(ownedEquipment).omi
   purchasedAt: true,
   quantity: true,
   upgradeLevel: true,
+  currentHashrate: true,
 });
 
 export const insertComponentUpgradeSchema = createInsertSchema(componentUpgrades).omit({
