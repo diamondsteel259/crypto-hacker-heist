@@ -1528,7 +1528,7 @@ function isValidTONAddress(address) {
   }
   return false;
 }
-async function pollForTransaction(txHash, expectedAmount, recipientAddress, senderAddress, timeoutMs = 18e4, intervalMs = 1e4) {
+async function pollForTransaction(txHash, expectedAmount, recipientAddress, senderAddress, timeoutMs = 3e5, intervalMs = 5e3) {
   const startTime = Date.now();
   const endTime = startTime + timeoutMs;
   let attempts = 0;
@@ -1555,7 +1555,7 @@ async function pollForTransaction(txHash, expectedAmount, recipientAddress, send
       console.log(`\u23F1\uFE0F Transaction not confirmed after ${attempts} attempts (${Math.floor((Date.now() - startTime) / 1e3)}s)`);
       return {
         verified: false,
-        error: `Transaction not confirmed within ${timeoutMs / 1e3} seconds. Please ensure the transaction was sent and wait a moment before trying again.`
+        error: `Transaction not confirmed within ${timeoutMs / 1e3} seconds. The payment may still be processing on the blockchain. Please contact support with your transaction hash if the issue persists.`
       };
     }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
