@@ -1952,8 +1952,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    if (powerUpType !== "hashrate-boost" && powerUpType !== "luck-boost") {
-      return res.status(400).json({ error: "Invalid power-up type" });
+    // Expanded power-up types validation
+    const validPowerUps = [
+      "hashrate-boost", 
+      "luck-boost", 
+      "cs-multiplier", 
+      "mega-boost", 
+      "chst-boost", 
+      "duration-extender", 
+      "auto-claim"
+    ];
+    
+    if (!validPowerUps.includes(powerUpType)) {
+      return res.status(400).json({ 
+        error: "Invalid power-up type",
+        validTypes: validPowerUps
+      });
     }
 
     // Validate TON addresses
@@ -2000,18 +2014,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
 
-        // Determine rewards and boost parameters
+        // Determine rewards and boost parameters based on power-up type
         let rewardCs = 0;
         let rewardChst = 0;
         let boostPercentage = 0;
-        const duration = 60 * 60 * 1000; // 1 hour in milliseconds
+        let duration = 60 * 60 * 1000; // Default: 1 hour in milliseconds
 
-        if (powerUpType === "hashrate-boost") {
-          rewardCs = 100;
-          boostPercentage = 50; // 50% hashrate boost
-        } else if (powerUpType === "luck-boost") {
-          rewardCs = 50;
-          boostPercentage = 20; // 20% luck boost
+        switch (powerUpType) {
+          case "hashrate-boost":
+            rewardCs = 100;
+            boostPercentage = 50; // 50% hashrate boost
+            duration = 60 * 60 * 1000; // 1 hour
+            break;
+            
+          case "luck-boost":
+            rewardCs = 50;
+            boostPercentage = 20; // 20% luck boost
+            duration = 60 * 60 * 1000; // 1 hour
+            break;
+            
+          case "cs-multiplier":
+            rewardCs = 200;
+            boostPercentage = 100; // 2x CS earnings (100% increase)
+            duration = 2 * 60 * 60 * 1000; // 2 hours
+            break;
+            
+          case "mega-boost":
+            rewardCs = 500;
+            rewardChst = 50;
+            boostPercentage = 75; // 75% combined boost to hashrate and luck
+            duration = 3 * 60 * 60 * 1000; // 3 hours
+            break;
+            
+          case "chst-boost":
+            rewardChst = 100;
+            boostPercentage = 50; // 50% more CHST from mining
+            duration = 2 * 60 * 60 * 1000; // 2 hours
+            break;
+            
+          case "duration-extender":
+            rewardCs = 150;
+            boostPercentage = 0; // No direct boost, extends other active boosts
+            duration = 60 * 60 * 1000; // Extends by 1 hour
+            
+            // Extend all active power-ups by 1 hour
+            const now = new Date();
+            await tx.update(activePowerUps)
+              .set({ 
+                expiresAt: sql`${activePowerUps.expiresAt} + interval '1 hour'` 
+              })
+              .where(and(
+                eq(activePowerUps.userId, user[0].telegramId),
+                eq(activePowerUps.isActive, true),
+                sql`${activePowerUps.expiresAt} > ${now}`
+              ));
+            break;
+            
+          case "auto-claim":
+            rewardCs = 300;
+            boostPercentage = 0; // Special boost - enables auto-claiming
+            duration = 24 * 60 * 60 * 1000; // 24 hours
+            break;
         }
 
         // Record purchase
@@ -2053,6 +2116,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           reward: { cs: rewardCs, chst: rewardChst },
           boost_active: true,
           boost_percentage: boostPercentage,
+          duration_hours: duration / (60 * 60 * 1000),
           activated_at: now.toISOString(),
           expires_at: expiresAt.toISOString(),
           new_balance: {
