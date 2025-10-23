@@ -12,6 +12,7 @@ import { registerAnalyticsRoutes } from "./analytics.routes";
 import { registerEventsRoutes } from "./events.routes";
 import { registerEconomyRoutes } from "./economy.routes";
 import { registerSegmentationRoutes } from "./segmentation.routes";
+import { registerGamificationRoutes } from "./gamification.routes";
 
 /**
  * Register all modularized routes
@@ -57,6 +58,9 @@ export function registerModularRoutes(app: Express): void {
 
   // Segmentation (NEW - user classification, targeted offers)
   registerSegmentationRoutes(app);
+
+  // Gamification (NEW - spin wheel, hourly bonuses)
+  registerGamificationRoutes(app);
 
   // MIGRATION STATUS:
   // ✅ COMPLETED:
