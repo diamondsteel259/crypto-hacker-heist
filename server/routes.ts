@@ -88,6 +88,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(user);
   });
 
+  // Get user statistics
+  app.get("/api/user/:userId/statistics", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+    const { userId } = req.params;
+    
+    try {
+      const { userStatistics } = await import("@shared/schema");
+      
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      // Get or create statistics record
+      let stats = await db.select().from(userStatistics)
+        .where(eq(userStatistics.userId, user.telegramId))
+        .limit(1);
+
+      if (stats.length === 0) {
+        // Create default statistics record
+        await db.insert(userStatistics).values({
+          userId: user.telegramId,
+          totalCsEarned: 0,
+          totalChstEarned: 0,
+          totalBlocksMined: 0,
+          bestBlockReward: 0,
+          highestHashrate: user.totalHashrate || 0,
+          totalTonSpent: '0',
+          totalCsSpent: 0,
+          totalReferrals: 0,
+          achievementsUnlocked: 0,
+        });
+
+        stats = await db.select().from(userStatistics)
+          .where(eq(userStatistics.userId, user.telegramId))
+          .limit(1);
+      }
+
+      res.json(stats[0]);
+    } catch (error: any) {
+      console.error("Get user statistics error:", error);
+      res.status(500).json({ error: "Failed to get user statistics" });
+    }
+  });
+
   // Leaderboard endpoints
   app.get("/api/leaderboard/hashrate", validateTelegramAuth, async (req, res) => {
     try {
@@ -1865,11 +1907,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         if (type === "cs") {
           await tx.update(users)
-            .set({ csBalance: sql`${users.csBalance} + ${reward}` })
+            .set({
+              csBalance: sql`${users.csBalance} + ${reward}`,
+            })
             .where(eq(users.id, userId));
         } else {
           await tx.update(users)
-            .set({ chstBalance: sql`${users.chstBalance} + ${reward}` })
+            .set({
+              chstBalance: sql`${users.chstBalance} + ${reward}`,
+            })
             .where(eq(users.id, userId));
         }
 
