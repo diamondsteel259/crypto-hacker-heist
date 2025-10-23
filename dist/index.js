@@ -1851,10 +1851,8 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/user/:userId/equipment/purchase", validateTelegramAuth, verifyUserAccess, async (req, res) => {
     const { userId } = req.params;
-    console.log("Purchase request:", { userId, body: req.body });
     const parsed = insertOwnedEquipmentSchema.safeParse({ ...req.body, userId });
     if (!parsed.success) {
-      console.log("Schema validation failed:", parsed.error);
       return res.status(400).json({ message: "Invalid equipment data", errors: parsed.error });
     }
     try {
@@ -1863,11 +1861,9 @@ async function registerRoutes(app2) {
         if (!user[0]) throw new Error("User not found");
         const equipmentType = await tx.select().from(equipmentTypes).where(eq5(equipmentTypes.id, parsed.data.equipmentTypeId));
         if (!equipmentType[0]) {
-          console.log("Equipment type not found:", parsed.data.equipmentTypeId);
           throw new Error("Equipment type not found");
         }
         const et = equipmentType[0];
-        console.log("Equipment type found:", et);
         const categoryEquipment = await tx.select().from(equipmentTypes).where(and4(
           eq5(equipmentTypes.category, et.category),
           eq5(equipmentTypes.tier, et.tier)
@@ -1879,11 +1875,6 @@ async function registerRoutes(app2) {
         const hasPrevious = currentCategoryEquipment.every(
           (prev) => userEquipment.some((owned2) => owned2.equipmentTypeId === prev.id)
         );
-        console.log("Previous equipment check:", {
-          currentCategoryEquipment: currentCategoryEquipment.length,
-          hasPrevious,
-          orderIndex: et.orderIndex
-        });
         if (!hasPrevious && et.orderIndex > 1 && (et.tier === "Basic" || et.tier === "Gaming")) {
           throw new Error("Must purchase previous equipment in this category first");
         }
@@ -1893,12 +1884,10 @@ async function registerRoutes(app2) {
         if (!isFirstBasicLaptop || !isFirstPurchase) {
           const balanceField = et.currency === "CS" ? "csBalance" : "chstBalance";
           const currentBalance = user[0][balanceField];
-          console.log("Balance check:", { balanceField, currentBalance, requiredPrice: et.basePrice, currency: et.currency });
           if (currentBalance < et.basePrice) {
             throw new Error(`Insufficient ${et.currency} balance`);
           }
         } else {
-          console.log("First Basic Laptop purchase - skipping balance check");
         }
         const owned = userEquipment.find((e) => e.equipmentTypeId === parsed.data.equipmentTypeId);
         if (owned && owned.quantity >= et.maxOwned) {
@@ -1925,15 +1914,12 @@ async function registerRoutes(app2) {
             [balanceField]: sql5`${balanceField === "csBalance" ? users.csBalance : users.chstBalance} - ${et.basePrice}`,
             totalHashrate: sql5`${users.totalHashrate} + ${et.baseHashrate}`
           }).where(eq5(users.id, userId));
-          console.log(`Paid purchase: Updated user hashrate by +${et.baseHashrate}, deducted ${et.basePrice} ${et.currency}`);
         } else {
           await tx.update(users).set({
             totalHashrate: sql5`${users.totalHashrate} + ${et.baseHashrate}`
           }).where(eq5(users.id, userId));
-          console.log(`Free purchase: Updated user hashrate by +${et.baseHashrate}`);
         }
         const updatedUser = await tx.select().from(users).where(eq5(users.id, userId));
-        console.log(`User ${userId} now has hashrate: ${updatedUser[0]?.totalHashrate}`);
         return equipment2;
       });
       res.json(result);
@@ -2631,7 +2617,6 @@ async function registerRoutes(app2) {
           rewardChst
         });
         const updatedUser = await tx.select().from(users).where(eq5(users.id, userId));
-        console.log(`User ${userId} now has hashrate: ${updatedUser[0]?.totalHashrate}`);
         return {
           success: true,
           taskId,
@@ -2903,7 +2888,6 @@ async function registerRoutes(app2) {
             error: "Transaction hash already used. Cannot reuse payment."
           });
         }
-        console.log(`Verifying TON transaction: ${tonTransactionHash} for ${tonAmount} TON`);
         const verification = await verifyTONTransaction(
           tonTransactionHash,
           tonAmount,
@@ -2916,7 +2900,6 @@ async function registerRoutes(app2) {
             error: verification.error || "Transaction verification failed"
           });
         }
-        console.log("TON transaction verified successfully:", verification.transaction);
         let rewardCs = 0;
         let rewardChst = 0;
         let boostPercentage = 0;
@@ -3111,7 +3094,6 @@ async function registerRoutes(app2) {
           }
         };
       });
-      console.log(`Loot box opened: ${boxType} for user ${userId}, rewards:`, result.rewards);
       res.json(result);
     } catch (error) {
       console.error("Loot box open error:", error);
