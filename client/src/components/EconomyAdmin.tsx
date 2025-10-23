@@ -146,20 +146,20 @@ export default function EconomyAdmin() {
   });
 
   // Format data for charts
-  const inflationChartData = history?.map(h => ({
+  const inflationChartData = (Array.isArray(history) ? history :  []).map(h => ({
     date: new Date(h.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     inflation: parseFloat(h.inflationRatePercent),
-  })).reverse() || [];
+  })).reverse();
 
-  const giniChartData = history?.map(h => ({
+  const giniChartData = (Array.isArray(history) ? history : []).map(h => ({
     date: new Date(h.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     gini: parseFloat(h.giniCoefficient) * 100,
-  })).reverse() || [];
+  })).reverse();
 
-  const distributionPieData = distribution?.map(d => ({
+  const distributionPieData = (Array.isArray(distribution) ? distribution : []).map(d => ({
     name: d.percentile,
     value: parseFloat(d.sharePercent),
-  })) || [];
+  }));
 
   const COLORS = ['#10b981', '#06b6d4', '#f59e0b', '#ef4444', '#8b5cf6'];
 
