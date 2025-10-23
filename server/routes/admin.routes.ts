@@ -21,7 +21,7 @@ import {
   seasons
 } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
-import { validateTelegramAuth, requireAdmin } from "../middleware/auth";
+import { validateTelegramAuth, requireAdmin, type AuthRequest } from "../middleware/auth";
 import { miningService } from "../mining";
 
 /**
