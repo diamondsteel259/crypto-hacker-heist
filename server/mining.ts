@@ -144,7 +144,7 @@ export class MiningService {
       // Calculate boosted hashrates for network total
       let totalNetworkHashrate = 0;
       const minerData = activeMiners.map(user => {
-        const boosts = userPowerUps.get(user.telegramId) || { hashrateBoost: 0, luckBoost: 0 };
+        const boosts = userPowerUps.get(user.telegramId || '') || { hashrateBoost: 0, luckBoost: 0 };
         const boostedHashrate = user.totalHashrate * (1 + boosts.hashrateBoost / 100);
         totalNetworkHashrate += boostedHashrate;
         
