@@ -14,6 +14,17 @@ export interface AuthRequest extends Request {
 }
 
 export function validateTelegramAuth(req: AuthRequest, res: Response, next: NextFunction) {
+  // Test environment bypass
+  if (process.env.NODE_ENV === 'test' && req.headers['x-test-user-id']) {
+    const testUserId = parseInt(req.headers['x-test-user-id'] as string);
+    req.telegramUser = {
+      id: testUserId,
+      first_name: 'Test',
+      username: 'testuser',
+    };
+    return next();
+  }
+
   const initData = req.headers['x-telegram-init-data'] as string;
   const botToken = process.env.BOT_TOKEN;
 
