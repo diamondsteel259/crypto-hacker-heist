@@ -2,23 +2,30 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Clock, TrendingUp } from "lucide-react";
+import type { Block } from "@shared/schema";
 
 interface BlockTimerProps {
   onBlockMined?: () => void;
   userHashrate?: number;
 }
 
+interface NetworkStats {
+  totalHashrate: number;
+  activeMiners: number;
+  timestamp: string;
+}
+
 export default function BlockTimer({ onBlockMined, userHashrate = 0 }: BlockTimerProps) {
   const [timeLeft, setTimeLeft] = useState(300); // 5 minutes in seconds
 
   // Fetch latest block data
-  const { data: latestBlock } = useQuery({
+  const { data: latestBlock } = useQuery<Block>({
     queryKey: ['/api/blocks/latest'],
     refetchInterval: 1000, // Refetch every second
   });
 
   // Fetch network stats to calculate estimated reward
-  const { data: networkStats } = useQuery({
+  const { data: networkStats } = useQuery<NetworkStats>({
     queryKey: ['/api/network-stats'],
     queryFn: () => fetch('/api/network-stats').then(r => r.json()),
     refetchInterval: 60000, // Refresh every minute
