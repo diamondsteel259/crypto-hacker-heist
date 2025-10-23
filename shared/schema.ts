@@ -898,3 +898,12 @@ export type UserSession = typeof userSessions.$inferSelect;
 export type InsertUserSession = z.infer<typeof insertUserSessionSchema>;
 export type RetentionCohort = typeof retentionCohorts.$inferSelect;
 export type InsertRetentionCohort = z.infer<typeof insertRetentionCohortSchema>;
+
+// Event Scheduler schemas and types
+export const insertScheduledEventSchema = createInsertSchema(scheduledEvents).omit({ id: true, createdAt: true });
+export const insertEventParticipationSchema = createInsertSchema(eventParticipation).omit({ id: true, participatedAt: true });
+
+export type ScheduledEvent = typeof scheduledEvents.$inferSelect;
+export type InsertScheduledEvent = z.infer<typeof insertScheduledEventSchema>;
+export type EventParticipation = typeof eventParticipation.$inferSelect;
+export type InsertEventParticipation = z.infer<typeof insertEventParticipationSchema>;
