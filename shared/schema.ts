@@ -997,3 +997,12 @@ export type EconomySinks = typeof economySinks.$inferSelect;
 export type InsertEconomySinks = z.infer<typeof insertEconomySinksSchema>;
 export type EconomyAlerts = typeof economyAlerts.$inferSelect;
 export type InsertEconomyAlerts = z.infer<typeof insertEconomyAlertsSchema>;
+
+// User Segmentation schemas and types
+export const insertUserSegmentSchema = createInsertSchema(userSegments).omit({ id: true, updatedAt: true });
+export const insertSegmentTargetedOfferSchema = createInsertSchema(segmentTargetedOffers).omit({ id: true, createdAt: true });
+
+export type UserSegment = typeof userSegments.$inferSelect;
+export type InsertUserSegment = z.infer<typeof insertUserSegmentSchema>;
+export type SegmentTargetedOffer = typeof segmentTargetedOffers.$inferSelect;
+export type InsertSegmentTargetedOffer = z.infer<typeof insertSegmentTargetedOfferSchema>;
