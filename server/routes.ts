@@ -436,14 +436,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Calculate upgrade cost based on component type and level
         const baseCost = owned[0].equipment_types.basePrice * 0.1; // 10% of equipment base price
-        const componentMultiplier = {
+        const componentMultiplier: Record<string, number> = {
           "RAM": 0.8,
           "CPU": 1.2,
           "Storage": 0.6,
           "GPU": 1.5
-        }[componentType] || 1;
+        };
+        const multiplier = componentMultiplier[componentType as string] || 1;
 
-        const upgradeCostCS = Math.floor(baseCost * componentMultiplier * Math.pow(1.15, currentLevel));
+        const upgradeCostCS = Math.floor(baseCost * multiplier * Math.pow(1.15, currentLevel));
         
         // Calculate cost in different currencies
         let upgradeCost = upgradeCostCS;
