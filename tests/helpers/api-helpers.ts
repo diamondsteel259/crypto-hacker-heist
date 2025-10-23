@@ -42,10 +42,11 @@ export async function authenticateTestUser(
   userData?: Partial<TestUserData>
 ): Promise<{ user: User; request: supertest.SuperTest<supertest.Test> }> {
   const user = await createTestUser(userData);
-  const request = supertest(app);
+  
+  // Create supertest instance with test auth header
+  const request = supertest(app)
+    .set('x-test-user-id', user.telegramId.toString());
 
-  // In tests, we bypass Telegram auth and use user ID directly
-  // Most routes accept userId in path params
   return { user, request };
 }
 
@@ -215,9 +216,21 @@ export async function waitFor(
  */
 export function apiRequest(app: Application, userId: string) {
   return {
-    get: (path: string) => supertest(app).get(path.replace(':userId', userId)),
-    post: (path: string) => supertest(app).post(path.replace(':userId', userId)),
-    put: (path: string) => supertest(app).put(path.replace(':userId', userId)),
-    delete: (path: string) => supertest(app).delete(path.replace(':userId', userId)),
+    get: (path: string) => 
+      supertest(app)
+        .get(path.replace(':userId', userId))
+        .set('x-test-user-id', userId),
+    post: (path: string) => 
+      supertest(app)
+        .post(path.replace(':userId', userId))
+        .set('x-test-user-id', userId),
+    put: (path: string) => 
+      supertest(app)
+        .put(path.replace(':userId', userId))
+        .set('x-test-user-id', userId),
+    delete: (path: string) => 
+      supertest(app)
+        .delete(path.replace(':userId', userId))
+        .set('x-test-user-id', userId),
   };
 }
