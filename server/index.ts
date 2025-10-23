@@ -9,6 +9,7 @@ import { seedFeatureFlags } from "./seedFeatureFlags";
 import { initializeBot } from "./bot";
 import { applyPerformanceIndexes } from "./applyIndexes";
 import { initializeDatabase, checkDatabaseHealth } from "./db";
+import { startCronJobs } from "./cron";
 import rateLimit from "express-rate-limit";
 
 const app = express();
