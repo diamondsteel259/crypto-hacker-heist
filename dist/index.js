@@ -7632,14 +7632,14 @@ async function seedDatabase() {
       { id: "quantum-ionq-forte", name: "IonQ Forte Quantum", tier: "Quantum", category: "Quantum Miner", baseHashrate: 15e6, basePrice: 750, currency: "TON", maxOwned: 10, orderIndex: 54 },
       { id: "quantum-atom-prime", name: "Atom Computing Prime Quantum", tier: "Quantum", category: "Quantum Miner", baseHashrate: 25e6, basePrice: 1e3, currency: "TON", maxOwned: 10, orderIndex: 55 }
     ];
-    const existingEquipment = await db.select().from(equipmentTypes);
-    if (existingEquipment.length === 0) {
-      console.log(`\u{1F4E6} Inserting ${equipmentCatalog.length} equipment items...`);
-      await db.insert(equipmentTypes).values(equipmentCatalog);
-      console.log(`\u2705 Equipment types seeded: ${equipmentCatalog.length}`);
-    } else {
-      console.log(`\u2705 Equipment types already exist (${existingEquipment.length} items) - skipping seed`);
+    console.log(`\u{1F4E6} Upserting ${equipmentCatalog.length} equipment items...`);
+    for (const equipment2 of equipmentCatalog) {
+      await db.insert(equipmentTypes).values(equipment2).onConflictDoUpdate({
+        target: equipmentTypes.id,
+        set: equipment2
+      });
     }
+    console.log(`\u2705 Equipment types upserted: ${equipmentCatalog.length}`);
     const finalCount = await db.select().from(equipmentTypes);
     console.log(`\u{1F50D} Verification: ${finalCount.length} equipment items in database`);
     const defaultSettings = [
