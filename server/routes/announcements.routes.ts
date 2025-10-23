@@ -41,11 +41,11 @@ export function registerAnnouncementRoutes(app: Express): void {
         return res.status(400).json({ error: `Invalid type. Must be one of: ${validTypes.join(', ')}` });
       }
 
-      if (!validPriorities.includes(data.priority)) {
+      if (!data.priority || !validPriorities.includes(data.priority)) {
         return res.status(400).json({ error: `Invalid priority. Must be one of: ${validPriorities.join(', ')}` });
       }
 
-      if (!validAudiences.includes(data.targetAudience)) {
+      if (!data.targetAudience || !validAudiences.includes(data.targetAudience)) {
         return res.status(400).json({ error: `Invalid target audience. Must be one of: ${validAudiences.join(', ')}` });
       }
 
