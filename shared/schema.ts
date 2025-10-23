@@ -15,6 +15,8 @@ export const users = pgTable("users", {
   totalHashrate: real("total_hashrate").notNull().default(0),
   referralCode: text("referral_code").notNull().unique(),
   referredBy: text("referred_by"),
+  freeLootBoxes: integer("free_loot_boxes").notNull().default(0),
+  inviteLootBoxes: integer("invite_loot_boxes").notNull().default(0),
   isAdmin: boolean("is_admin").notNull().default(false),
   tutorialCompleted: boolean("tutorial_completed").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
