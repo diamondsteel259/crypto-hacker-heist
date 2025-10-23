@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { registerHealthRoutes } from "./health.routes";
 import { registerAuthRoutes } from "./auth.routes";
 import { registerUserRoutes } from "./user.routes";
+import { registerAdminRoutes } from "./admin.routes";
 import { registerSocialRoutes } from "./social.routes";
 import { registerMiningRoutes } from "./mining.routes";
 import { registerEquipmentRoutes } from "./equipment.routes";
@@ -26,6 +27,9 @@ export function registerModularRoutes(app: Express): void {
 
   // User profile and management
   registerUserRoutes(app);
+
+  // Admin panel (settings, users, mining, jackpots, equipment, flash sales, seasons)
+  registerAdminRoutes(app);
 
   // Social features (leaderboard, referrals, network stats)
   registerSocialRoutes(app);
