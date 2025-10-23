@@ -82,16 +82,19 @@ export async function seedDatabase() {
       { id: 'quantum-atom-prime', name: 'Atom Computing Prime Quantum', tier: 'Quantum', category: 'Quantum Miner', baseHashrate: 25000000, basePrice: 1000.0, currency: 'TON', maxOwned: 10, orderIndex: 55 },
     ];
 
-    // Check if equipment types already exist - ONLY seed if empty
-    const existingEquipment = await db.select().from(equipmentTypes);
+    // Upsert equipment types - insert new items and update existing ones
+    console.log(`📦 Upserting ${equipmentCatalog.length} equipment items...`);
     
-    if (existingEquipment.length === 0) {
-      console.log(`📦 Inserting ${equipmentCatalog.length} equipment items...`);
-      await db.insert(equipmentTypes).values(equipmentCatalog);
-      console.log(`✅ Equipment types seeded: ${equipmentCatalog.length}`);
-    } else {
-      console.log(`✅ Equipment types already exist (${existingEquipment.length} items) - skipping seed`);
+    for (const equipment of equipmentCatalog) {
+      await db.insert(equipmentTypes)
+        .values(equipment)
+        .onConflictDoUpdate({
+          target: equipmentTypes.id,
+          set: equipment,
+        });
     }
+    
+    console.log(`✅ Equipment types upserted: ${equipmentCatalog.length}`);
     
     // Verify the data
     const finalCount = await db.select().from(equipmentTypes);
