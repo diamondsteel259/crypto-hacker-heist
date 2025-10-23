@@ -6022,8 +6022,20 @@ async function registerRoutes(app2) {
     if (!powerUpType || !tonTransactionHash || !userWalletAddress || !tonAmount) {
       return res.status(400).json({ error: "Missing required fields" });
     }
-    if (powerUpType !== "hashrate-boost" && powerUpType !== "luck-boost") {
-      return res.status(400).json({ error: "Invalid power-up type" });
+    const validPowerUps = [
+      "hashrate-boost",
+      "luck-boost",
+      "cs-multiplier",
+      "mega-boost",
+      "chst-boost",
+      "duration-extender",
+      "auto-claim"
+    ];
+    if (!validPowerUps.includes(powerUpType)) {
+      return res.status(400).json({
+        error: "Invalid power-up type",
+        validTypes: validPowerUps
+      });
     }
     if (!isValidTONAddress(userWalletAddress)) {
       return res.status(400).json({ error: "Invalid user wallet address format" });
@@ -6059,13 +6071,52 @@ async function registerRoutes(app2) {
         let rewardCs = 0;
         let rewardChst = 0;
         let boostPercentage = 0;
-        const duration = 60 * 60 * 1e3;
-        if (powerUpType === "hashrate-boost") {
-          rewardCs = 100;
-          boostPercentage = 50;
-        } else if (powerUpType === "luck-boost") {
-          rewardCs = 50;
-          boostPercentage = 20;
+        let duration = 60 * 60 * 1e3;
+        switch (powerUpType) {
+          case "hashrate-boost":
+            rewardCs = 100;
+            boostPercentage = 50;
+            duration = 60 * 60 * 1e3;
+            break;
+          case "luck-boost":
+            rewardCs = 50;
+            boostPercentage = 20;
+            duration = 60 * 60 * 1e3;
+            break;
+          case "cs-multiplier":
+            rewardCs = 200;
+            boostPercentage = 100;
+            duration = 2 * 60 * 60 * 1e3;
+            break;
+          case "mega-boost":
+            rewardCs = 500;
+            rewardChst = 50;
+            boostPercentage = 75;
+            duration = 3 * 60 * 60 * 1e3;
+            break;
+          case "chst-boost":
+            rewardChst = 100;
+            boostPercentage = 50;
+            duration = 2 * 60 * 60 * 1e3;
+            break;
+          case "duration-extender":
+            rewardCs = 150;
+            boostPercentage = 0;
+            duration = 60 * 60 * 1e3;
+            const now2 = /* @__PURE__ */ new Date();
+            await tx.update(activePowerUps).set({
+              expiresAt: sql14`${activePowerUps.expiresAt} + interval '1 hour'`
+            }).where(and12(
+              eq17(activePowerUps.userId, user[0].telegramId),
+              eq17(activePowerUps.isActive, true),
+              sql14`${activePowerUps.expiresAt} > ${now2}`
+            ));
+            break;
+          case "auto-claim":
+            rewardCs = 300;
+            boostPercentage = 0;
+            duration = 24 * 60 * 60 * 1e3;
+            break;
         }
         await tx.insert(powerUpPurchases).values({
           userId: user[0].telegramId,
@@ -6096,6 +6147,7 @@ async function registerRoutes(app2) {
           reward: { cs: rewardCs, chst: rewardChst },
           boost_active: true,
           boost_percentage: boostPercentage,
+          duration_hours: duration / (60 * 60 * 1e3),
           activated_at: now.toISOString(),
           expires_at: expiresAt.toISOString(),
           new_balance: {
@@ -7539,7 +7591,7 @@ async function seedDatabase() {
       { id: "server-hp-proliant-dl380", name: "HP ProLiant DL380", tier: "Server", category: "Server Farm", baseHashrate: 1e4, basePrice: 1.5, currency: "TON", maxOwned: 25, orderIndex: 18 },
       { id: "server-custom-rack-1u", name: "Custom 1U Rack Server", tier: "Server", category: "Server Farm", baseHashrate: 15e3, basePrice: 2, currency: "TON", maxOwned: 25, orderIndex: 19 },
       { id: "server-custom-rack-2u", name: "Custom 2U Rack Server", tier: "Server", category: "Server Farm", baseHashrate: 2e4, basePrice: 3, currency: "TON", maxOwned: 25, orderIndex: 20 },
-      // ASIC RIGS - TON-only - 10 Models - Cap: 50/model/user
+      // ASIC RIGS - TON-only - Cap: 50/model/user
       { id: "asic-bitmain-s21-pro", name: "Bitmain Antminer S21 Pro", tier: "ASIC", category: "ASIC Rig", baseHashrate: 5e4, basePrice: 5, currency: "TON", maxOwned: 50, orderIndex: 21 },
       { id: "asic-whatsminer-m60s", name: "WhatsMiner M60S", tier: "ASIC", category: "ASIC Rig", baseHashrate: 75e3, basePrice: 7.5, currency: "TON", maxOwned: 50, orderIndex: 22 },
       { id: "asic-bitmain-s21-xp", name: "Bitmain Antminer S21 XP", tier: "ASIC", category: "ASIC Rig", baseHashrate: 1e5, basePrice: 10, currency: "TON", maxOwned: 50, orderIndex: 23 },
@@ -7549,7 +7601,36 @@ async function seedDatabase() {
       { id: "asic-bitmain-s21-xp-hyd", name: "Bitmain Antminer S21 XP+ Hyd", tier: "ASIC", category: "ASIC Rig", baseHashrate: 2e5, basePrice: 20, currency: "TON", maxOwned: 50, orderIndex: 27 },
       { id: "asic-canaan-avalon-q", name: "Canaan Avalon Q", tier: "ASIC", category: "ASIC Rig", baseHashrate: 25e4, basePrice: 25, currency: "TON", maxOwned: 50, orderIndex: 28 },
       { id: "asic-bitmain-s21e-xp-hydro", name: "Bitmain Antminer S21e XP Hydro", tier: "ASIC", category: "ASIC Rig", baseHashrate: 3e5, basePrice: 30, currency: "TON", maxOwned: 50, orderIndex: 29 },
-      { id: "asic-whatsminer-m63s-hydro", name: "WhatsMiner M63S Hydro", tier: "ASIC", category: "ASIC Rig", baseHashrate: 5e5, basePrice: 50, currency: "TON", maxOwned: 50, orderIndex: 30 }
+      { id: "asic-whatsminer-m63s-hydro", name: "WhatsMiner M63S Hydro", tier: "ASIC", category: "ASIC Rig", baseHashrate: 5e5, basePrice: 50, currency: "TON", maxOwned: 50, orderIndex: 30 },
+      // NEW: MORE ASIC RIGS - Premium Models - TON-only - Cap: 50/model/user
+      { id: "asic-bitmain-s25-pro", name: "Bitmain Antminer S25 Pro", tier: "ASIC", category: "ASIC Rig", baseHashrate: 6e5, basePrice: 60, currency: "TON", maxOwned: 50, orderIndex: 31 },
+      { id: "asic-whatsminer-m70s", name: "WhatsMiner M70S", tier: "ASIC", category: "ASIC Rig", baseHashrate: 7e5, basePrice: 70, currency: "TON", maxOwned: 50, orderIndex: 32 },
+      { id: "asic-microbt-m63", name: "MicroBT WhatsMiner M63", tier: "ASIC", category: "ASIC Rig", baseHashrate: 75e4, basePrice: 75, currency: "TON", maxOwned: 50, orderIndex: 33 },
+      { id: "asic-canaan-avalon-ultra", name: "Canaan Avalon Ultra", tier: "ASIC", category: "ASIC Rig", baseHashrate: 8e5, basePrice: 80, currency: "TON", maxOwned: 50, orderIndex: 34 },
+      { id: "asic-bitmain-s26-hydro", name: "Bitmain Antminer S26 Hydro", tier: "ASIC", category: "ASIC Rig", baseHashrate: 9e5, basePrice: 90, currency: "TON", maxOwned: 50, orderIndex: 35 },
+      { id: "asic-whatsminer-m80s-elite", name: "WhatsMiner M80S Elite", tier: "ASIC", category: "ASIC Rig", baseHashrate: 1e6, basePrice: 100, currency: "TON", maxOwned: 50, orderIndex: 36 },
+      { id: "asic-microbt-m70-turbo", name: "MicroBT M70 Turbo", tier: "ASIC", category: "ASIC Rig", baseHashrate: 11e5, basePrice: 110, currency: "TON", maxOwned: 50, orderIndex: 37 },
+      { id: "asic-bitmain-s27-pro-hydro", name: "Bitmain Antminer S27 Pro Hydro", tier: "ASIC", category: "ASIC Rig", baseHashrate: 125e4, basePrice: 125, currency: "TON", maxOwned: 50, orderIndex: 38 },
+      { id: "asic-whatsminer-m90s-max", name: "WhatsMiner M90S Max", tier: "ASIC", category: "ASIC Rig", baseHashrate: 15e5, basePrice: 150, currency: "TON", maxOwned: 50, orderIndex: 39 },
+      { id: "asic-axionminer-2000-ultra", name: "AxionMiner 2000 Ultra", tier: "ASIC", category: "ASIC Rig", baseHashrate: 2e6, basePrice: 200, currency: "TON", maxOwned: 50, orderIndex: 40 },
+      // NEW: FPGA MINERS - Mid-tier between GPU and ASIC - TON-only - Cap: 30/model/user
+      { id: "fpga-xilinx-vcu1525", name: "Xilinx VCU1525 FPGA", tier: "FPGA", category: "FPGA Miner", baseHashrate: 25e3, basePrice: 2.5, currency: "TON", maxOwned: 30, orderIndex: 41 },
+      { id: "fpga-bittware-cvp13", name: "BittWare CVP-13 FPGA", tier: "FPGA", category: "FPGA Miner", baseHashrate: 35e3, basePrice: 3.5, currency: "TON", maxOwned: 30, orderIndex: 42 },
+      { id: "fpga-intel-stratix-10", name: "Intel Stratix 10 FPGA", tier: "FPGA", category: "FPGA Miner", baseHashrate: 45e3, basePrice: 4.5, currency: "TON", maxOwned: 30, orderIndex: 43 },
+      { id: "fpga-xilinx-u250", name: "Xilinx Alveo U250", tier: "FPGA", category: "FPGA Miner", baseHashrate: 6e4, basePrice: 6, currency: "TON", maxOwned: 30, orderIndex: 44 },
+      { id: "fpga-bittware-xupvv4", name: "BittWare XUPVV4 FPGA Cluster", tier: "FPGA", category: "FPGA Miner", baseHashrate: 8e4, basePrice: 8, currency: "TON", maxOwned: 30, orderIndex: 45 },
+      // NEW: CLOUD MINING CONTRACTS - Subscription-based - TON-only - Cap: 100/model/user
+      { id: "cloud-starter-1month", name: "Cloud Mining Starter (30 days)", tier: "Cloud", category: "Cloud Mining", baseHashrate: 1e5, basePrice: 3, currency: "TON", maxOwned: 100, orderIndex: 46 },
+      { id: "cloud-pro-1month", name: "Cloud Mining Pro (30 days)", tier: "Cloud", category: "Cloud Mining", baseHashrate: 25e4, basePrice: 7, currency: "TON", maxOwned: 100, orderIndex: 47 },
+      { id: "cloud-elite-1month", name: "Cloud Mining Elite (30 days)", tier: "Cloud", category: "Cloud Mining", baseHashrate: 5e5, basePrice: 15, currency: "TON", maxOwned: 100, orderIndex: 48 },
+      { id: "cloud-enterprise-1month", name: "Cloud Mining Enterprise (30 days)", tier: "Cloud", category: "Cloud Mining", baseHashrate: 1e6, basePrice: 30, currency: "TON", maxOwned: 100, orderIndex: 49 },
+      { id: "cloud-mega-1month", name: "Cloud Mining Mega (30 days)", tier: "Cloud", category: "Cloud Mining", baseHashrate: 25e5, basePrice: 75, currency: "TON", maxOwned: 100, orderIndex: 50 },
+      // NEW: QUANTUM MINERS - Elite/Legendary tier - TON-only - Cap: 10/model/user (limited!)
+      { id: "quantum-ibm-q1", name: "IBM Quantum System Q1", tier: "Quantum", category: "Quantum Miner", baseHashrate: 5e6, basePrice: 250, currency: "TON", maxOwned: 10, orderIndex: 51 },
+      { id: "quantum-google-sycamore", name: "Google Sycamore Quantum", tier: "Quantum", category: "Quantum Miner", baseHashrate: 75e5, basePrice: 375, currency: "TON", maxOwned: 10, orderIndex: 52 },
+      { id: "quantum-rigetti-aspen", name: "Rigetti Aspen Quantum", tier: "Quantum", category: "Quantum Miner", baseHashrate: 1e7, basePrice: 500, currency: "TON", maxOwned: 10, orderIndex: 53 },
+      { id: "quantum-ionq-forte", name: "IonQ Forte Quantum", tier: "Quantum", category: "Quantum Miner", baseHashrate: 15e6, basePrice: 750, currency: "TON", maxOwned: 10, orderIndex: 54 },
+      { id: "quantum-atom-prime", name: "Atom Computing Prime Quantum", tier: "Quantum", category: "Quantum Miner", baseHashrate: 25e6, basePrice: 1e3, currency: "TON", maxOwned: 10, orderIndex: 55 }
     ];
     const existingEquipment = await db.select().from(equipmentTypes);
     if (existingEquipment.length === 0) {
