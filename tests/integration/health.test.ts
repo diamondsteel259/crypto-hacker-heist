@@ -64,27 +64,26 @@ describe('Health Endpoints', () => {
     it('should return mining service health status', async () => {
       const response = await request.get('/api/health/mining');
 
-      expect(response.status).toBeOneOf([200, 503]);
+      expect([200, 503]).toContain(response.status);
       expect(response.body).toHaveProperty('status');
     });
 
-    it('should include mining health metrics', async () => {
+    it('should have required properties', async () => {
       const response = await request.get('/api/health/mining');
 
       expect(response.body).toHaveProperty('status');
-
-      // May have additional properties depending on mining service state
-      if (response.body.status === 'healthy') {
-        // Healthy mining service should provide more details
-        expect(response.status).toBe(200);
-      }
+      expect(response.body).toHaveProperty('lastSuccessfulMine');
+      expect(response.body).toHaveProperty('consecutiveFailures');
     });
 
     it('should work even when mining is paused', async () => {
+      // Try to pause mining (might not have admin access, but endpoint should still respond)
+      await request.post('/api/admin/mining/pause').send();
+
       const response = await request.get('/api/health/mining');
 
       // Should always respond, even if mining is paused
-      expect(response.status).toBeOneOf([200, 503]);
+      expect([200, 503]).toContain(response.status);
       expect(response.body).toHaveProperty('status');
     });
   });
