@@ -678,6 +678,38 @@ export const economyAlerts = pgTable("economy_alerts", {
   acknowledgedIdx: index("economy_alerts_acknowledged_idx").on(table.acknowledged),
 }));
 
+// User Segmentation System
+export const userSegments = pgTable("user_segments", {
+  id: serial("id").primaryKey(),
+  telegramId: text("telegram_id").notNull().unique().references(() => users.telegramId, { onDelete: 'cascade' }),
+  segment: text("segment").notNull(), // 'whale', 'dolphin', 'minnow', 'new_user', 'active', 'at_risk', 'churned', 'returning'
+  lifetimeValue: decimal("lifetime_value", { precision: 15, scale: 2 }).notNull().default('0'), // Total TON spent
+  lastActiveAt: timestamp("last_active_at"),
+  daysSinceLastActive: integer("days_since_last_active").notNull().default(0),
+  totalSessions: integer("total_sessions").notNull().default(0),
+  avgSessionDuration: integer("avg_session_duration").notNull().default(0), // seconds
+  retentionD7: boolean("retention_d7").notNull().default(false), // Came back after 7 days
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  telegramIdIdx: index("user_segments_telegram_id_idx").on(table.telegramId),
+  segmentIdx: index("user_segments_segment_idx").on(table.segment),
+}));
+
+export const segmentTargetedOffers = pgTable("segment_targeted_offers", {
+  id: serial("id").primaryKey(),
+  targetSegment: text("target_segment").notNull(), // 'whale', 'dolphin', 'minnow', 'new_user', 'at_risk', 'churned', 'returning'
+  offerType: text("offer_type").notNull(), // 'promo_code', 'flash_sale', 'bonus_cs', 'exclusive_equipment'
+  offerData: text("offer_data").notNull(), // JSON with offer details
+  validFrom: timestamp("valid_from").notNull().defaultNow(),
+  validUntil: timestamp("valid_until"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdBy: text("created_by").notNull().references(() => users.telegramId),
+}, (table) => ({
+  segmentIdx: index("segment_targeted_offers_segment_idx").on(table.targetSegment),
+  activeIdx: index("segment_targeted_offers_active_idx").on(table.isActive),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
