@@ -1364,7 +1364,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get or create streak data
-      const streakData = await db.select().from(userStreaks).where(eq(userStreaks.userId, user.telegramId)).limit(1);
+      const streakData = await db.select().from(userStreaks).where(eq(userStreaks.userId, user.telegramId!)).limit(1);
       let currentStreak = 0;
       
       if (streakData.length > 0) {
@@ -1418,7 +1418,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               longestStreak: sql`GREATEST(${userStreaks.longestStreak}, ${currentStreak})`,
               lastLoginDate: loginDateStr,
             })
-            .where(eq(userStreaks.userId, user.telegramId));
+            .where(eq(userStreaks.userId, user.telegramId!));
         } else {
           await tx.insert(userStreaks).values({
             userId: user.telegramId!,
