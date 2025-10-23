@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { validateTelegramWebAppData } from '../telegram-auth';
+import type { User } from '@shared/schema';
 
 export interface AuthRequest extends Request {
   telegramUser?: {
@@ -9,6 +10,7 @@ export interface AuthRequest extends Request {
     username?: string;
     photo_url?: string;
   };
+  user?: User;
 }
 
 export function validateTelegramAuth(req: AuthRequest, res: Response, next: NextFunction) {
@@ -79,6 +81,9 @@ export async function requireAdmin(req: AuthRequest, res: Response, next: NextFu
   if (!user || !user.isAdmin) {
     return res.status(403).json({ error: 'Admin access required' });
   }
+
+  // Attach user to request for use in admin routes
+  req.user = user;
 
   next();
 }
