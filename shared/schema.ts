@@ -594,6 +594,44 @@ export const retentionCohorts = pgTable("retention_cohorts", {
   cohortDateIdx: index("retention_cohorts_date_idx").on(table.cohortDate),
 }));
 
+// Event Scheduler System
+export const scheduledEvents = pgTable("scheduled_events", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 200 }).notNull(),
+  description: text("description"),
+  eventType: text("event_type").notNull(), // 'multiplier', 'flash_sale', 'community_goal', 'tournament', 'custom'
+  eventData: text("event_data").notNull(), // JSON string with type-specific config
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time").notNull(),
+  isActive: boolean("is_active").notNull().default(false), // Auto-toggled by cron
+  isRecurring: boolean("is_recurring").notNull().default(false),
+  recurrenceRule: varchar("recurrence_rule", { length: 100 }), // 'DAILY', 'WEEKLY_FRI', 'MONTHLY_1ST'
+  priority: integer("priority").notNull().default(0), // For UI sorting
+  bannerImage: text("banner_image"), // URL or base64
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdBy: text("created_by").notNull().references(() => users.telegramId),
+  announcementSent: boolean("announcement_sent").notNull().default(false),
+}, (table) => ({
+  activeIdx: index("scheduled_events_active_idx").on(table.isActive),
+  startTimeIdx: index("scheduled_events_start_time_idx").on(table.startTime),
+  endTimeIdx: index("scheduled_events_end_time_idx").on(table.endTime),
+  eventTypeIdx: index("scheduled_events_type_idx").on(table.eventType),
+}));
+
+export const eventParticipation = pgTable("event_participation", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull().references(() => scheduledEvents.id, { onDelete: 'cascade' }),
+  telegramId: text("telegram_id").notNull().references(() => users.telegramId, { onDelete: 'cascade' }),
+  contribution: decimal("contribution", { precision: 20, scale: 2 }).notNull().default('0'), // For community goals
+  rank: integer("rank"), // For tournaments
+  rewardClaimed: boolean("reward_claimed").notNull().default(false),
+  participatedAt: timestamp("participated_at").notNull().defaultNow(),
+}, (table) => ({
+  userEventUnique: unique().on(table.eventId, table.telegramId),
+  eventIdx: index("event_participation_event_idx").on(table.eventId),
+  userIdx: index("event_participation_user_idx").on(table.telegramId),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
