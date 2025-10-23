@@ -1001,7 +1001,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Record purchase
         const purchase = await tx.insert(packPurchases).values({
-          userId: user[0].telegramId,
+          userId: user[0].telegramId!,
           packType,
           tonAmount,
           tonTransactionHash,
