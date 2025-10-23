@@ -29,7 +29,7 @@ export function registerHealthRoutes(app: Express): void {
     try {
       const miningHealth = getMiningHealth();
       const isHealthy = miningHealth.consecutiveFailures < 3 &&
-                        (Date.now() - miningHealth.lastSuccessfulMine) < 15 * 60 * 1000;
+                        (miningHealth.lastSuccessfulMine !== null && Date.now() - miningHealth.lastSuccessfulMine.getTime() < 15 * 60 * 1000);
 
       res.json({
         ok: isHealthy,
