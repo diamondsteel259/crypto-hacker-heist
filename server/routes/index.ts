@@ -13,6 +13,7 @@ import { registerEventsRoutes } from "./events.routes";
 import { registerEconomyRoutes } from "./economy.routes";
 import { registerSegmentationRoutes } from "./segmentation.routes";
 import { registerGamificationRoutes } from "./gamification.routes";
+import { registerApiAliases } from "./api-aliases";
 
 /**
  * Register all modularized routes
@@ -62,6 +63,9 @@ export function registerModularRoutes(app: Express): void {
   // Gamification (NEW - spin wheel, hourly bonuses)
   registerGamificationRoutes(app);
 
+  // API Aliases (Frontend compatibility - fixes route mismatches)
+  registerApiAliases(app);
+
   // MIGRATION STATUS:
   // ✅ COMPLETED:
   //   - admin.routes.ts (18 routes) - migrated in code review fix
@@ -69,6 +73,7 @@ export function registerModularRoutes(app: Express): void {
   //   - health.routes.ts, auth.routes.ts, social.routes.ts, mining.routes.ts
   //   - equipment.routes.ts, announcements.routes.ts, promoCodes.routes.ts
   //   - analytics.routes.ts, events.routes.ts, economy.routes.ts, segmentation.routes.ts
+  //   - api-aliases.ts (2 routes) - fixes equipment/types and leaderboard bugs
   //
   // 🔄 TODO: Migrate remaining routes from routes.ts
   //   - shop.routes.ts (~25 routes: flash sales, powerups, lootboxes, packs, price alerts)
