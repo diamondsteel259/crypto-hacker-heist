@@ -183,7 +183,7 @@ export default function AnalyticsAdmin() {
         {/* Overview Stats */}
         {overviewLoading ? (
           <p className="text-sm text-muted-foreground">Loading overview...</p>
-        ) : overview && (
+        ) : overview && overview.today ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-md">
               <div className="flex items-center gap-2 mb-2">
@@ -191,10 +191,10 @@ export default function AnalyticsAdmin() {
                 <p className="text-xs text-muted-foreground uppercase">Today DAU</p>
               </div>
               <p className="text-2xl font-bold font-mono text-cyan-500">
-                {overview.today.dau}
+                {overview.today.dau || 0}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                {overview.today.newUsers} new users
+                {overview.today.newUsers || 0} new users
               </p>
             </div>
 
@@ -204,10 +204,10 @@ export default function AnalyticsAdmin() {
                 <p className="text-xs text-muted-foreground uppercase">30-Day MAU</p>
               </div>
               <p className="text-2xl font-bold font-mono text-purple-500">
-                {overview.last30Days.mau}
+                {overview.last30Days?.mau || 0}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Avg DAU: {overview.last30Days.avgDau.toFixed(0)}
+                Avg DAU: {overview.last30Days?.avgDau?.toFixed(0) || 0}
               </p>
             </div>
 
@@ -217,7 +217,7 @@ export default function AnalyticsAdmin() {
                 <p className="text-xs text-muted-foreground uppercase">Today Revenue</p>
               </div>
               <p className="text-2xl font-bold font-mono text-yellow-500">
-                {parseFloat(overview.today.tonRevenue).toFixed(2)} TON
+                {parseFloat(overview.today.tonRevenue || '0').toFixed(2)} TON
               </p>
             </div>
 
@@ -227,10 +227,12 @@ export default function AnalyticsAdmin() {
                 <p className="text-xs text-muted-foreground uppercase">30-Day Revenue</p>
               </div>
               <p className="text-2xl font-bold font-mono text-matrix-green">
-                {parseFloat(overview.last30Days.totalRevenue).toFixed(2)} TON
+                {parseFloat(overview.last30Days?.totalRevenue || '0').toFixed(2)} TON
               </p>
             </div>
           </div>
+        ) : (
+          <p className="text-sm text-muted-foreground text-center py-4">No analytics data available</p>
         )}
       </Card>
 
