@@ -284,6 +284,7 @@ export function registerGamificationRoutes(app: Express): void {
 
       res.json({
         success: true,
+        bonus: reward, // For test compatibility
         reward,
         message: `Claimed ${reward.toLocaleString()} CS!`,
       });
