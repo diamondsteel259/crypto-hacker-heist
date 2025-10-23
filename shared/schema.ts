@@ -19,6 +19,8 @@ export const users = pgTable("users", {
   inviteLootBoxes: integer("invite_loot_boxes").notNull().default(0),
   isAdmin: boolean("is_admin").notNull().default(false),
   tutorialCompleted: boolean("tutorial_completed").notNull().default(false),
+  hasPremium: boolean("has_premium").notNull().default(false),
+  hasActiveSubscription: boolean("has_active_subscription").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
   referralCodeIdx: index("users_referral_code_idx").on(table.referralCode),
