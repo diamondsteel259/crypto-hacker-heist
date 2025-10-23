@@ -253,7 +253,7 @@ export default function AnnouncementsAdmin() {
             >
               <option value="all">All Users</option>
               <option value="premium">Premium Users</option>
-              <option value="new">New Users (< 7 days)</option>
+              <option value="new">New Users (&lt; 7 days)</option>
               <option value="active">Active Users</option>
             </select>
           </div>
