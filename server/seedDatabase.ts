@@ -68,11 +68,11 @@ export async function seedDatabase() {
       { id: 'fpga-bittware-xupvv4', name: 'BittWare XUPVV4 FPGA Cluster', tier: 'FPGA', category: 'FPGA Miner', baseHashrate: 80000, basePrice: 8.0, currency: 'TON', maxOwned: 30, orderIndex: 45 },
       
       // NEW: CLOUD MINING CONTRACTS - Subscription-based - TON-only - Cap: 100/model/user
-      { id: 'cloud-starter-1month', name: 'Cloud Mining Starter (30 days)', tier: 'Cloud', category: 'Cloud Mining', baseHashrate: 100000, basePrice: 3.0, currency: 'TON', maxOwned: 100, orderIndex: 46 },
-      { id: 'cloud-pro-1month', name: 'Cloud Mining Pro (30 days)', tier: 'Cloud', category: 'Cloud Mining', baseHashrate: 250000, basePrice: 7.0, currency: 'TON', maxOwned: 100, orderIndex: 47 },
-      { id: 'cloud-elite-1month', name: 'Cloud Mining Elite (30 days)', tier: 'Cloud', category: 'Cloud Mining', baseHashrate: 500000, basePrice: 15.0, currency: 'TON', maxOwned: 100, orderIndex: 48 },
-      { id: 'cloud-enterprise-1month', name: 'Cloud Mining Enterprise (30 days)', tier: 'Cloud', category: 'Cloud Mining', baseHashrate: 1000000, basePrice: 30.0, currency: 'TON', maxOwned: 100, orderIndex: 49 },
-      { id: 'cloud-mega-1month', name: 'Cloud Mining Mega (30 days)', tier: 'Cloud', category: 'Cloud Mining', baseHashrate: 2500000, basePrice: 75.0, currency: 'TON', maxOwned: 100, orderIndex: 50 },
+      { id: 'cloud-starter-1month', name: 'Cloud Mining Starter (30 days)', tier: 'Cloud', category: 'Cloud Mining', baseHashrate: 33000, basePrice: 3.0, currency: 'TON', maxOwned: 100, orderIndex: 46 },
+      { id: 'cloud-pro-1month', name: 'Cloud Mining Pro (30 days)', tier: 'Cloud', category: 'Cloud Mining', baseHashrate: 83000, basePrice: 7.0, currency: 'TON', maxOwned: 100, orderIndex: 47 },
+      { id: 'cloud-elite-1month', name: 'Cloud Mining Elite (30 days)', tier: 'Cloud', category: 'Cloud Mining', baseHashrate: 166000, basePrice: 15.0, currency: 'TON', maxOwned: 100, orderIndex: 48 },
+      { id: 'cloud-enterprise-1month', name: 'Cloud Mining Enterprise (30 days)', tier: 'Cloud', category: 'Cloud Mining', baseHashrate: 333000, basePrice: 30.0, currency: 'TON', maxOwned: 100, orderIndex: 49 },
+      { id: 'cloud-mega-1month', name: 'Cloud Mining Mega (30 days)', tier: 'Cloud', category: 'Cloud Mining', baseHashrate: 833000, basePrice: 75.0, currency: 'TON', maxOwned: 100, orderIndex: 50 },
       
       // NEW: QUANTUM MINERS - Elite/Legendary tier - TON-only - Cap: 10/model/user (limited!)
       { id: 'quantum-ibm-q1', name: 'IBM Quantum System Q1', tier: 'Quantum', category: 'Quantum Miner', baseHashrate: 5000000, basePrice: 250.0, currency: 'TON', maxOwned: 10, orderIndex: 51 },
