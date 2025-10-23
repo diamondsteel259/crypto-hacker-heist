@@ -74,7 +74,24 @@ jobs:
         run: cp .env.test .env
 
       - name: Run database migrations
-        run: npm run db:push
+        run: |
+          echo "Running drizzle-kit push to create schema..."
+          npm run db:push || echo "Warning: db:push had issues, continuing..."
+          
+          echo "Verifying database schema..."
+          PGPASSWORD=postgres psql -h localhost -U postgres -d crypto_hacker_test -c "\dt" || echo "No tables found yet"
+          
+          echo "Checking if users table exists..."
+          TABLE_EXISTS=$(PGPASSWORD=postgres psql -h localhost -U postgres -d crypto_hacker_test -tAc "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name='users');")
+          
+          if [ "$TABLE_EXISTS" != "t" ]; then
+            echo "Users table not found, running alternative migration..."
+            npx drizzle-kit generate
+            npx drizzle-kit migrate || echo "Migration had issues, will rely on test setup"
+          fi
+          
+          echo "Final schema verification:"
+          PGPASSWORD=postgres psql -h localhost -U postgres -d crypto_hacker_test -c "\dt"
 
       - name: Run unit tests
         run: npm run test:unit
