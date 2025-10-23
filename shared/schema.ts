@@ -848,3 +848,15 @@ export type PromoCode = typeof promoCodes.$inferSelect;
 export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
 export type PromoCodeRedemption = typeof promoCodeRedemptions.$inferSelect;
 export type InsertPromoCodeRedemption = z.infer<typeof insertPromoCodeRedemptionSchema>;
+
+// Analytics schemas and types
+export const insertDailyAnalyticsSchema = createInsertSchema(dailyAnalytics).omit({ id: true, createdAt: true });
+export const insertUserSessionSchema = createInsertSchema(userSessions).omit({ id: true, startedAt: true });
+export const insertRetentionCohortSchema = createInsertSchema(retentionCohorts).omit({ id: true });
+
+export type DailyAnalytics = typeof dailyAnalytics.$inferSelect;
+export type InsertDailyAnalytics = z.infer<typeof insertDailyAnalyticsSchema>;
+export type UserSession = typeof userSessions.$inferSelect;
+export type InsertUserSession = z.infer<typeof insertUserSessionSchema>;
+export type RetentionCohort = typeof retentionCohorts.$inferSelect;
+export type InsertRetentionCohort = z.infer<typeof insertRetentionCohortSchema>;
