@@ -299,55 +299,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: Create flash sale
-  app.post("/api/admin/flash-sales", validateTelegramAuth, requireAdmin, async (req, res) => {
-    try {
-      const { flashSales } = await import("@shared/schema");
-      const { equipmentId, discountPercentage, durationHours } = req.body;
-
-      if (!equipmentId || !discountPercentage || !durationHours) {
-        return res.status(400).json({ error: "Missing required fields" });
-      }
-
-      if (discountPercentage < 10 || discountPercentage > 50) {
-        return res.status(400).json({ error: "Discount must be between 10% and 50%" });
-      }
-
-      const startTime = new Date();
-      const endTime = new Date(startTime.getTime() + durationHours * 60 * 60 * 1000);
-
-      const newSale = await db.insert(flashSales).values({
-        equipmentId,
-        discountPercentage,
-        startTime,
-        endTime,
-        isActive: true,
-      }).returning();
-
-      res.json(newSale[0]);
-    } catch (error: any) {
-      console.error("Create flash sale error:", error);
-      res.status(500).json({ error: "Failed to create flash sale" });
-    }
-  });
-
-  // Admin: End flash sale early
-  app.post("/api/admin/flash-sales/:saleId/end", validateTelegramAuth, requireAdmin, async (req, res) => {
-    try {
-      const { flashSales } = await import("@shared/schema");
-      const { saleId } = req.params;
-
-      await db.update(flashSales)
-        .set({ isActive: false })
-        .where(eq(flashSales.id, parseInt(saleId)));
-
-      res.json({ success: true });
-    } catch (error: any) {
-      console.error("End flash sale error:", error);
-      res.status(500).json({ error: "Failed to end flash sale" });
-    }
-  });
-
   app.get("/api/equipment-types/:category/:tier", async (req, res) => {
     const { category, tier } = req.params;
     const equipmentTypes = await storage.getEquipmentTypesByCategoryAndTier(category, tier);
@@ -969,7 +920,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin routes moved to admin.routes.ts
+  // Admin routes for flash sales moved to admin.routes.ts
 
   // ==========================================
   // STARTER/PRO/WHALE PACKS ROUTES
