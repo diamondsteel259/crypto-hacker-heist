@@ -39,9 +39,12 @@ export async function createTestUser(overrides?: Partial<TestUserData>): Promise
  */
 export async function authenticateTestUser(
   app: Application,
-  userData?: Partial<TestUserData>
+  userData?: Partial<TestUserData> | User
 ): Promise<{ user: User; request: any }> {
-  const user = await createTestUser(userData);
+  // If a full User object is passed (has 'id' property), use it directly
+  const user = (userData && 'id' in userData) 
+    ? userData as User
+    : await createTestUser(userData as Partial<TestUserData> | undefined);
   
   // Return request builder that adds auth header to each request
   const request = {
