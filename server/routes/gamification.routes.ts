@@ -114,7 +114,7 @@ export function registerGamificationRoutes(app: Express): void {
           // Record jackpot win
           await db.insert(jackpotWins).values({
             userId: telegramUser.id.toString(),
-            username: telegramUser.username || telegramUser.firstName || 'Player',
+            username: telegramUser.username || telegramUser.first_name || 'Player',
             walletAddress: userWalletAddress || null,
             amount: '1.0',
             paidOut: false,
