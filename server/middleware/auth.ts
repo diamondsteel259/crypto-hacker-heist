@@ -16,9 +16,10 @@ export interface AuthRequest extends Request {
 export function validateTelegramAuth(req: AuthRequest, res: Response, next: NextFunction) {
   // Test environment bypass
   if (process.env.NODE_ENV === 'test' && req.headers['x-test-user-id']) {
-    const testUserId = parseInt(req.headers['x-test-user-id'] as string);
+    const testUserId = req.headers['x-test-user-id'] as string;
+    // Don't parseInt - test users have string IDs
     req.telegramUser = {
-      id: testUserId,
+      id: testUserId as any, // Cast to any to accept string IDs in tests
       first_name: 'Test',
       username: 'testuser',
     };
