@@ -44,7 +44,7 @@ describe('User Endpoints', () => {
 
     it('should retrieve user by ID', async () => {
       const user = await createTestUser();
-      const { request } = await authenticateTestUser(app);
+      const { request } = await authenticateTestUser(app, user);  // Authenticate as the same user
 
       const response = await request.get(`/api/user/${user.id}`);
 
@@ -66,7 +66,7 @@ describe('User Endpoints', () => {
   describe('User Balance Operations', () => {
     it('should retrieve user balance', async () => {
       const user = await createTestUser({ csBalance: 50000, chstBalance: 500 });
-      const { request } = await authenticateTestUser(app);
+      const { request } = await authenticateTestUser(app, user);  // Authenticate as the same user
 
       const response = await request.get(`/api/user/${user.id}/balance`);
 
@@ -80,7 +80,7 @@ describe('User Endpoints', () => {
 
       await setUserBalance(user.id, 100000, 1000);
 
-      const { request } = await authenticateTestUser(app);
+      const { request } = await authenticateTestUser(app, user);  // Authenticate as the same user
       const response = await request.get(`/api/user/${user.id}/balance`);
 
       expect(response.status).toBe(200);
@@ -92,7 +92,7 @@ describe('User Endpoints', () => {
   describe('User Equipment', () => {
     it('should return empty array for user with no equipment', async () => {
       const user = await createTestUser();
-      const { request } = await authenticateTestUser(app);
+      const { request } = await authenticateTestUser(app, user);  // Authenticate as the same user
 
       const response = await request.get(`/api/user/${user.id}/equipment`);
 
@@ -105,7 +105,7 @@ describe('User Endpoints', () => {
   describe('User Network Stats', () => {
     it('should return network statistics', async () => {
       const user = await createTestUser({ totalHashrate: 100 });
-      const { request } = await authenticateTestUser(app);
+      const { request } = await authenticateTestUser(app, user);  // Authenticate as the same user
 
       const response = await request.get(`/api/user/${user.id}/network-stats`);
 
@@ -121,7 +121,8 @@ describe('User Endpoints', () => {
       const user2 = await createTestUser({ totalHashrate: 200 });
       const user3 = await createTestUser({ totalHashrate: 700 });
 
-      const { request } = await authenticateTestUser(app);
+      const { request } = await authenticateTestUser(app, user1);  // Authenticate as user1
+
       const response = await request.get(`/api/user/${user1.id}/network-stats`);
 
       expect(response.status).toBe(200);
@@ -134,7 +135,7 @@ describe('User Endpoints', () => {
   describe('User Ranking', () => {
     it('should return user rank', async () => {
       const user = await createTestUser();
-      const { request } = await authenticateTestUser(app);
+      const { request } = await authenticateTestUser(app, user);  // Authenticate as the same user
 
       const response = await request.get(`/api/user/${user.id}/rank`);
 
@@ -148,11 +149,14 @@ describe('User Endpoints', () => {
       const user2 = await createTestUser({ csBalance: 50000 });
       const user3 = await createTestUser({ csBalance: 100000 });
 
-      const { request } = await authenticateTestUser(app);
+      // Authenticate as each user to get their rank
+      const { request: request1 } = await authenticateTestUser(app, user1);
+      const { request: request2 } = await authenticateTestUser(app, user2);
+      const { request: request3 } = await authenticateTestUser(app, user3);
 
-      const rank1 = await request.get(`/api/user/${user1.id}/rank`);
-      const rank2 = await request.get(`/api/user/${user2.id}/rank`);
-      const rank3 = await request.get(`/api/user/${user3.id}/rank`);
+      const rank1 = await request1.get(`/api/user/${user1.id}/rank`);
+      const rank2 = await request2.get(`/api/user/${user2.id}/rank`);
+      const rank3 = await request3.get(`/api/user/${user3.id}/rank`);
 
       expect(rank3.body.rank).toBeLessThan(rank2.body.rank);
       expect(rank2.body.rank).toBeLessThan(rank1.body.rank);
@@ -162,7 +166,7 @@ describe('User Endpoints', () => {
   describe('Daily Login and Streaks', () => {
     it('should retrieve streak status', async () => {
       const user = await createTestUser();
-      const { request } = await authenticateTestUser(app);
+      const { request } = await authenticateTestUser(app, user);  // Authenticate as the same user
 
       const response = await request.get(`/api/user/${user.id}/streak`);
 
@@ -172,7 +176,7 @@ describe('User Endpoints', () => {
 
     it('should increment streak on check-in', async () => {
       const user = await createTestUser();
-      const api = apiRequest(app, user.id);
+      const api = await apiRequest(app, user.id);  // apiRequest already looks up the user
 
       const checkInResponse = await api.post(`/api/user/${user.id}/streak/checkin`).send({});
 
@@ -186,7 +190,7 @@ describe('User Endpoints', () => {
   describe('Daily Login Rewards', () => {
     it('should check daily login status', async () => {
       const user = await createTestUser();
-      const { request } = await authenticateTestUser(app);
+      const { request } = await authenticateTestUser(app, user);  // Authenticate as the same user
 
       const response = await request.get(`/api/user/${user.id}/daily-login/status`);
 
@@ -196,7 +200,7 @@ describe('User Endpoints', () => {
 
     it('should claim daily login reward', async () => {
       const user = await createTestUser();
-      const api = apiRequest(app, user.id);
+      const api = await apiRequest(app, user.id);  // apiRequest already looks up the user
 
       const claimResponse = await api.post(`/api/user/${user.id}/daily-login/claim`).send({});
 
@@ -211,7 +215,7 @@ describe('User Endpoints', () => {
 
     it('should prevent claiming twice in one day', async () => {
       const user = await createTestUser();
-      const api = apiRequest(app, user.id);
+      const api = await apiRequest(app, user.id);  // apiRequest already looks up the user
 
       const claim1 = await api.post(`/api/user/${user.id}/daily-login/claim`).send({});
 
@@ -227,7 +231,7 @@ describe('User Endpoints', () => {
   describe('Hourly Bonus', () => {
     it('should check hourly bonus status', async () => {
       const user = await createTestUser();
-      const { request } = await authenticateTestUser(app);
+      const { request } = await authenticateTestUser(app, user);  // Authenticate as the same user
 
       const response = await request.get(`/api/user/${user.id}/hourly-bonus/status`);
 
@@ -237,7 +241,7 @@ describe('User Endpoints', () => {
 
     it('should give random bonus between 500-2000', async () => {
       const user = await createTestUser();
-      const api = apiRequest(app, user.id);
+      const api = await apiRequest(app, user.id);  // apiRequest already looks up the user
 
       const initialBalance = user.csBalance;
       const claimResponse = await api.post(`/api/user/${user.id}/hourly-bonus/claim`).send({});
