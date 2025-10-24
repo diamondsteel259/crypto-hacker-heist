@@ -219,23 +219,29 @@ export async function waitFor(
 /**
  * Helper to make authenticated API requests
  */
-export function apiRequest(app: Application, userId: string) {
+export async function apiRequest(app: Application, userId: string) {
+  // Look up user to get their telegramId for the auth header
+  const user = await storage.getUser(userId);
+  if (!user) {
+    throw new Error(`User ${userId} not found for apiRequest`);
+  }
+
   return {
     get: (path: string) => 
       supertest(app)
         .get(path.replace(':userId', userId))
-        .set('x-test-user-id', userId),
+        .set('x-test-user-id', user.telegramId),
     post: (path: string) => 
       supertest(app)
         .post(path.replace(':userId', userId))
-        .set('x-test-user-id', userId),
+        .set('x-test-user-id', user.telegramId),
     put: (path: string) => 
       supertest(app)
         .put(path.replace(':userId', userId))
-        .set('x-test-user-id', userId),
+        .set('x-test-user-id', user.telegramId),
     delete: (path: string) => 
       supertest(app)
         .delete(path.replace(':userId', userId))
-        .set('x-test-user-id', userId),
+        .set('x-test-user-id', user.telegramId),
   };
 }
