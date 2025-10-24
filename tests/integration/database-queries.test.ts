@@ -8,7 +8,7 @@ import {
 } from '../helpers/api-helpers.js';
 import { resetTestDatabase, getTestDbConnection } from '../helpers/test-db.js';
 import { users, ownedEquipment, blocks, blockRewards, referrals, equipmentTypes } from '@shared/schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, desc } from 'drizzle-orm';
 import type { Application } from 'express';
 
 /**
@@ -121,21 +121,21 @@ describe('Database Query Verification', () => {
       const eqTypes = await db.select().from(equipmentTypes).limit(1);
 
       if (eqTypes.length > 0) {
-        // Insert owned equipment
+        // Insert owned equipment - use user.id, not user.telegramId
         await db.insert(ownedEquipment).values({
-          userId: user.telegramId,
+          userId: user.id,
           equipmentTypeId: eqTypes[0].id,
           quantity: 1,
           currentHashrate: eqTypes[0].baseHashrate,
           upgradeLevel: 0,
         });
 
-        // Join query
+        // Join query - query by user.id
         const owned = await db
           .select()
           .from(ownedEquipment)
           .leftJoin(equipmentTypes, eq(ownedEquipment.equipmentTypeId, equipmentTypes.id))
-          .where(eq(ownedEquipment.userId, user.telegramId));
+          .where(eq(ownedEquipment.userId, user.id));
 
         expect(owned).toHaveLength(1);
         expect(owned[0].equipment_types).toBeTruthy();
@@ -147,10 +147,10 @@ describe('Database Query Verification', () => {
       const user = await createTestUser();
       const eqTypes = await db.select().from(equipmentTypes).limit(3);
 
-      // Insert multiple equipment items
+      // Insert multiple equipment items - use user.id
       for (const eqType of eqTypes) {
         await db.insert(ownedEquipment).values({
-          userId: user.telegramId,
+          userId: user.id,
           equipmentTypeId: eqType.id,
           quantity: 1,
           currentHashrate: eqType.baseHashrate,
@@ -158,13 +158,13 @@ describe('Database Query Verification', () => {
         });
       }
 
-      // Calculate total hashrate
+      // Calculate total hashrate - query by user.id
       const result = await db
-        .select({ totalHashrate: sql<number>`SUM(${ownedEquipment.currentHashrate})` })
+        .select({ totalHashrate: sql<string>`SUM(${ownedEquipment.currentHashrate})` })
         .from(ownedEquipment)
-        .where(eq(ownedEquipment.userId, user.telegramId));
+        .where(eq(ownedEquipment.userId, user.id));
 
-      const calculatedHashrate = result[0]?.totalHashrate || 0;
+      const calculatedHashrate = parseFloat(result[0]?.totalHashrate || '0');
       expect(calculatedHashrate).toBeGreaterThan(0);
     });
   });
@@ -248,7 +248,7 @@ describe('Database Query Verification', () => {
       const recentBlocks = await db
         .select()
         .from(blocks)
-        .orderBy(sql`${blocks.minedAt} DESC`)
+        .orderBy(desc(blocks.minedAt))
         .limit(10);
       const duration = Date.now() - startTime;
 
@@ -279,17 +279,17 @@ describe('Database Query Verification', () => {
         });
       }
 
-      // Aggregate query
+      // Aggregate query - parse results to numbers
       const result = await db
         .select({
-          totalRewards: sql<number>`SUM(${blockRewards.reward})`,
-          blockCount: sql<number>`COUNT(*)`,
+          totalRewards: sql<string>`SUM(${blockRewards.reward})`,
+          blockCount: sql<string>`COUNT(*)`,
         })
         .from(blockRewards)
         .where(eq(blockRewards.userId, user.id));
 
-      expect(result[0].totalRewards).toBe(50000);
-      expect(result[0].blockCount).toBe(5);
+      expect(parseFloat(result[0].totalRewards)).toBe(50000);
+      expect(parseInt(result[0].blockCount)).toBe(5);
     });
   });
 
@@ -298,11 +298,11 @@ describe('Database Query Verification', () => {
       const referrer = await createTestUser({ telegramId: '111' });
       const referred = await createTestUser({ telegramId: '222' });
 
-      // Create referral
+      // Create referral - use refereeId and bonusEarned
       await db.insert(referrals).values({
         referrerId: referrer.id,
-        referredId: referred.id,
-        rewardGiven: true,
+        refereeId: referred.id,
+        bonusEarned: 1000,
       });
 
       // Query referrals
@@ -312,7 +312,7 @@ describe('Database Query Verification', () => {
         .where(eq(referrals.referrerId, referrer.id));
 
       expect(userReferrals).toHaveLength(1);
-      expect(userReferrals[0].referredId).toBe(referred.id);
+      expect(userReferrals[0].refereeId).toBe(referred.id);
     });
 
     it('should count referrals efficiently', async () => {
@@ -323,19 +323,19 @@ describe('Database Query Verification', () => {
         const referred = await createTestUser({ telegramId: `ref_${i}` });
         await db.insert(referrals).values({
           referrerId: referrer.id,
-          referredId: referred.id,
-          rewardGiven: true,
+          refereeId: referred.id,
+          bonusEarned: 1000,
         });
       }
 
       const startTime = Date.now();
       const result = await db
-        .select({ count: sql<number>`COUNT(*)` })
+        .select({ count: sql<string>`COUNT(*)` })
         .from(referrals)
         .where(eq(referrals.referrerId, referrer.id));
       const duration = Date.now() - startTime;
 
-      expect(result[0].count).toBe(10);
+      expect(parseInt(result[0].count)).toBe(10);
       expect(duration).toBeLessThan(100);
     });
   });
@@ -352,7 +352,7 @@ describe('Database Query Verification', () => {
       const leaderboard = await db
         .select()
         .from(users)
-        .orderBy(sql`${users.csBalance} DESC`)
+        .orderBy(desc(users.csBalance))
         .limit(10);
       const duration = Date.now() - startTime;
 
@@ -371,7 +371,7 @@ describe('Database Query Verification', () => {
         .select()
         .from(users)
         .where(sql`${users.totalHashrate} > 0`)
-        .orderBy(sql`${users.totalHashrate} DESC`)
+        .orderBy(desc(users.totalHashrate))
         .limit(10);
       const duration = Date.now() - startTime;
 
@@ -400,22 +400,22 @@ describe('Database Query Verification', () => {
       // Should complete in reasonable time
       expect(duration).toBeLessThan(2000);
 
-      // Verify count
+      // Verify count - parse to number
       const result = await db
-        .select({ count: sql<number>`COUNT(*)` })
+        .select({ count: sql<string>`COUNT(*)` })
         .from(users);
 
-      expect(result[0].count).toBeGreaterThanOrEqual(100);
+      expect(parseInt(result[0].count)).toBeGreaterThanOrEqual(100);
     });
 
     it('should handle complex joins without timeout', async () => {
       const user = await createTestUser();
       const eqTypes = await db.select().from(equipmentTypes).limit(5);
 
-      // Insert equipment
+      // Insert equipment - use user.id
       for (const eqType of eqTypes) {
         await db.insert(ownedEquipment).values({
-          userId: user.telegramId,
+          userId: user.id,
           equipmentTypeId: eqType.id,
           quantity: 1,
           currentHashrate: eqType.baseHashrate,
@@ -434,7 +434,7 @@ describe('Database Query Verification', () => {
           hashrate: ownedEquipment.currentHashrate,
         })
         .from(users)
-        .leftJoin(ownedEquipment, eq(users.telegramId, ownedEquipment.userId))
+        .leftJoin(ownedEquipment, eq(users.id, ownedEquipment.userId))
         .leftJoin(equipmentTypes, eq(ownedEquipment.equipmentTypeId, equipmentTypes.id))
         .where(eq(users.id, user.id));
 
