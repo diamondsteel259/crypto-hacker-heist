@@ -1367,9 +1367,10 @@ function validateTelegramWebAppData(initData, botToken) {
 // server/middleware/auth.ts
 function validateTelegramAuth(req, res, next) {
   if (process.env.NODE_ENV === "test" && req.headers["x-test-user-id"]) {
-    const testUserId = parseInt(req.headers["x-test-user-id"]);
+    const testUserId = req.headers["x-test-user-id"];
     req.telegramUser = {
       id: testUserId,
+      // Cast to any to accept string IDs in tests
       first_name: "Test",
       username: "testuser"
     };
