@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import { visualizer } from 'rollup-plugin-visualizer';
 
 export default defineConfig({
   plugins: [
@@ -27,7 +28,14 @@ export default defineConfig({
           ),
         ]
       : []),
-  ],
+    // Bundle analyzer for production builds
+    process.env.ANALYZE === 'true' ? visualizer({
+      filename: 'dist/public/stats.html',
+      open: true,
+      gzipSize: true,
+      brotliSize: true,
+    }) : null,
+  ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
@@ -39,6 +47,26 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split vendor chunks for better caching
+          vendor: ['react', 'react-dom'],
+          router: ['wouter'],
+          ui: ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-toast'],
+          query: ['@tanstack/react-query'],
+          ton: ['@ton/core', '@ton/ton'],
+          tonconnect: ['@tonconnect/ui-react'],
+          forms: ['react-hook-form', '@hookform/resolvers'],
+          utils: ['date-fns', 'clsx', 'tailwind-merge'],
+          icons: ['lucide-react', 'react-icons'],
+          charts: ['recharts'],
+        },
+      },
+    },
+    // Set bundle size limits
+    chunkSizeWarningLimit: 400, // Warn when chunks exceed 400KB
+    assetsInlineLimit: 4096, // Inline assets smaller than 4KB
   },
   server: {
     fs: {

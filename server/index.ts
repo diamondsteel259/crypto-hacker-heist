@@ -77,6 +77,38 @@ app.use((req, res, next) => {
 });
 
 // Health check endpoints (before other routes)
+app.get('/health', async (_req: Request, res: Response) => {
+  try {
+    const isDatabaseHealthy = await checkDatabaseHealth();
+    const uptime = process.uptime();
+    
+    if (isDatabaseHealthy) {
+      res.status(200).json({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        uptime: Math.floor(uptime),
+        database: 'connected' 
+      });
+    } else {
+      res.status(503).json({ 
+        status: 'degraded', 
+        timestamp: new Date().toISOString(),
+        uptime: Math.floor(uptime),
+        database: 'disconnected', 
+        message: 'Database connection failed' 
+      });
+    }
+  } catch (error) {
+    res.status(503).json({ 
+      status: 'degraded', 
+      timestamp: new Date().toISOString(),
+      uptime: Math.floor(process.uptime()),
+      database: 'error', 
+      message: 'Health check failed' 
+    });
+  }
+});
+
 app.get('/api/health', async (_req: Request, res: Response) => {
   try {
     const isDatabaseHealthy = await checkDatabaseHealth();
