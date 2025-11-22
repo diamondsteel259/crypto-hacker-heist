@@ -2,6 +2,58 @@
 
 A Telegram mini app game where players mine cryptocurrency blocks, collect equipment, and compete on leaderboards.
 
+## Architecture
+
+### Backend (Express + TypeScript + PostgreSQL)
+- **Modular Routing System**: All API routes are organized into dedicated modules under `server/routes/`
+- **Database**: PostgreSQL with Drizzle ORM for type-safe database operations
+- **Authentication**: Telegram WebApp integration with secure user verification
+- **TON Blockchain**: Full integration for TON payments and transaction verification
+- **Real-time Features**: Cron-driven mining cycles, analytics, and automated events
+- **Admin System**: Comprehensive admin panel for game management and analytics
+
+### Frontend (React + Vite + Tailwind)
+- **Modern Stack**: React 18 with Vite for fast development
+- **UI Components**: Tailwind CSS + shadcn/ui for consistent design
+- **State Management**: TanStack Query for server state management
+- **Routing**: Wouter for lightweight client-side routing
+- **Telegram Integration**: TonConnect UI for TON wallet connections
+
+### Route Structure
+
+The backend uses a modular routing system where each feature has its own route module:
+
+```
+server/routes/
+├── health.routes.ts          # Health checks and monitoring
+├── auth.routes.ts            # Authentication endpoints  
+├── user.routes.ts            # User profile management
+├── userManagement.routes.ts   # User operations (reset, etc.)
+├── admin.routes.ts           # Admin panel (18 routes)
+├── social.routes.ts          # Leaderboards, referrals, network stats
+├── mining.routes.ts          # Mining system
+├── equipment.routes.ts       # Equipment management
+├── statistics.routes.ts      # User statistics
+├── shop.routes.ts           # Equipment shop & purchases
+├── components.routes.ts     # Component upgrades
+├── blocks.routes.ts         # Block explorer & mining calendar
+├── packs.routes.ts          # Starter/pro/whale packs
+├── powerups.routes.ts       # Power-up purchases
+├── prestige.routes.ts       # Prestige system
+├── subscriptions.routes.ts   # Subscription management
+├── dailyLogin.routes.ts     # Daily login rewards
+├── announcements.routes.ts  # Game announcements
+├── promoCodes.routes.ts     # Promo code system
+├── analytics.routes.ts      # Analytics & metrics
+├── events.routes.ts         # Limited-time events
+├── economy.routes.ts        # Economy monitoring
+├── segmentation.routes.ts   # User segmentation
+├── gamification.routes.ts   # Gamification features
+└── api-aliases.ts          # Route compatibility layer
+```
+
+All routes are registered through `server/routes/index.ts` and the main `server/routes.ts` only contains the Telegram webhook handler and route registration.
+
 ## Environment Variables
 
 ### Backend (.env in root)
