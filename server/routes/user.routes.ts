@@ -1,8 +1,10 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { storage, db } from "../storage";
 import { users, ownedEquipment, blockRewards, referrals, userStreaks, dailyLoginRewards } from "@shared/schema";
 import { eq, sql, and } from "drizzle-orm";
 import { validateTelegramAuth, verifyUserAccess } from "../middleware/auth";
+import { asyncHandler, createSuccessResponse } from "../middleware/errorHandler";
+import { createNotFoundError, createValidationError } from "../errors/apiErrors";
 
 // Helper function to calculate daily login rewards based on streak day
 function calculateDailyLoginReward(streakDay: number): { cs: number; chst: number; item: string | null } {
@@ -27,27 +29,22 @@ function calculateDailyLoginReward(streakDay: number): { cs: number; chst: numbe
 
 export function registerUserRoutes(app: Express): void {
   // Get user profile
-  app.get("/api/user/:userId", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+  app.get("/api/user/:userId", validateTelegramAuth, verifyUserAccess, asyncHandler(async (req: Request, res: Response) => {
     const user = await storage.getUser(req.params.userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
-    res.json(user);
-  });
+    if (!user) throw createNotFoundError("User not found");
+    res.json(createSuccessResponse(user));
+  }));
 
   // Get user balance
-  app.get("/api/user/:userId/balance", validateTelegramAuth, verifyUserAccess, async (req, res) => {
-    try {
-      const user = await storage.getUser(req.params.userId);
-      if (!user) return res.status(404).json({ error: "User not found" });
-      
-      res.json({
-        csBalance: user.csBalance,
-        chstBalance: user.chstBalance,
-      });
-    } catch (error: any) {
-      console.error("Get balance error:", error);
-      res.status(500).json({ error: "Failed to fetch balance" });
-    }
-  });
+  app.get("/api/user/:userId/balance", validateTelegramAuth, verifyUserAccess, asyncHandler(async (req: Request, res: Response) => {
+    const user = await storage.getUser(req.params.userId);
+    if (!user) throw createNotFoundError("User not found");
+    
+    res.json(createSuccessResponse({
+      csBalance: user.csBalance,
+      chstBalance: user.chstBalance,
+    }));
+  }));
 
   // Get user rank (hashrate and balance) - returns simplified rank for compatibility
   app.get("/api/user/:userId/rank", validateTelegramAuth, verifyUserAccess, async (req, res) => {
@@ -85,11 +82,11 @@ export function registerUserRoutes(app: Express): void {
   });
 
   // Get user network stats
-  app.get("/api/user/:userId/network-stats", validateTelegramAuth, verifyUserAccess, async (req, res) => {
+  app.get("/api/user/:userId/network-stats", validateTelegramAuth, verifyUserAccess, asyncHandler(async (req: Request, res: Response) => {
     try {
       const { userId } = req.params;
       const user = await storage.getUser(userId);
-      if (!user) return res.status(404).json({ error: "User not found" });
+      if (!user) throw createNotFoundError("User not found");
 
       // Get total network hashrate
       const networkHashrateResult = await db.select({ 
@@ -100,14 +97,14 @@ export function registerUserRoutes(app: Express): void {
       const userHashrate = user.totalHashrate || 0;
       const networkShare = networkHashrate > 0 ? userHashrate / networkHashrate : 0;
 
-      res.json({
+      res.json(createSuccessResponse({
         userHashrate,
         networkHashrate,
         networkShare,
-      });
+      }));
     } catch (error: any) {
       console.error("Network stats error:", error);
-      res.status(500).json({ error: "Failed to fetch network stats" });
+      throw error; // Let error handler handle it
     }
   });
 

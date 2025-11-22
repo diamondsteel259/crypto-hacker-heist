@@ -1,6 +1,8 @@
 import { storage, db } from "./storage";
 import { blocks, blockRewards, users, activePowerUps, ownedEquipment, equipmentTypes } from "@shared/schema";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql, and, inArray, sum } from "drizzle-orm";
+import { createMiningPausedError, createDatabaseError } from "./errors/apiErrors";
+import { measurePerformance, DatabasePerformanceMonitor } from "./utils/performance";
 
 const BLOCK_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const BLOCK_REWARD = 100000; // 100K CS (Phase 1: Months 1-6)
@@ -47,38 +49,55 @@ export class MiningService {
 
   async recalculateAllHashrates() {
     console.log("Recalculating all user hashrates from equipment...");
+    
     try {
-      const result = await db.transaction(async (tx: any) => {
-        const allUsers = await tx.select().from(users);
-        let usersUpdated = 0;
+      const result = await DatabasePerformanceMonitor.measureQuery('recalculateHashrates', async () => {
+        return db.transaction(async (tx: any) => {
+        // Batch 1: Get all users and their equipment hashrates in a single query
+        const userHashrates = await tx
+          .select({
+            telegramId: users.telegramId,
+            totalHashrate: sql<number>`COALESCE(SUM(${ownedEquipment.currentHashrate}), 0)`.as('totalHashrate'),
+            currentTotalHashrate: users.totalHashrate,
+          })
+          .from(users)
+          .leftJoin(ownedEquipment, eq(users.telegramId, ownedEquipment.userId))
+          .groupBy(users.telegramId, users.totalHashrate);
 
-        for (const user of allUsers) {
-          // Get user's equipment
-          const equipment = await tx.select()
-            .from(ownedEquipment)
-            .leftJoin(equipmentTypes, eq(ownedEquipment.equipmentTypeId, equipmentTypes.id))
-            .where(eq(ownedEquipment.userId, user.telegramId));
+        // Batch 2: Filter users who need updates and update them in bulk
+        const usersToUpdate = userHashrates.filter(
+          (user: any) => user.currentTotalHashrate !== user.totalHashrate
+        );
 
-          // Calculate total hashrate from equipment
-          const actualHashrate = equipment.reduce((sum: number, row: any) => {
-            return sum + (row.owned_equipment?.currentHashrate || 0);
-          }, 0);
-
-          // Update if there's a mismatch
-          if (user.totalHashrate !== actualHashrate) {
-            await tx.update(users)
-              .set({ totalHashrate: actualHashrate })
-              .where(eq(users.telegramId, user.telegramId));
-            usersUpdated++;
-          }
+        if (usersToUpdate.length === 0) {
+          return { totalUsers: userHashrates.length, usersUpdated: 0 };
         }
 
-        return { totalUsers: allUsers.length, usersUpdated };
+        // Batch 3: Update all users in a single operation using CASE statement
+        const updateCases = usersToUpdate
+          .map((user: any) => `WHEN ${user.telegramId} THEN ${user.totalHashrate}`)
+          .join(' ');
+
+        await tx.execute(sql`
+          UPDATE users 
+          SET totalHashrate = CASE telegramId ${updateCases} END
+          WHERE telegramId IN (${usersToUpdate.map((u: any) => u.telegramId).join(',')})
+        `);
+
+        return { 
+          totalUsers: userHashrates.length, 
+          usersUpdated: usersToUpdate.length 
+        };
+        });
       });
 
       console.log(`Hashrate recalculation complete: ${result.usersUpdated}/${result.totalUsers} users updated`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Hashrate recalculation error:", error);
+      throw createDatabaseError("Failed to recalculate user hashrates", {
+        operation: "recalculateAllHashrates",
+        originalError: error.message,
+      });
     }
   }
 
@@ -108,89 +127,101 @@ export class MiningService {
       const blockNumber = this.lastBlockNumber + 1;
       console.log(`Mining block #${blockNumber}...`);
 
-      const allUsers = await storage.getAllUsers();
-      const activeMiners = allUsers.filter(user => user.totalHashrate > 0);
-      
-      console.log(`Total users: ${allUsers.length}, Active miners: ${activeMiners.length}`);
+      // Batch 1: Get active miners and their power-ups in a single query
+      const now = new Date();
+      const activeMinerData = await DatabasePerformanceMonitor.measureQuery('getActiveMiners', async () => {
+        return db
+          .select({
+            user: users,
+            hashrateBoost: sql<number>`COALESCE(SUM(CASE WHEN ${activePowerUps.powerUpType} = 'hashrate-boost' THEN ${activePowerUps.boostPercentage} ELSE 0 END), 0)`.as('hashrateBoost'),
+            luckBoost: sql<number>`COALESCE(SUM(CASE WHEN ${activePowerUps.powerUpType} = 'luck-boost' THEN ${activePowerUps.boostPercentage} ELSE 0 END), 0)`.as('luckBoost'),
+          })
+          .from(users)
+          .leftJoin(activePowerUps, and(
+            eq(users.telegramId, activePowerUps.userId),
+            eq(activePowerUps.isActive, true),
+            sql`${activePowerUps.expiresAt} > ${now}`
+          ))
+          .where(sql`${users.totalHashrate} > 0`)
+          .groupBy(users.id, users.telegramId, users.totalHashrate);
+      });
 
-      if (activeMiners.length === 0) {
+      if (activeMinerData.length === 0) {
         console.log(`Block #${blockNumber} skipped - no active miners.`);
         return;
       }
 
-      // Get active power-ups for all users
-      const now = new Date();
-      const allActivePowerUps = await db.select().from(activePowerUps)
-        .where(and(
-          eq(activePowerUps.isActive, true),
-          sql`${activePowerUps.expiresAt} > ${now}`
-        ));
+      console.log(`Active miners: ${activeMinerData.length}`);
 
-      // Create a map of user power-ups for fast lookup
-      const userPowerUps = new Map<string, { hashrateBoost: number; luckBoost: number }>();
-      
-      for (const powerUp of allActivePowerUps) {
-        const existing = userPowerUps.get(powerUp.userId) || { hashrateBoost: 0, luckBoost: 0 };
-        
-        if (powerUp.powerUpType === 'hashrate-boost') {
-          existing.hashrateBoost += powerUp.boostPercentage;
-        } else if (powerUp.powerUpType === 'luck-boost') {
-          existing.luckBoost += powerUp.boostPercentage;
-        }
-        
-        userPowerUps.set(powerUp.userId, existing);
-      }
-
-      // Calculate boosted hashrates for network total
+      // Batch 2: Calculate boosted hashrates and rewards
       let totalNetworkHashrate = 0;
-      const minerData = activeMiners.map(user => {
-        const boosts = userPowerUps.get(user.telegramId || '') || { hashrateBoost: 0, luckBoost: 0 };
-        const boostedHashrate = user.totalHashrate * (1 + boosts.hashrateBoost / 100);
+      const minerRewards = activeMinerData.map(({ user, hashrateBoost, luckBoost }) => {
+        const boostedHashrate = user.totalHashrate * (1 + hashrateBoost / 100);
         totalNetworkHashrate += boostedHashrate;
         
         return {
-          user,
+          userId: user.id,
+          telegramId: user.telegramId,
           boostedHashrate,
-          luckBoost: boosts.luckBoost,
+          luckBoost,
         };
       });
 
-      await db.transaction(async (tx: any) => {
+      // Calculate rewards and prepare bulk insert data
+      const rewardsToInsert = minerRewards.map(miner => {
+        const userShare = totalNetworkHashrate > 0 ? miner.boostedHashrate / totalNetworkHashrate : 0;
+        let userReward = BLOCK_REWARD * userShare;
+        
+        // Apply luck boost to reward
+        if (miner.luckBoost > 0) {
+          userReward = userReward * (1 + miner.luckBoost / 100);
+        }
+        
+        const sharePercent = userShare * 100;
+
+        return {
+          userId: miner.userId,
+          reward: userReward,
+          hashrate: miner.boostedHashrate,
+          sharePercent,
+        };
+      });
+
+      // Batch 3: Execute all operations in a single transaction
+      await DatabasePerformanceMonitor.measureQuery('mineBlockTransaction', async () => {
+        return db.transaction(async (tx: any) => {
+        // Insert the block
         const newBlock = await tx.insert(blocks).values({
           blockNumber,
           reward: BLOCK_REWARD,
           totalHashrate: totalNetworkHashrate,
-          totalMiners: activeMiners.length,
+          totalMiners: activeMinerData.length,
           difficulty: 1,
         }).returning();
 
         const blockId = newBlock[0].id;
 
-        for (const { user, boostedHashrate, luckBoost } of minerData) {
-          const userShare = boostedHashrate / totalNetworkHashrate;
-          let userReward = BLOCK_REWARD * userShare;
-          
-          // Apply luck boost to reward
-          if (luckBoost > 0) {
-            userReward = userReward * (1 + luckBoost / 100);
-          }
-          
-          const sharePercent = userShare * 100;
+        // Bulk insert all rewards
+        const rewardInserts = rewardsToInsert.map(reward => ({
+          userId: reward.userId,
+          blockId,
+          reward: reward.reward,
+          hashrate: reward.hashrate,
+          sharePercent: reward.sharePercent,
+        }));
 
-          await tx.insert(blockRewards).values({
-            userId: user.id,
-            blockId,
-            reward: userReward,
-            hashrate: boostedHashrate,
-            sharePercent,
-          });
+        await tx.insert(blockRewards).values(rewardInserts);
 
-          await tx.update(users)
-            .set({ 
-              csBalance: sql`${users.csBalance} + ${userReward}` 
-            })
-            .where(eq(users.id, user.id));
-        }
+        // Bulk update user balances using CASE statement for better performance
+        const balanceUpdateCases = rewardsToInsert
+          .map(reward => `WHEN ${reward.userId} THEN ${users.csBalance} + ${reward.reward}`)
+          .join(' ');
+
+        await tx.execute(sql`
+          UPDATE users 
+          SET csBalance = CASE id ${balanceUpdateCases} END
+          WHERE id IN (${rewardsToInsert.map(r => r.userId).join(',')})
+        `);
 
         // Auto-expire power-ups that have expired
         await tx.update(activePowerUps)
@@ -201,8 +232,9 @@ export class MiningService {
           ));
 
         console.log(
-          `Block #${blockNumber} mined! Reward: ${BLOCK_REWARD} CS distributed to ${activeMiners.length} miners. Total hashrate: ${totalNetworkHashrate.toFixed(2)} H/s (with boosts)`
+          `Block #${blockNumber} mined! Reward: ${BLOCK_REWARD} CS distributed to ${activeMinerData.length} miners. Total hashrate: ${totalNetworkHashrate.toFixed(2)} H/s (with boosts)`
         );
+        });
       });
 
       this.lastBlockNumber = blockNumber;
@@ -221,7 +253,15 @@ export class MiningService {
         // TODO: Send alert (email, Slack, monitoring service)
       }
       
-      throw error;
+      if (error.message?.includes('mining_paused')) {
+        throw createMiningPausedError();
+      }
+      
+      throw createDatabaseError("Failed to mine block", {
+        blockNumber: this.lastBlockNumber + 1,
+        operation: "mineBlock",
+        originalError: error.message,
+      });
     } finally {
       if (this.miningTimeoutId) {
         clearTimeout(this.miningTimeoutId);
