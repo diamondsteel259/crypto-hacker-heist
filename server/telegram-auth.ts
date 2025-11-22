@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { logger } from './logger';
 
 export interface TelegramUser {
   id: number;
@@ -62,7 +63,7 @@ export function validateTelegramWebAppData(
       hash,
     };
   } catch (error) {
-    console.error('Telegram auth validation error:', error);
+    logger.error('Telegram auth validation error', error);
     return null;
   }
 }

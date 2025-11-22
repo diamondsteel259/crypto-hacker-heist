@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { db } from "../storage";
 import { promoCodes, insertPromoCodeSchema } from "@shared/schema";
@@ -70,7 +71,7 @@ export function registerPromoCodeRoutes(app: Express): void {
         promoCode: newPromoCode,
       });
     } catch (error: any) {
-      console.error("Create promo code error:", error);
+      logger.error("Create promo code error:", error);
       res.status(500).json({ error: error.message || "Failed to create promo code" });
     }
   });
@@ -82,7 +83,7 @@ export function registerPromoCodeRoutes(app: Express): void {
       const codes = await getAllPromoCodes(limit);
       res.json(codes);
     } catch (error: any) {
-      console.error("Get promo codes error:", error);
+      logger.error("Get promo codes error:", error);
       res.status(500).json({ error: "Failed to fetch promo codes" });
     }
   });
@@ -118,7 +119,7 @@ export function registerPromoCodeRoutes(app: Express): void {
 
       res.json(updated);
     } catch (error: any) {
-      console.error("Update promo code error:", error);
+      logger.error("Update promo code error:", error);
       res.status(500).json({ error: "Failed to update promo code" });
     }
   });
@@ -135,7 +136,7 @@ export function registerPromoCodeRoutes(app: Express): void {
 
       res.json({ success: true, message: "Promo code deactivated" });
     } catch (error: any) {
-      console.error("Deactivate promo code error:", error);
+      logger.error("Deactivate promo code error:", error);
       res.status(500).json({ error: "Failed to deactivate promo code" });
     }
   });
@@ -147,7 +148,7 @@ export function registerPromoCodeRoutes(app: Express): void {
       const redemptions = await getPromoCodeRedemptions(promoCodeId);
       res.json(redemptions);
     } catch (error: any) {
-      console.error("Get redemptions error:", error);
+      logger.error("Get redemptions error:", error);
       res.status(500).json({ error: "Failed to fetch redemptions" });
     }
   });
@@ -168,7 +169,7 @@ export function registerPromoCodeRoutes(app: Express): void {
       const validation = await validatePromoCode(code, req.telegramUser.id.toString());
       res.json(validation);
     } catch (error: any) {
-      console.error("Validate promo code error:", error);
+      logger.error("Validate promo code error:", error);
       res.status(500).json({ error: "Failed to validate promo code" });
     }
   });
@@ -205,7 +206,7 @@ export function registerPromoCodeRoutes(app: Express): void {
         reward: result.reward,
       });
     } catch (error: any) {
-      console.error("Redeem promo code error:", error);
+      logger.error("Redeem promo code error:", error);
       res.status(500).json({ error: error.message || "Failed to redeem promo code" });
     }
   });

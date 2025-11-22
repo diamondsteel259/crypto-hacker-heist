@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { storage, db } from "../storage";
 import { users, referrals } from "@shared/schema";
@@ -22,7 +23,7 @@ export function registerSocialRoutes(app: Express): void {
 
       res.json(topMiners);
     } catch (error: any) {
-      console.error("Leaderboard hashrate error:", error);
+      logger.error("Leaderboard hashrate error:", error);
       res.status(500).json({ error: "Failed to fetch leaderboard" });
     }
   });
@@ -44,7 +45,7 @@ export function registerSocialRoutes(app: Express): void {
 
       res.json(topBalances);
     } catch (error: any) {
-      console.error("Leaderboard balance error:", error);
+      logger.error("Leaderboard balance error:", error);
       res.status(500).json({ error: "Failed to fetch leaderboard" });
     }
   });
@@ -68,7 +69,7 @@ export function registerSocialRoutes(app: Express): void {
 
       res.json(topReferrers);
     } catch (error: any) {
-      console.error("Leaderboard referrals error:", error);
+      logger.error("Leaderboard referrals error:", error);
       res.status(500).json({ error: "Failed to fetch referral leaderboard" });
     }
   });

@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { getMiningHealth } from "../mining";
 
@@ -15,7 +16,7 @@ export function registerHealthRoutes(app: Express): void {
         timestamp: new Date().toISOString(),
       });
     } catch (error: any) {
-      console.error("Health check error:", error);
+      logger.error("Health check error:", error);
       res.status(500).json({
         ok: false,
         error: "Health check failed",
@@ -36,7 +37,7 @@ export function registerHealthRoutes(app: Express): void {
         ...miningHealth,
       });
     } catch (error: any) {
-      console.error("Mining health check error:", error);
+      logger.error("Mining health check error:", error);
       res.status(500).json({
         ok: false,
         error: "Mining health check failed",

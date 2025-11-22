@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { db } from "../storage";
 import { segmentTargetedOffers, insertSegmentTargetedOfferSchema } from "@shared/schema";
@@ -20,7 +21,7 @@ export function registerSegmentationRoutes(app: Express): void {
       const overview = await getSegmentOverview();
       res.json(overview);
     } catch (error: any) {
-      console.error("Get segment overview error:", error);
+      logger.error("Get segment overview error:", error);
       res.status(500).json({ error: "Failed to fetch segment overview" });
     }
   });
@@ -38,7 +39,7 @@ export function registerSegmentationRoutes(app: Express): void {
       const users = await getUsersInSegment(segment);
       res.json(users);
     } catch (error: any) {
-      console.error("Get users in segment error:", error);
+      logger.error("Get users in segment error:", error);
       res.status(500).json({ error: "Failed to fetch users in segment" });
     }
   });
@@ -48,7 +49,7 @@ export function registerSegmentationRoutes(app: Express): void {
     try {
       // Run in background (don't wait)
       refreshAllSegments().catch(error => {
-        console.error("Background segment refresh error:", error);
+        logger.error("Background segment refresh error:", error);
       });
 
       res.json({
@@ -56,7 +57,7 @@ export function registerSegmentationRoutes(app: Express): void {
         message: "Segment refresh started in background",
       });
     } catch (error: any) {
-      console.error("Refresh segments error:", error);
+      logger.error("Refresh segments error:", error);
       res.status(500).json({ error: "Failed to trigger segment refresh" });
     }
   });
@@ -111,7 +112,7 @@ export function registerSegmentationRoutes(app: Express): void {
         offer: newOffer,
       });
     } catch (error: any) {
-      console.error("Create targeted offer error:", error);
+      logger.error("Create targeted offer error:", error);
       res.status(500).json({ error: error.message || "Failed to create targeted offer" });
     }
   });
@@ -122,7 +123,7 @@ export function registerSegmentationRoutes(app: Express): void {
       const offers = await getAllTargetedOffers();
       res.json(offers);
     } catch (error: any) {
-      console.error("Get targeted offers error:", error);
+      logger.error("Get targeted offers error:", error);
       res.status(500).json({ error: "Failed to fetch targeted offers" });
     }
   });
@@ -166,7 +167,7 @@ export function registerSegmentationRoutes(app: Express): void {
 
       res.json(updated);
     } catch (error: any) {
-      console.error("Update targeted offer error:", error);
+      logger.error("Update targeted offer error:", error);
       res.status(500).json({ error: "Failed to update targeted offer" });
     }
   });
@@ -181,7 +182,7 @@ export function registerSegmentationRoutes(app: Express): void {
 
       res.json({ success: true, message: "Offer deleted" });
     } catch (error: any) {
-      console.error("Delete targeted offer error:", error);
+      logger.error("Delete targeted offer error:", error);
       res.status(500).json({ error: "Failed to delete targeted offer" });
     }
   });
@@ -191,7 +192,7 @@ export function registerSegmentationRoutes(app: Express): void {
     try {
       // Run in background
       sendReEngagementMessages().catch(error => {
-        console.error("Background re-engagement send error:", error);
+        logger.error("Background re-engagement send error:", error);
       });
 
       res.json({
@@ -199,7 +200,7 @@ export function registerSegmentationRoutes(app: Express): void {
         message: "Re-engagement messages being sent in background",
       });
     } catch (error: any) {
-      console.error("Send re-engagement error:", error);
+      logger.error("Send re-engagement error:", error);
       res.status(500).json({ error: "Failed to send re-engagement messages" });
     }
   });
@@ -209,7 +210,7 @@ export function registerSegmentationRoutes(app: Express): void {
     try {
       // Run in background
       sendChurnedMessages().catch(error => {
-        console.error("Background churned send error:", error);
+        logger.error("Background churned send error:", error);
       });
 
       res.json({
@@ -217,7 +218,7 @@ export function registerSegmentationRoutes(app: Express): void {
         message: "Churned user messages being sent in background",
       });
     } catch (error: any) {
-      console.error("Send churned messages error:", error);
+      logger.error("Send churned messages error:", error);
       res.status(500).json({ error: "Failed to send churned messages" });
     }
   });
@@ -232,7 +233,7 @@ export function registerSegmentationRoutes(app: Express): void {
       const offers = await getTargetedOffersForUser(req.telegramUser.id.toString());
       res.json(offers);
     } catch (error: any) {
-      console.error("Get my targeted offers error:", error);
+      logger.error("Get my targeted offers error:", error);
       res.status(500).json({ error: "Failed to fetch targeted offers" });
     }
   });

@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { storage, db } from "../storage";
 import { insertOwnedEquipmentSchema } from "@shared/schema";
@@ -12,7 +13,7 @@ export function registerEquipmentRoutes(app: Express) {
       const equipment = await storage.getAllEquipmentTypes();
       res.json(equipment);
     } catch (error) {
-      console.error("Error loading equipment types:", error);
+      logger.error("Error loading equipment types:", error);
       res.status(500).json({ error: "Failed to load equipment types" });
     }
   });

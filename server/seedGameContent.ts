@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { dailyChallenges, achievements, cosmeticItems } from "@shared/schema";
+import { logger } from "./logger";
 
 // Daily Challenges Data
 export const dailyChallengesData = [
@@ -342,11 +343,11 @@ export const cosmeticItemsData = [
 ];
 
 export async function seedGameContent() {
-  console.log("🎮 Seeding game content...");
+  logger.info("Seeding game content");
 
   try {
     // Seed daily challenges
-    console.log("📅 Seeding daily challenges...");
+    logger.info("Seeding daily challenges");
     for (const challenge of dailyChallengesData) {
       await db.insert(dailyChallenges)
         .values(challenge)
@@ -355,10 +356,10 @@ export async function seedGameContent() {
           set: challenge,
         });
     }
-    console.log(`✅ Seeded ${dailyChallengesData.length} daily challenges`);
+    logger.info("Daily challenges seeded", { count: dailyChallengesData.length });
 
     // Seed achievements
-    console.log("🏆 Seeding achievements...");
+    logger.info("Seeding achievements");
     for (const achievement of achievementsData) {
       await db.insert(achievements)
         .values(achievement)
@@ -367,10 +368,10 @@ export async function seedGameContent() {
           set: achievement,
         });
     }
-    console.log(`✅ Seeded ${achievementsData.length} achievements`);
+    logger.info("Achievements seeded", { count: achievementsData.length });
 
     // Seed cosmetic items
-    console.log("🎨 Seeding cosmetic items...");
+    logger.info("Seeding cosmetic items");
     for (const cosmetic of cosmeticItemsData) {
       await db.insert(cosmeticItems)
         .values(cosmetic)
@@ -379,11 +380,11 @@ export async function seedGameContent() {
           set: cosmetic,
         });
     }
-    console.log(`✅ Seeded ${cosmeticItemsData.length} cosmetic items`);
+    logger.info("Cosmetic items seeded", { count: cosmeticItemsData.length });
 
-    console.log("✨ Game content seeding complete!");
+    logger.info("Game content seeding complete");
   } catch (error) {
-    console.error("❌ Error seeding game content:", error);
+    logger.error("Error seeding game content", error);
     throw error;
   }
 }

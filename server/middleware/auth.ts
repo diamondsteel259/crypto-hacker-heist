@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { validateTelegramWebAppData } from '../telegram-auth';
 import type { User } from '@shared/schema';
+import { logger } from '../logger';
 
 export interface AuthRequest extends Request {
   telegramUser?: {
@@ -30,7 +31,7 @@ export function validateTelegramAuth(req: AuthRequest, res: Response, next: Next
   const botToken = process.env.BOT_TOKEN;
 
   if (!botToken) {
-    console.error('BOT_TOKEN not configured');
+    logger.error('BOT_TOKEN not configured');
     return res.status(500).json({ error: 'Server configuration error' });
   }
 

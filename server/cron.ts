@@ -3,6 +3,7 @@ import { generateDailyReport, updateRetentionCohorts } from "./services/analytic
 import { processScheduledEvents } from "./services/events";
 import { calculateDailyEconomyMetrics, calculateEconomySinks } from "./services/economy";
 import { refreshAllSegments, sendReEngagementMessages } from "./services/segmentation";
+import { logger } from "./logger";
 
 /**
  * Cron job scheduler for background tasks
@@ -23,14 +24,14 @@ let reEngagementInterval: NodeJS.Timeout | null = null;
  * Start all cron jobs
  */
 export function startCronJobs(): void {
-  console.log("⏰ Starting cron jobs...");
+  logger.info("Starting cron jobs");
 
   // Check for scheduled announcements every minute
   announcementInterval = setInterval(async () => {
     try {
       await processScheduledAnnouncements();
     } catch (error) {
-      console.error("Announcement cron error:", error);
+      logger.error("Announcement cron error", error);
     }
   }, 60 * 1000); // Every 1 minute
 
@@ -39,7 +40,7 @@ export function startCronJobs(): void {
     try {
       await processScheduledEvents();
     } catch (error) {
-      console.error("Event scheduler cron error:", error);
+      logger.error("Event scheduler cron error", error);
     }
   }, 60 * 1000); // Every 1 minute
 
@@ -53,12 +54,12 @@ export function startCronJobs(): void {
         const yesterday = new Date(now);
         yesterday.setDate(yesterday.getDate() - 1);
         
-        console.log(`📊 Generating daily analytics report for ${yesterday.toISOString().split('T')[0]}...`);
+        logger.info("Generating daily analytics report", { date: yesterday.toISOString().split('T')[0] });
         await generateDailyReport(yesterday);
-        console.log("✅ Daily analytics report generated");
+        logger.info("Daily analytics report generated");
       }
     } catch (error) {
-      console.error("Daily analytics cron error:", error);
+      logger.error("Daily analytics cron error", error);
     }
   }, 60 * 60 * 1000); // Every 1 hour
 
@@ -69,12 +70,12 @@ export function startCronJobs(): void {
       
       // Check if it's 1am UTC
       if (now.getUTCHours() === 1 && now.getUTCMinutes() < 60) {
-        console.log("📊 Updating retention cohorts...");
+        logger.info("Updating retention cohorts");
         await updateRetentionCohorts();
-        console.log("✅ Retention cohorts updated");
+        logger.info("Retention cohorts updated");
       }
     } catch (error) {
-      console.error("Retention cohorts cron error:", error);
+      logger.error("Retention cohorts cron error", error);
     }
   }, 60 * 60 * 1000); // Every 1 hour
 
@@ -88,12 +89,12 @@ export function startCronJobs(): void {
         const yesterday = new Date(now);
         yesterday.setDate(yesterday.getDate() - 1);
         
-        console.log(`💰 Calculating economy metrics for ${yesterday.toISOString().split('T')[0]}...`);
+        logger.info("Calculating economy metrics", { date: yesterday.toISOString().split('T')[0] });
         await calculateDailyEconomyMetrics(yesterday);
-        console.log("✅ Economy metrics calculated");
+        logger.info("Economy metrics calculated");
       }
     } catch (error) {
-      console.error("Economy metrics cron error:", error);
+      logger.error("Economy metrics cron error", error);
     }
   }, 60 * 60 * 1000); // Every 1 hour
 
@@ -107,12 +108,12 @@ export function startCronJobs(): void {
         const yesterday = new Date(now);
         yesterday.setDate(yesterday.getDate() - 1);
         
-        console.log(`💰 Calculating economy sinks for ${yesterday.toISOString().split('T')[0]}...`);
+        logger.info("Calculating economy sinks", { date: yesterday.toISOString().split('T')[0] });
         await calculateEconomySinks(yesterday);
-        console.log("✅ Economy sinks calculated");
+        logger.info("Economy sinks calculated");
       }
     } catch (error) {
-      console.error("Economy sinks cron error:", error);
+      logger.error("Economy sinks cron error", error);
     }
   }, 60 * 60 * 1000); // Every 1 hour
 
@@ -123,12 +124,12 @@ export function startCronJobs(): void {
       
       // Check if it's 4am UTC
       if (now.getUTCHours() === 4 && now.getUTCMinutes() < 60) {
-        console.log("👥 Refreshing user segments...");
+        logger.info("Refreshing user segments");
         await refreshAllSegments();
-        console.log("✅ User segments refreshed");
+        logger.info("User segments refreshed");
       }
     } catch (error) {
-      console.error("Segment refresh cron error:", error);
+      logger.error("Segment refresh cron error", error);
     }
   }, 60 * 60 * 1000); // Every 1 hour
 
@@ -139,12 +140,12 @@ export function startCronJobs(): void {
       
       // Check if it's 5am UTC
       if (now.getUTCHours() === 5 && now.getUTCMinutes() < 60) {
-        console.log("📧 Sending re-engagement messages...");
+        logger.info("Sending re-engagement messages");
         await sendReEngagementMessages();
-        console.log("✅ Re-engagement messages sent");
+        logger.info("Re-engagement messages sent");
       }
     } catch (error) {
-      console.error("Re-engagement cron error:", error);
+      logger.error("Re-engagement cron error", error);
     }
   }, 60 * 60 * 1000); // Every 1 hour
 
@@ -152,31 +153,34 @@ export function startCronJobs(): void {
   hourlyDauInterval = setInterval(async () => {
     try {
       const today = new Date();
-      console.log("📊 Updating today's analytics...");
+      logger.info("Updating today's analytics");
       await generateDailyReport(today);
-      console.log("✅ Today's analytics updated");
+      logger.info("Today's analytics updated");
     } catch (error) {
-      console.error("Hourly DAU cron error:", error);
+      logger.error("Hourly DAU cron error", error);
     }
   }, 60 * 60 * 1000); // Every 1 hour
 
-  console.log("✅ Cron jobs started:");
-  console.log("  - Scheduled announcements: Every 1 minute");
-  console.log("  - Event scheduler: Every 1 minute");
-  console.log("  - Daily analytics report: Daily at midnight UTC");
-  console.log("  - Retention cohorts: Daily at 1am UTC");
-  console.log("  - Economy metrics: Daily at 2am UTC");
-  console.log("  - Economy sinks: Daily at 2:30am UTC");
-  console.log("  - User segment refresh: Daily at 4am UTC");
-  console.log("  - Re-engagement messages: Daily at 5am UTC");
-  console.log("  - Hourly DAU update: Every hour");
+  logger.info("Cron jobs started", {
+    jobs: [
+      "Scheduled announcements: Every 1 minute",
+      "Event scheduler: Every 1 minute",
+      "Daily analytics report: Daily at midnight UTC",
+      "Retention cohorts: Daily at 1am UTC",
+      "Economy metrics: Daily at 2am UTC",
+      "Economy sinks: Daily at 2:30am UTC",
+      "User segment refresh: Daily at 4am UTC",
+      "Re-engagement messages: Daily at 5am UTC",
+      "Hourly DAU update: Every hour"
+    ]
+  });
 }
 
 /**
  * Stop all cron jobs (for graceful shutdown)
  */
 export function stopCronJobs(): void {
-  console.log("⏰ Stopping cron jobs...");
+  logger.info("Stopping cron jobs");
 
   if (announcementInterval) {
     clearInterval(announcementInterval);
@@ -223,7 +227,7 @@ export function stopCronJobs(): void {
     hourlyDauInterval = null;
   }
 
-  console.log("✅ Cron jobs stopped");
+  logger.info("Cron jobs stopped");
 }
 
 /**

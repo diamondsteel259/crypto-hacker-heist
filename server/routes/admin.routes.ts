@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { db } from "../storage";
 import { storage } from "../storage";
@@ -43,7 +44,7 @@ export function registerAdminRoutes(app: Express): void {
       const settings = await storage.getAllGameSettings();
       res.json(settings);
     } catch (error: any) {
-      console.error("Get settings error:", error);
+      logger.error("Get settings error:", error);
       res.status(500).json({ error: "Failed to fetch settings" });
     }
   });
@@ -61,7 +62,7 @@ export function registerAdminRoutes(app: Express): void {
       const setting = await storage.setGameSetting(key, value);
       res.json(setting);
     } catch (error: any) {
-      console.error("Update setting error:", error);
+      logger.error("Update setting error:", error);
       res.status(500).json({ error: "Failed to update setting" });
     }
   });
@@ -79,7 +80,7 @@ export function registerAdminRoutes(app: Express): void {
       const users = await storage.getAllUsers();
       res.json(users);
     } catch (error: any) {
-      console.error("Get users error:", error);
+      logger.error("Get users error:", error);
       res.status(500).json({ error: "Failed to fetch users" });
     }
   });
@@ -94,7 +95,7 @@ export function registerAdminRoutes(app: Express): void {
       await storage.setUserAdmin(req.params.userId, isAdmin);
       res.json({ success: true });
     } catch (error: any) {
-      console.error("Set admin error:", error);
+      logger.error("Set admin error:", error);
       res.status(500).json({ error: "Failed to update admin status" });
     }
   });
@@ -141,7 +142,7 @@ export function registerAdminRoutes(app: Express): void {
             items: parsed.items || [],
           };
         } catch (e) {
-          console.error("Failed to parse loot box rewards:", e);
+          logger.error("Failed to parse loot box rewards:", e);
         }
 
         return {
@@ -167,7 +168,7 @@ export function registerAdminRoutes(app: Express): void {
             items: parsed.items || [],
           };
         } catch (e) {
-          console.error("Failed to parse pack rewards:", e);
+          logger.error("Failed to parse pack rewards:", e);
         }
 
         return {
@@ -197,7 +198,7 @@ export function registerAdminRoutes(app: Express): void {
         payments: allPayments,
       });
     } catch (error: any) {
-      console.error("Payment history error:", error);
+      logger.error("Payment history error:", error);
       res.status(500).json({ error: "Failed to fetch payment history" });
     }
   });
@@ -215,7 +216,7 @@ export function registerAdminRoutes(app: Express): void {
       await storage.setGameSetting('mining_paused', 'true');
       res.json({ success: true, paused: true });
     } catch (error: any) {
-      console.error("Pause mining error:", error);
+      logger.error("Pause mining error:", error);
       res.status(500).json({ error: "Failed to pause mining" });
     }
   });
@@ -229,7 +230,7 @@ export function registerAdminRoutes(app: Express): void {
       await storage.setGameSetting('mining_paused', 'false');
       res.json({ success: true, paused: false });
     } catch (error: any) {
-      console.error("Resume mining error:", error);
+      logger.error("Resume mining error:", error);
       res.status(500).json({ error: "Failed to resume mining" });
     }
   });
@@ -338,7 +339,7 @@ export function registerAdminRoutes(app: Express): void {
 
       res.json(result);
     } catch (error: any) {
-      console.error("Bulk reset error:", error);
+      logger.error("Bulk reset error:", error);
       res.status(500).json({
         error: "Reset failed: Database transaction error",
         details: "All changes have been rolled back. Database is in original state.",
@@ -396,10 +397,10 @@ export function registerAdminRoutes(app: Express): void {
         };
       });
 
-      console.log(`Hashrate recalculation complete: ${result.usersUpdated}/${result.totalUsers} users updated`);
+      logger.info(`Hashrate recalculation complete: ${result.usersUpdated}/${result.totalUsers} users updated`);
       res.json(result);
     } catch (error: any) {
-      console.error("Hashrate recalculation error:", error);
+      logger.error("Hashrate recalculation error:", error);
       res.status(500).json({
         error: "Hashrate recalculation failed",
         details: error.message,
@@ -435,7 +436,7 @@ export function registerAdminRoutes(app: Express): void {
         },
       });
     } catch (error: any) {
-      console.error("Get jackpots error:", error);
+      logger.error("Get jackpots error:", error);
       res.status(500).json({
         error: "Failed to fetch jackpots",
         details: error.message,
@@ -486,14 +487,14 @@ export function registerAdminRoutes(app: Express): void {
         return updated[0];
       });
 
-      console.log(`Jackpot ${jackpotId} marked as paid by admin ${req.user?.telegramId}`);
+      logger.info(`Jackpot ${jackpotId} marked as paid by admin ${req.user?.telegramId}`);
       res.json({
         success: true,
         jackpot: result,
         message: "Jackpot marked as paid successfully",
       });
     } catch (error: any) {
-      console.error("Mark jackpot paid error:", error);
+      logger.error("Mark jackpot paid error:", error);
       res.status(400).json({
         error: error.message || "Failed to mark jackpot as paid",
       });
@@ -551,7 +552,7 @@ export function registerAdminRoutes(app: Express): void {
         message: "Equipment updated successfully"
       });
     } catch (error: any) {
-      console.error("Equipment update error:", error);
+      logger.error("Equipment update error:", error);
       res.status(500).json({ error: "Failed to update equipment" });
     }
   });
@@ -590,7 +591,7 @@ export function registerAdminRoutes(app: Express): void {
 
       res.json(newSale[0]);
     } catch (error: any) {
-      console.error("Create flash sale error:", error);
+      logger.error("Create flash sale error:", error);
       res.status(500).json({ error: "Failed to create flash sale" });
     }
   });
@@ -610,7 +611,7 @@ export function registerAdminRoutes(app: Express): void {
 
       res.json({ success: true });
     } catch (error: any) {
-      console.error("End flash sale error:", error);
+      logger.error("End flash sale error:", error);
       res.status(500).json({ error: "Failed to end flash sale" });
     }
   });
@@ -657,7 +658,7 @@ export function registerAdminRoutes(app: Express): void {
         season: newSeason[0],
       });
     } catch (error: any) {
-      console.error("Create season error:", error);
+      logger.error("Create season error:", error);
       res.status(500).json({ error: error.message || "Failed to create season" });
     }
   });
@@ -698,7 +699,7 @@ export function registerAdminRoutes(app: Express): void {
         season: updated[0],
       });
     } catch (error: any) {
-      console.error("Update season error:", error);
+      logger.error("Update season error:", error);
       res.status(500).json({ error: error.message || "Failed to update season" });
     }
   });
@@ -738,7 +739,7 @@ export function registerAdminRoutes(app: Express): void {
         season: updated[0],
       });
     } catch (error: any) {
-      console.error("Toggle season error:", error);
+      logger.error("Toggle season error:", error);
       res.status(500).json({ error: error.message || "Failed to toggle season" });
     }
   });
@@ -767,10 +768,10 @@ export function registerAdminRoutes(app: Express): void {
         message: "Season deleted successfully",
       });
     } catch (error: any) {
-      console.error("Delete season error:", error);
+      logger.error("Delete season error:", error);
       res.status(500).json({ error: error.message || "Failed to delete season" });
     }
   });
 
-  console.log("Admin routes registered: 18 routes across 7 categories");
+  logger.info("Admin routes registered: 18 routes across 7 categories");
 }

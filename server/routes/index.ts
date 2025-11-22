@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { registerHealthRoutes } from "./health.routes";
 import { registerAuthRoutes } from "./auth.routes";

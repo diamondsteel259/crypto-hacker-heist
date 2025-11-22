@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { db } from "../storage";
 import { announcements, insertAnnouncementSchema } from "@shared/schema";
@@ -60,7 +61,7 @@ export function registerAnnouncementRoutes(app: Express): void {
       if (shouldSendNow) {
         // Send in background (don't await)
         sendAnnouncementToAllUsers(newAnnouncement.id).catch(error => {
-          console.error("Failed to send announcement:", error);
+          logger.error("Failed to send announcement:", error);
         });
       }
 
@@ -70,7 +71,7 @@ export function registerAnnouncementRoutes(app: Express): void {
         sendingNow: shouldSendNow,
       });
     } catch (error: any) {
-      console.error("Create announcement error:", error);
+      logger.error("Create announcement error:", error);
       res.status(500).json({ error: error.message || "Failed to create announcement" });
     }
   });
@@ -82,7 +83,7 @@ export function registerAnnouncementRoutes(app: Express): void {
       const allAnnouncements = await getAllAnnouncements(limit);
       res.json(allAnnouncements);
     } catch (error: any) {
-      console.error("Get announcements error:", error);
+      logger.error("Get announcements error:", error);
       res.status(500).json({ error: "Failed to fetch announcements" });
     }
   });
@@ -123,7 +124,7 @@ export function registerAnnouncementRoutes(app: Express): void {
 
       res.json(updated);
     } catch (error: any) {
-      console.error("Update announcement error:", error);
+      logger.error("Update announcement error:", error);
       res.status(500).json({ error: "Failed to update announcement" });
     }
   });
@@ -138,7 +139,7 @@ export function registerAnnouncementRoutes(app: Express): void {
 
       res.json({ success: true, message: "Announcement deleted" });
     } catch (error: any) {
-      console.error("Delete announcement error:", error);
+      logger.error("Delete announcement error:", error);
       res.status(500).json({ error: "Failed to delete announcement" });
     }
   });
@@ -171,7 +172,7 @@ export function registerAnnouncementRoutes(app: Express): void {
         failedCount: result.failedUsers.length,
       });
     } catch (error: any) {
-      console.error("Force send announcement error:", error);
+      logger.error("Force send announcement error:", error);
       res.status(500).json({ error: error.message || "Failed to send announcement" });
     }
   });
@@ -186,7 +187,7 @@ export function registerAnnouncementRoutes(app: Express): void {
       const activeAnnouncements = await getActiveAnnouncementsForUser(req.telegramUser!.id.toString());
       res.json(activeAnnouncements);
     } catch (error: any) {
-      console.error("Get active announcements error:", error);
+      logger.error("Get active announcements error:", error);
       res.status(500).json({ error: "Failed to fetch active announcements" });
     }
   });
@@ -202,7 +203,7 @@ export function registerAnnouncementRoutes(app: Express): void {
       await markAnnouncementAsRead(announcementId, req.telegramUser!.id.toString());
       res.json({ success: true, message: "Announcement marked as read" });
     } catch (error: any) {
-      console.error("Mark announcement as read error:", error);
+      logger.error("Mark announcement as read error:", error);
       res.status(500).json({ error: "Failed to mark announcement as read" });
     }
   });

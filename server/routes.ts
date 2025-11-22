@@ -9,6 +9,7 @@ import { verifyTONTransaction, getGameWalletAddress, isValidTONAddress, pollForT
 import { miningService } from "./mining";
 import { getBotWebhookHandler } from "./bot";
 import { registerModularRoutes } from "./routes/index";
+import { logger } from "./logger";
 
 /**
  * ROUTES.TS - Legacy Monolithic Routes File
@@ -91,7 +92,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const botWebhook = getBotWebhookHandler();
   if (botWebhook) {
     app.post(botWebhook.path, botWebhook.handler);
-    console.log(`🤖 Telegram webhook registered at ${botWebhook.path}`);
+    logger.info(`🤖 Telegram webhook registered at ${botWebhook.path}`);
   }
   
   // Register all modular routes (health, auth, user, social, mining, equipment, announcements)
@@ -166,7 +167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(stats[0]);
     } catch (error: any) {
-      console.error("Get user statistics error:", error);
+      logger.error("Get user statistics error:", error);
       res.status(500).json({ error: "Failed to get user statistics" });
     }
   });
@@ -188,7 +189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(topMiners);
     } catch (error: any) {
-      console.error("Leaderboard hashrate error:", error);
+      logger.error("Leaderboard hashrate error:", error);
       res.status(500).json({ error: "Failed to fetch leaderboard" });
     }
   });
@@ -209,7 +210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(topBalances);
     } catch (error: any) {
-      console.error("Leaderboard balance error:", error);
+      logger.error("Leaderboard balance error:", error);
       res.status(500).json({ error: "Failed to fetch leaderboard" });
     }
   });
@@ -232,7 +233,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(topReferrers);
     } catch (error: any) {
-      console.error("Referral leaderboard error:", error);
+      logger.error("Referral leaderboard error:", error);
       res.status(500).json({ error: "Failed to fetch referral leaderboard" });
     }
   });
@@ -243,7 +244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const equipment = await storage.getAllEquipmentTypes();
       res.json(equipment);
     } catch (error) {
-      console.error("Error loading equipment types:", error);
+      logger.error("Error loading equipment types:", error);
       res.status(500).json({ error: "Failed to load equipment types" });
     }
   });
@@ -264,7 +265,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(activeSales);
     } catch (error: any) {
-      console.error("Get flash sales error:", error);
+      logger.error("Get flash sales error:", error);
       res.status(500).json({ error: "Failed to fetch flash sales" });
     }
   });
@@ -646,7 +647,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(result);
     } catch (error: any) {
-      console.error("Purchase error:", error);
+      logger.error("Purchase error:", error);
       res.status(400).json({ message: error.message });
     }
   });
@@ -740,7 +741,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         upcomingBlocks,
       });
     } catch (error: any) {
-      console.error("Mining calendar error:", error);
+      logger.error("Mining calendar error:", error);
       res.status(500).json({ error: error.message || "Failed to generate mining calendar" });
     }
   });
@@ -913,7 +914,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(purchases);
     } catch (error: any) {
-      console.error("Get pack purchases error:", error);
+      logger.error("Get pack purchases error:", error);
       res.status(500).json({ error: error.message || "Failed to get pack purchases" });
     }
   });
@@ -1020,7 +1021,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rewards: result.rewards,
       });
     } catch (error: any) {
-      console.error("Purchase pack error:", error);
+      logger.error("Purchase pack error:", error);
       res.status(500).json({ error: error.message || "Failed to purchase pack" });
     }
   });
@@ -1103,7 +1104,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         activePowerUp: result.activePowerUp,
       });
     } catch (error: any) {
-      console.error("Purchase power-up error:", error);
+      logger.error("Purchase power-up error:", error);
       res.status(500).json({ error: error.message || "Failed to purchase power-up" });
     }
   });
@@ -1151,7 +1152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         currentBoost: prestige[0].prestigeLevel * 5, // 5% per prestige level
       });
     } catch (error: any) {
-      console.error("Get prestige error:", error);
+      logger.error("Get prestige error:", error);
       res.status(500).json({ error: error.message || "Failed to get prestige info" });
     }
   });
@@ -1238,7 +1239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         permanentBoost: result.newPrestigeLevel * 5,
       });
     } catch (error: any) {
-      console.error("Execute prestige error:", error);
+      logger.error("Execute prestige error:", error);
       res.status(500).json({ error: error.message || "Failed to execute prestige" });
     }
   });
@@ -1274,7 +1275,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subscription: { ...sub, isActive },
       });
     } catch (error: any) {
-      console.error("Get subscription error:", error);
+      logger.error("Get subscription error:", error);
       res.status(500).json({ error: error.message || "Failed to get subscription" });
     }
   });
@@ -1349,7 +1350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subscription: result,
       });
     } catch (error: any) {
-      console.error("Subscribe error:", error);
+      logger.error("Subscribe error:", error);
       res.status(500).json({ error: error.message || "Failed to subscribe" });
     }
   });
@@ -1375,7 +1376,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Subscription cancelled",
       });
     } catch (error: any) {
-      console.error("Cancel subscription error:", error);
+      logger.error("Cancel subscription error:", error);
       res.status(500).json({ error: error.message || "Failed to cancel subscription" });
     }
   });
@@ -1416,7 +1417,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastClaimDate: todaysClaim.length > 0 ? todaysClaim[0].claimedAt : null,
       });
     } catch (error: any) {
-      console.error("Daily login status error:", error);
+      logger.error("Daily login status error:", error);
       res.status(500).json({ error: "Failed to get daily login status" });
     }
   });
@@ -1519,7 +1520,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: `Day ${currentStreak} reward claimed!`,
       });
     } catch (error: any) {
-      console.error("Daily login claim error:", error);
+      logger.error("Daily login claim error:", error);
       res.status(500).json({ error: "Failed to claim daily reward" });
     }
   });

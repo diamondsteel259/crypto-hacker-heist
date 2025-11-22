@@ -2,10 +2,11 @@ import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { logger } from "./logger";
 
 export async function applyPerformanceIndexes() {
   try {
-    console.log("📊 Applying performance indexes...");
+    logger.info("Applying performance indexes");
     
     const indexSQL = readFileSync(
       join(process.cwd(), "server/migrations/add-indexes.sql"),
@@ -22,8 +23,8 @@ export async function applyPerformanceIndexes() {
       await db.execute(sql.raw(statement));
     }
     
-    console.log(`✅ Applied ${statements.length} performance indexes`);
+    logger.info("Performance indexes applied", { count: statements.length });
   } catch (error) {
-    console.error("⚠️  Failed to apply indexes (non-fatal):", error);
+    logger.warn("Failed to apply indexes (non-fatal)", error);
   }
 }

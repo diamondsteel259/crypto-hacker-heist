@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { storage } from "../storage";
 import { validateTelegramAuth, type AuthRequest } from "../middleware/auth";

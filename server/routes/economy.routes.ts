@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { validateTelegramAuth, requireAdmin, type AuthRequest } from "../middleware/auth";
 import {
@@ -26,7 +27,7 @@ export function registerEconomyRoutes(app: Express): void {
         recommendations,
       });
     } catch (error: any) {
-      console.error("Get economy overview error:", error);
+      logger.error("Get economy overview error:", error);
       res.status(500).json({ error: "Failed to fetch economy overview" });
     }
   });
@@ -39,7 +40,7 @@ export function registerEconomyRoutes(app: Express): void {
 
       res.json(history);
     } catch (error: any) {
-      console.error("Get economy history error:", error);
+      logger.error("Get economy history error:", error);
       res.status(500).json({ error: "Failed to fetch economy history" });
     }
   });
@@ -51,7 +52,7 @@ export function registerEconomyRoutes(app: Express): void {
 
       res.json(distribution);
     } catch (error: any) {
-      console.error("Get wealth distribution error:", error);
+      logger.error("Get wealth distribution error:", error);
       res.status(500).json({ error: "Failed to fetch wealth distribution" });
     }
   });
@@ -79,7 +80,7 @@ export function registerEconomyRoutes(app: Express): void {
         aggregated,
       });
     } catch (error: any) {
-      console.error("Get economy sinks error:", error);
+      logger.error("Get economy sinks error:", error);
       res.status(500).json({ error: "Failed to fetch economy sinks" });
     }
   });
@@ -91,7 +92,7 @@ export function registerEconomyRoutes(app: Express): void {
 
       res.json(alerts);
     } catch (error: any) {
-      console.error("Get economy alerts error:", error);
+      logger.error("Get economy alerts error:", error);
       res.status(500).json({ error: "Failed to fetch economy alerts" });
     }
   });
@@ -112,7 +113,7 @@ export function registerEconomyRoutes(app: Express): void {
         message: "Alert acknowledged",
       });
     } catch (error: any) {
-      console.error("Acknowledge alert error:", error);
+      logger.error("Acknowledge alert error:", error);
       res.status(500).json({ error: "Failed to acknowledge alert" });
     }
   });
@@ -139,7 +140,7 @@ export function registerEconomyRoutes(app: Express): void {
         message: `Economy metrics calculated for ${targetDate.toISOString().split('T')[0]}`,
       });
     } catch (error: any) {
-      console.error("Calculate metrics error:", error);
+      logger.error("Calculate metrics error:", error);
       res.status(500).json({ error: "Failed to calculate metrics" });
     }
   });
@@ -159,7 +160,7 @@ export function registerEconomyRoutes(app: Express): void {
         },
       });
     } catch (error: any) {
-      console.error("Get recommendations error:", error);
+      logger.error("Get recommendations error:", error);
       res.status(500).json({ error: "Failed to fetch recommendations" });
     }
   });
