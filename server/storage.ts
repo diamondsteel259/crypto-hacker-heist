@@ -26,16 +26,19 @@ import { randomUUID } from "crypto";
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByTelegramId(telegramId: string): Promise<User | undefined>;
+  getUsersByIds(ids: string[]): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUserBalance(userId: string, csBalance: number, chstBalance: number): Promise<void>;
   updateUserHashrate(userId: string, totalHashrate: number): Promise<void>;
   getAllUsers(): Promise<User[]>;
+  getActiveMiners(): Promise<User[]>;
   
   getAllEquipmentTypes(): Promise<EquipmentType[]>;
   getEquipmentTypesByCategoryAndTier(category: string, tier: string): Promise<EquipmentType[]>;
   getEquipmentType(id: string): Promise<EquipmentType | undefined>;
   
   getUserEquipment(userId: string): Promise<(OwnedEquipment & { equipmentType: EquipmentType })[]>;
+  getUsersEquipment(userIds: string[]): Promise<Map<string, (OwnedEquipment & { equipmentType: EquipmentType })[]>>;
   getSpecificEquipment(userId: string, equipmentTypeId: string): Promise<OwnedEquipment | undefined>;
   purchaseEquipment(equipment: InsertOwnedEquipment): Promise<OwnedEquipment>;
   upgradeEquipment(equipmentId: string, newLevel: number, newHashrate: number): Promise<void>;
@@ -47,6 +50,7 @@ export interface IStorage {
   
   getUserBlockRewards(userId: string, limit?: number): Promise<(BlockReward & { block: Block })[]>;
   createBlockReward(reward: InsertBlockReward): Promise<BlockReward>;
+  createBlockRewardsBulk(rewards: InsertBlockReward[]): Promise<void>;
   
   getUserReferrals(userId: string): Promise<(Referral & { referee: User })[]>;
   createReferral(referrerId: string, refereeId: string): Promise<Referral>;
@@ -96,6 +100,15 @@ export class DbStorage implements IStorage {
     return await db.select().from(users);
   }
 
+  async getUsersByIds(ids: string[]): Promise<User[]> {
+    if (ids.length === 0) return [];
+    return await db.select().from(users).where(sql`id IN (${ids.join(',')})`);
+  }
+
+  async getActiveMiners(): Promise<User[]> {
+    return await db.select().from(users).where(sql`totalHashrate > 0`);
+  }
+
   async getAllEquipmentTypes(): Promise<EquipmentType[]> {
     return await db.select().from(equipmentTypes).orderBy(equipmentTypes.category, equipmentTypes.orderIndex);
   }
@@ -125,6 +138,32 @@ export class DbStorage implements IStorage {
       ...row.owned_equipment,
       equipmentType: row.equipment_types!
     }));
+  }
+
+  async getUsersEquipment(userIds: string[]): Promise<Map<string, (OwnedEquipment & { equipmentType: EquipmentType })[]>> {
+    if (userIds.length === 0) return new Map();
+    
+    const result = await db.select()
+      .from(ownedEquipment)
+      .leftJoin(equipmentTypes, eq(ownedEquipment.equipmentTypeId, equipmentTypes.id))
+      .where(sql`userId IN (${userIds.join(',')})`);
+    
+    const equipmentMap = new Map<string, (OwnedEquipment & { equipmentType: EquipmentType })[]>();
+    
+    result.forEach((row: any) => {
+      const userId = row.owned_equipment.userId;
+      const equipment = {
+        ...row.owned_equipment,
+        equipmentType: row.equipment_types!
+      };
+      
+      if (!equipmentMap.has(userId)) {
+        equipmentMap.set(userId, []);
+      }
+      equipmentMap.get(userId)!.push(equipment);
+    });
+    
+    return equipmentMap;
   }
 
   async getSpecificEquipment(userId: string, equipmentTypeId: string): Promise<OwnedEquipment | undefined> {
@@ -207,6 +246,11 @@ export class DbStorage implements IStorage {
   async createBlockReward(reward: InsertBlockReward): Promise<BlockReward> {
     const result = await db.insert(blockRewards).values(reward).returning();
     return result[0];
+  }
+
+  async createBlockRewardsBulk(rewards: InsertBlockReward[]): Promise<void> {
+    if (rewards.length === 0) return;
+    await db.insert(blockRewards).values(rewards);
   }
 
   async getUserReferrals(userId: string): Promise<(Referral & { referee: User })[]> {
