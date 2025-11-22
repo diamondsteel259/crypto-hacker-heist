@@ -42,12 +42,64 @@ tests/
 │
 ├── integration/           # API integration tests
 │   ├── health.test.ts     # Health check endpoints
-│   └── user.test.ts       # User management endpoints
+│   ├── user.test.ts       # User management endpoints
+│   └── routes.test.ts     # Modular routing system tests
 │
 ├── unit/                  # Unit tests
 │   ├── mining-calculations.test.ts
 │   └── economy-calculations.test.ts
 │
+└── server/               # Server-side integration tests
+    └── routes.test.ts     # Route registration and accessibility
+```
+
+### Modular Routing System Tests
+
+The modular routing system includes dedicated tests to ensure:
+
+1. **Route Registration**: All modules are properly registered via `registerModularRoutes()`
+2. **Endpoint Accessibility**: Each route responds correctly (200/401/404 as expected)
+3. **Authentication**: Protected routes properly require authentication
+4. **Database Integration**: Routes work with real database operations
+5. **Error Handling**: Proper error responses and logging
+
+#### Running Route Tests
+```bash
+# Test modular routing system specifically
+node server/test/routes.test.ts
+
+# Or run with timeout to prevent hanging
+timeout 30s node server/test/routes.test.ts
+```
+
+#### Route Coverage Verification
+
+The test verifies coverage of all migrated route modules:
+- ✅ Health checks → health.routes.ts
+- ✅ Authentication → auth.routes.ts  
+- ✅ User profile → user.routes.ts
+- ✅ User management → userManagement.routes.ts
+- ✅ Admin panel → admin.routes.ts (18 routes)
+- ✅ Social features → social.routes.ts
+- ✅ Mining → mining.routes.ts
+- ✅ Equipment → equipment.routes.ts
+- ✅ Statistics → statistics.routes.ts
+- ✅ Shop → shop.routes.ts
+- ✅ Component upgrades → components.routes.ts
+- ✅ Blocks → blocks.routes.ts
+- ✅ Packs → packs.routes.ts
+- ✅ Power-ups → powerups.routes.ts
+- ✅ Prestige → prestige.routes.ts
+- ✅ Subscriptions → subscriptions.routes.ts
+- ✅ Daily login → dailyLogin.routes.ts
+- ✅ Announcements → announcements.routes.ts
+- ✅ Promo codes → promoCodes.routes.ts
+- ✅ Analytics → analytics.routes.ts
+- ✅ Events → events.routes.ts
+- ✅ Economy → economy.routes.ts
+- ✅ Segmentation → segmentation.routes.ts
+- ✅ Gamification → gamification.routes.ts
+- ✅ API aliases → api-aliases.ts
 ├── fixtures/              # Test data fixtures
 │   ├── users.ts
 │   ├── equipment.ts
