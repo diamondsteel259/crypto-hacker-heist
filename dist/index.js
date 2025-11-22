@@ -6595,6 +6595,7 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { nodePolyfills } from "vite-plugin-node-polyfills";
+import { visualizer } from "rollup-plugin-visualizer";
 var vite_config_default = defineConfig({
   plugins: [
     react(),
@@ -6614,8 +6615,15 @@ var vite_config_default = defineConfig({
       await import("@replit/vite-plugin-dev-banner").then(
         (m) => m.devBanner()
       )
-    ] : []
-  ],
+    ] : [],
+    // Bundle analyzer for production builds
+    process.env.ANALYZE === "true" ? visualizer({
+      filename: "dist/public/stats.html",
+      open: true,
+      gzipSize: true,
+      brotliSize: true
+    }) : null
+  ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
@@ -6626,7 +6634,29 @@ var vite_config_default = defineConfig({
   root: path.resolve(import.meta.dirname, "client"),
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split vendor chunks for better caching
+          vendor: ["react", "react-dom"],
+          router: ["wouter"],
+          ui: ["@radix-ui/react-dialog", "@radix-ui/react-dropdown-menu", "@radix-ui/react-toast"],
+          query: ["@tanstack/react-query"],
+          ton: ["@ton/core", "@ton/ton"],
+          tonconnect: ["@tonconnect/ui-react"],
+          forms: ["react-hook-form", "@hookform/resolvers"],
+          utils: ["date-fns", "clsx", "tailwind-merge"],
+          icons: ["lucide-react", "react-icons"],
+          charts: ["recharts"]
+        }
+      }
+    },
+    // Set bundle size limits
+    chunkSizeWarningLimit: 400,
+    // Warn when chunks exceed 400KB
+    assetsInlineLimit: 4096
+    // Inline assets smaller than 4KB
   },
   server: {
     fs: {
@@ -7516,6 +7546,36 @@ app.use((req, res, next) => {
     }
   });
   next();
+});
+app.get("/health", async (_req, res) => {
+  try {
+    const isDatabaseHealthy = await checkDatabaseHealth();
+    const uptime = process.uptime();
+    if (isDatabaseHealthy) {
+      res.status(200).json({
+        status: "ok",
+        timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+        uptime: Math.floor(uptime),
+        database: "connected"
+      });
+    } else {
+      res.status(503).json({
+        status: "degraded",
+        timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+        uptime: Math.floor(uptime),
+        database: "disconnected",
+        message: "Database connection failed"
+      });
+    }
+  } catch (error) {
+    res.status(503).json({
+      status: "degraded",
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      uptime: Math.floor(process.uptime()),
+      database: "error",
+      message: "Health check failed"
+    });
+  }
 });
 app.get("/api/health", async (_req, res) => {
   try {
