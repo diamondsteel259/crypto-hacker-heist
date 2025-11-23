@@ -922,21 +922,212 @@ var init_schema = __esm({
   }
 });
 
+// server/logger.ts
+import pino, { Logger as PinoLogger } from "pino";
+import { AsyncLocalStorage } from "async_hooks";
+import fs from "fs";
+import path from "path";
+function redactSensitiveData(obj) {
+  if (!obj || typeof obj !== "object") {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(redactSensitiveData);
+  }
+  const redacted = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const lowerKey = key.toLowerCase();
+    const isSensitive = sensitivePatterns.some(
+      (pattern) => lowerKey.includes(pattern)
+    );
+    if (isSensitive) {
+      redacted[key] = "[REDACTED]";
+    } else if (value && typeof value === "object") {
+      redacted[key] = redactSensitiveData(value);
+    } else {
+      redacted[key] = value;
+    }
+  }
+  return redacted;
+}
+function getTransports() {
+  const transports = [];
+  if (process.env.NODE_ENV === "production") {
+    transports.push({
+      target: "pino-rotating-file-stream",
+      options: {
+        file: path.join(logsDir, "app.log"),
+        maxSize: process.env.LOG_MAX_SIZE || "100M",
+        maxFiles: parseInt(process.env.LOG_MAX_FILES || "10"),
+        mkdir: true
+      }
+    });
+    if (process.env.LOG_TO_STDOUT !== "false") {
+      transports.push({
+        target: "pino/file",
+        options: { destination: 1 }
+      });
+    }
+  } else {
+    transports.push({
+      target: "pino-pretty",
+      options: {
+        colorize: true,
+        translateTime: "SYS:standard",
+        ignore: "pid,hostname"
+      }
+    });
+    if (process.env.LOG_TO_FILE === "true") {
+      transports.push({
+        target: "pino-rotating-file-stream",
+        options: {
+          file: path.join(logsDir, "app.log"),
+          maxSize: "50M",
+          maxFiles: 5,
+          mkdir: true
+        }
+      });
+    }
+  }
+  return transports;
+}
+function setRequestId(id) {
+  requestIdStorage.run(id, () => {
+  });
+}
+var requestIdStorage, logsDir, logLevel, sensitivePatterns, pinoLogger, ContextLogger, logger;
+var init_logger = __esm({
+  "server/logger.ts"() {
+    "use strict";
+    requestIdStorage = new AsyncLocalStorage();
+    logsDir = process.env.LOG_DIR || path.resolve(process.cwd(), "logs");
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    logLevel = process.env.LOG_LEVEL || "info";
+    sensitivePatterns = [
+      "x-telegram-init-data",
+      "authorization",
+      "cookie",
+      "password",
+      "token",
+      "apiKey",
+      "api_key",
+      "secret",
+      "private_key",
+      "privateKey",
+      "initData",
+      "phone",
+      "email"
+    ];
+    pinoLogger = pino(
+      {
+        level: logLevel,
+        timestamp: pino.stdTimeFunctions.isoTime,
+        formatters: {
+          level: (label) => {
+            return { level: label };
+          }
+        },
+        // Add base metadata
+        base: {
+          env: process.env.NODE_ENV || "development",
+          service: "crypto-hacker-heist"
+        }
+      },
+      pino.transport({
+        targets: getTransports()
+      })
+    );
+    ContextLogger = class {
+      logger;
+      requestId;
+      constructor(logger2 = pinoLogger, requestId) {
+        this.logger = logger2;
+        this.requestId = requestId || "";
+      }
+      getContext() {
+        return {
+          requestId: this.requestId || requestIdStorage.getStore() || void 0
+        };
+      }
+      info(message, data) {
+        const context = this.getContext();
+        if (data) {
+          const sanitized = redactSensitiveData(data);
+          this.logger.info({ ...context, ...sanitized }, message);
+        } else {
+          this.logger.info(context, message);
+        }
+      }
+      error(message, error) {
+        const context = this.getContext();
+        if (error instanceof Error) {
+          this.logger.error(
+            {
+              ...context,
+              error: {
+                message: error.message,
+                stack: error.stack,
+                name: error.name
+              }
+            },
+            message
+          );
+        } else if (error) {
+          const sanitized = redactSensitiveData(error);
+          this.logger.error({ ...context, ...sanitized }, message);
+        } else {
+          this.logger.error(context, message);
+        }
+      }
+      warn(message, data) {
+        const context = this.getContext();
+        if (data) {
+          const sanitized = redactSensitiveData(data);
+          this.logger.warn({ ...context, ...sanitized }, message);
+        } else {
+          this.logger.warn(context, message);
+        }
+      }
+      debug(message, data) {
+        const context = this.getContext();
+        if (data) {
+          const sanitized = redactSensitiveData(data);
+          this.logger.debug({ ...context, ...sanitized }, message);
+        } else {
+          this.logger.debug(context, message);
+        }
+      }
+      trace(message, data) {
+        const context = this.getContext();
+        if (data) {
+          const sanitized = redactSensitiveData(data);
+          this.logger.trace({ ...context, ...sanitized }, message);
+        } else {
+          this.logger.trace(context, message);
+        }
+      }
+    };
+    logger = new ContextLogger(pinoLogger);
+  }
+});
+
 // server/db.ts
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 async function initializeDatabase() {
   try {
     if (!process.env.DATABASE_URL) {
-      console.error("[DB] DATABASE_URL not set, skipping database initialization");
+      logger.error("DATABASE_URL not set, skipping database initialization");
       return false;
     }
     await pool.query("CREATE EXTENSION IF NOT EXISTS pgcrypto;");
-    console.log("[DB] Database initialized successfully");
+    logger.info("Database initialized successfully");
     return true;
   } catch (error) {
-    console.error("[DB] Database initialization failed:", error);
-    console.error("[DB] Health endpoint will report unhealthy status");
+    logger.error("Database initialization failed", error);
+    logger.error("Health endpoint will report unhealthy status");
     return false;
   }
 }
@@ -945,7 +1136,7 @@ async function checkDatabaseHealth() {
     await pool.query("SELECT 1");
     return true;
   } catch (error) {
-    console.error("[DB] Health check failed:", error);
+    logger.error("Health check failed", error);
     return false;
   }
 }
@@ -954,8 +1145,9 @@ var init_db = __esm({
   "server/db.ts"() {
     "use strict";
     init_schema();
+    init_logger();
     if (!process.env.DATABASE_URL) {
-      console.error("DATABASE_URL environment variable is not set. Database will not be available.");
+      logger.error("DATABASE_URL environment variable is not set. Database will not be available.");
     }
     pool = new pg.Pool({
       connectionString: process.env.DATABASE_URL,
@@ -1148,6 +1340,7 @@ var init_mining = __esm({
     "use strict";
     init_storage();
     init_schema();
+    init_logger();
     BLOCK_INTERVAL = 5 * 60 * 1e3;
     BLOCK_REWARD = 1e5;
     MAX_CONSECUTIVE_FAILURES = 5;
@@ -1166,16 +1359,16 @@ var init_mining = __esm({
           try {
             await this.mineBlock();
           } catch (error) {
-            console.error("Error mining block:", error);
+            logger.error("Error mining block", error);
           }
         }, BLOCK_INTERVAL);
-        console.log(`Mining service started. Blocks will be mined every ${BLOCK_INTERVAL / 1e3} seconds.`);
+        logger.info(`Mining service started`, { blockInterval: `${BLOCK_INTERVAL / 1e3}s` });
       }
       stop() {
         if (this.intervalId) {
           clearInterval(this.intervalId);
           this.intervalId = null;
-          console.log("Mining service stopped.");
+          logger.info("Mining service stopped");
         }
       }
       async initializeBlockNumber() {
@@ -1183,7 +1376,7 @@ var init_mining = __esm({
         this.lastBlockNumber = latestBlock?.blockNumber ?? 0;
       }
       async recalculateAllHashrates() {
-        console.log("Recalculating all user hashrates from equipment...");
+        logger.info("Recalculating all user hashrates from equipment");
         try {
           const result = await db.transaction(async (tx) => {
             const allUsers = await tx.select().from(users);
@@ -1200,36 +1393,36 @@ var init_mining = __esm({
             }
             return { totalUsers: allUsers.length, usersUpdated };
           });
-          console.log(`Hashrate recalculation complete: ${result.usersUpdated}/${result.totalUsers} users updated`);
+          logger.info("Hashrate recalculation complete", { usersUpdated: result.usersUpdated, totalUsers: result.totalUsers });
         } catch (error) {
-          console.error("Hashrate recalculation error:", error);
+          logger.error("Hashrate recalculation error", error);
         }
       }
       async mineBlock() {
         if (this.isMining) {
-          console.log("Mining already in progress, skipping...");
+          logger.debug("Mining already in progress, skipping");
           return;
         }
         const pauseSetting = await storage.getGameSetting("mining_paused");
         if (pauseSetting && pauseSetting.value === "true") {
-          console.log("Mining is paused by admin.");
+          logger.debug("Mining is paused by admin");
           return;
         }
         this.isMining = true;
         this.miningTimeoutId = setTimeout(() => {
           if (this.isMining) {
-            console.error("[MINING] Mining operation timed out, resetting flag");
+            logger.error("Mining operation timed out, resetting flag");
             this.isMining = false;
           }
         }, MINING_TIMEOUT);
         try {
           const blockNumber = this.lastBlockNumber + 1;
-          console.log(`Mining block #${blockNumber}...`);
+          logger.debug(`Mining block #${blockNumber}`);
           const allUsers = await storage.getAllUsers();
           const activeMiners = allUsers.filter((user) => user.totalHashrate > 0);
-          console.log(`Total users: ${allUsers.length}, Active miners: ${activeMiners.length}`);
+          logger.info(`Mining cycle started`, { totalUsers: allUsers.length, activeMiners: activeMiners.length });
           if (activeMiners.length === 0) {
-            console.log(`Block #${blockNumber} skipped - no active miners.`);
+            logger.debug(`Block #${blockNumber} skipped - no active miners`);
             return;
           }
           const now = /* @__PURE__ */ new Date();
@@ -1289,19 +1482,24 @@ var init_mining = __esm({
               eq3(activePowerUps.isActive, true),
               sql3`${activePowerUps.expiresAt} <= ${now}`
             ));
-            console.log(
-              `Block #${blockNumber} mined! Reward: ${BLOCK_REWARD} CS distributed to ${activeMiners.length} miners. Total hashrate: ${totalNetworkHashrate.toFixed(2)} H/s (with boosts)`
+            logger.info(
+              `Block mined successfully`,
+              {
+                blockNumber,
+                reward: BLOCK_REWARD,
+                minerCount: activeMiners.length,
+                totalHashrate: totalNetworkHashrate.toFixed(2)
+              }
             );
           });
           this.lastBlockNumber = blockNumber;
           lastSuccessfulMine = /* @__PURE__ */ new Date();
           consecutiveFailures = 0;
-          console.log("[MINING] Block mined successfully");
         } catch (error) {
           consecutiveFailures++;
-          console.error("[MINING] Failed to mine block:", error);
+          logger.error("Failed to mine block", error);
           if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-            console.error("[MINING CRITICAL] Mining has failed 5 times consecutively");
+            logger.error("CRITICAL: Mining has failed multiple times consecutively", { failureCount: consecutiveFailures });
           }
           throw error;
         } finally {
@@ -1328,6 +1526,7 @@ import { createServer } from "http";
 import { eq as eq19, and as and15, sql as sql17 } from "drizzle-orm";
 
 // server/telegram-auth.ts
+init_logger();
 import crypto from "crypto";
 function validateTelegramWebAppData(initData, botToken) {
   try {
@@ -1359,12 +1558,13 @@ function validateTelegramWebAppData(initData, botToken) {
       hash
     };
   } catch (error) {
-    console.error("Telegram auth validation error:", error);
+    logger.error("Telegram auth validation error", error);
     return null;
   }
 }
 
 // server/middleware/auth.ts
+init_logger();
 function validateTelegramAuth(req, res, next) {
   if (process.env.NODE_ENV === "test" && req.headers["x-test-user-id"]) {
     const testUserId = req.headers["x-test-user-id"];
@@ -1379,7 +1579,7 @@ function validateTelegramAuth(req, res, next) {
   const initData = req.headers["x-telegram-init-data"];
   const botToken = process.env.BOT_TOKEN;
   if (!botToken) {
-    console.error("BOT_TOKEN not configured");
+    logger.error("BOT_TOKEN not configured");
     return res.status(500).json({ error: "Server configuration error" });
   }
   if (!initData) {
@@ -1434,6 +1634,7 @@ async function verifyUserAccess(req, res, next) {
 }
 
 // server/tonVerification.ts
+init_logger();
 async function verifyTONTransaction(txHash, expectedAmount, recipientAddress, senderAddress) {
   try {
     const apiKey = process.env.TON_API_KEY;
@@ -1450,7 +1651,7 @@ async function verifyTONTransaction(txHash, expectedAmount, recipientAddress, se
       headers
     });
     if (!response.ok) {
-      console.error("TON API response not OK:", response.status, response.statusText);
+      logger.error("TON API response not OK", { status: response.status, statusText: response.statusText });
       return {
         verified: false,
         error: "Failed to connect to TON blockchain API"
@@ -1458,7 +1659,7 @@ async function verifyTONTransaction(txHash, expectedAmount, recipientAddress, se
     }
     const data = await response.json();
     if (!data.transactions || !Array.isArray(data.transactions)) {
-      console.error("Invalid TON API response structure:", data);
+      logger.error("Invalid TON API response structure", { data });
       return {
         verified: false,
         error: "Invalid response from TON blockchain API"
@@ -1475,26 +1676,26 @@ async function verifyTONTransaction(txHash, expectedAmount, recipientAddress, se
       const toAddress = inMsg.destination;
       const value = BigInt(inMsg.value || "0");
       if (toAddress !== recipientAddress) {
-        console.log(`Address mismatch: expected ${recipientAddress}, got ${toAddress}`);
+        logger.debug("Address mismatch", { expected: recipientAddress, got: toAddress });
         continue;
       }
       if (senderAddress && fromAddress !== senderAddress) {
-        console.log(`Sender mismatch: expected ${senderAddress}, got ${fromAddress}`);
+        logger.debug("Sender mismatch", { expected: senderAddress, got: fromAddress });
         continue;
       }
       const amountDiff = value > expectedNanotons ? value - expectedNanotons : expectedNanotons - value;
       if (amountDiff > tolerance) {
-        console.log(`Amount mismatch: expected ${expectedAmount} TON (${expectedNanotons}), got ${Number(value) / 1e9} TON (${value})`);
+        logger.debug("Amount mismatch", { expected: expectedAmount, got: Number(value) / 1e9 });
         return {
           verified: false,
           error: `Amount mismatch: expected ${expectedAmount} TON, received ${Number(value) / 1e9} TON`
         };
       }
-      console.log("\u2705 TON transaction verified:", {
+      logger.info("TON transaction verified", {
         hash: tx.hash,
         from: fromAddress,
         to: toAddress,
-        amount: `${Number(value) / 1e9} TON`
+        amount: Number(value) / 1e9
       });
       return {
         verified: true,
@@ -1507,13 +1708,13 @@ async function verifyTONTransaction(txHash, expectedAmount, recipientAddress, se
         }
       };
     }
-    console.log(`Transaction ${txHash} not found in recent transactions`);
+    logger.debug("Transaction not found", { txHash: txHash.substring(0, 12) });
     return {
       verified: false,
       error: "Transaction not found on blockchain. It may still be processing or the hash is incorrect."
     };
   } catch (error) {
-    console.error("TON verification error:", error);
+    logger.error("TON verification error", error);
     return {
       verified: false,
       error: `Verification service error: ${error.message}`
@@ -1524,6 +1725,7 @@ async function verifyTONTransaction(txHash, expectedAmount, recipientAddress, se
 // server/bot.ts
 init_schema();
 init_db();
+init_logger();
 import { Telegraf } from "telegraf";
 import { eq as eq2 } from "drizzle-orm";
 var BOT_TOKEN = process.env.BOT_TOKEN;
@@ -1532,12 +1734,12 @@ var ADMIN_WHITELIST = process.env.ADMIN_WHITELIST?.split(",").map((id) => parseI
 var WEBHOOK_DOMAIN = process.env.WEBHOOK_DOMAIN || "https://crypto-hacker-heist.onrender.com";
 var USE_WEBHOOKS = process.env.NODE_ENV === "production";
 if (!BOT_TOKEN) {
-  console.warn("\u26A0\uFE0F  BOT_TOKEN not set - Bot commands will not work");
+  logger.warn("BOT_TOKEN not set - Bot commands will not work");
 }
 var bot = BOT_TOKEN ? new Telegraf(BOT_TOKEN) : null;
 async function initializeBot() {
   if (!bot) {
-    console.log("\u{1F916} Bot not initialized - BOT_TOKEN not provided");
+    logger.info("Bot not initialized - BOT_TOKEN not provided");
     return;
   }
   bot.start(async (ctx) => {
@@ -1574,7 +1776,7 @@ Use /play to continue your mining empire!`,
         );
       }
     } catch (error) {
-      console.error("Error in start command:", error);
+      logger.error("Error in start command", error);
       await ctx.reply("\u274C Error loading game data. Please try again later.");
     }
   });
@@ -1621,42 +1823,42 @@ Use /play to continue your mining empire!`,
     );
   });
   bot.on("web_app_data", async (ctx) => {
-    console.log("Web app data received:", ctx.webAppData);
+    logger.debug("Web app data received", { data: ctx.webAppData });
   });
   bot.catch((err, ctx) => {
-    console.error("Bot error:", err);
+    logger.error("Bot error", err);
     ctx.reply("\u274C An error occurred. Please try again later.");
   });
   try {
     if (USE_WEBHOOKS) {
-      console.log("\u{1F916} Starting bot with webhooks...");
+      logger.info("Starting bot with webhooks");
       const webhookPath = `/telegram-webhook/${BOT_TOKEN}`;
       await bot.telegram.setWebhook(`${WEBHOOK_DOMAIN}${webhookPath}`);
-      console.log(`\u{1F916} Webhook set to: ${WEBHOOK_DOMAIN}${webhookPath}`);
-      console.log("\u{1F916} Bot configured for webhooks (webhook handler needs to be registered in routes)");
+      logger.info("Webhook set", { url: `${WEBHOOK_DOMAIN}${webhookPath}` });
+      logger.info("Bot configured for webhooks (webhook handler needs to be registered in routes)");
     } else {
-      console.log("\u{1F916} Starting bot with long polling...");
+      logger.info("Starting bot with long polling");
       await bot.launch();
-      console.log("\u{1F916} Bot started successfully with polling");
+      logger.info("Bot started successfully with polling");
     }
   } catch (error) {
-    console.error("Failed to start bot:", error);
+    logger.error("Failed to start bot", error);
     if (error.response?.error_code === 409) {
-      console.error("\u26A0\uFE0F  Bot conflict (409): Another instance is running. This is normal during deployments.");
-      console.log("\u{1F4A1} Tip: The bot will work once the old instance stops. Commands may be delayed by 1-2 minutes.");
+      logger.warn("Bot conflict (409): Another instance is running. This is normal during deployments");
+      logger.info("Tip: The bot will work once the old instance stops. Commands may be delayed by 1-2 minutes");
     } else if (error.code === "ETELEGRAM") {
-      console.error("\u26A0\uFE0F  Telegram API error. Check your BOT_TOKEN.");
+      logger.warn("Telegram API error. Check your BOT_TOKEN");
     }
   }
   process.once("SIGINT", () => {
     if (bot) {
-      console.log("\u{1F916} Stopping bot...");
+      logger.info("Stopping bot (SIGINT)");
       bot.stop("SIGINT");
     }
   });
   process.once("SIGTERM", () => {
     if (bot) {
-      console.log("\u{1F916} Stopping bot...");
+      logger.info("Stopping bot (SIGTERM)");
       bot.stop("SIGTERM");
     }
   });
@@ -1692,6 +1894,7 @@ function getBotWebhookHandler() {
 }
 
 // server/routes/health.routes.ts
+init_logger();
 init_mining();
 function registerHealthRoutes(app2) {
   app2.get("/healthz", async (_req, res) => {
@@ -1704,7 +1907,7 @@ function registerHealthRoutes(app2) {
         timestamp: (/* @__PURE__ */ new Date()).toISOString()
       });
     } catch (error) {
-      console.error("Health check error:", error);
+      logger.error("Health check error:", error);
       res.status(500).json({
         ok: false,
         error: "Health check failed",
@@ -1721,7 +1924,7 @@ function registerHealthRoutes(app2) {
         ...miningHealth
       });
     } catch (error) {
-      console.error("Mining health check error:", error);
+      logger.error("Mining health check error:", error);
       res.status(500).json({
         ok: false,
         error: "Mining health check failed",
@@ -1761,6 +1964,7 @@ function registerAuthRoutes(app2) {
 }
 
 // server/routes/user.routes.ts
+init_logger();
 init_storage();
 init_schema();
 import { eq as eq4, sql as sql4, and as and3 } from "drizzle-orm";
@@ -1794,7 +1998,7 @@ function registerUserRoutes(app2) {
         chstBalance: user.chstBalance
       });
     } catch (error) {
-      console.error("Get balance error:", error);
+      logger.error("Get balance error:", error);
       res.status(500).json({ error: "Failed to fetch balance" });
     }
   });
@@ -1815,7 +2019,7 @@ function registerUserRoutes(app2) {
         userId
       });
     } catch (error) {
-      console.error("User rank error:", error);
+      logger.error("User rank error:", error);
       res.status(500).json({ error: "Failed to fetch user rank" });
     }
   });
@@ -1836,7 +2040,7 @@ function registerUserRoutes(app2) {
         networkShare
       });
     } catch (error) {
-      console.error("Network stats error:", error);
+      logger.error("Network stats error:", error);
       res.status(500).json({ error: "Failed to fetch network stats" });
     }
   });
@@ -1855,7 +2059,7 @@ function registerUserRoutes(app2) {
         lastLoginDate
       });
     } catch (error) {
-      console.error("Get streak error:", error);
+      logger.error("Get streak error:", error);
       res.status(500).json({ error: "Failed to fetch streak" });
     }
   });
@@ -1903,7 +2107,7 @@ function registerUserRoutes(app2) {
         message: `Day ${currentStreak} check-in complete!`
       });
     } catch (error) {
-      console.error("Streak check-in error:", error);
+      logger.error("Streak check-in error:", error);
       res.status(500).json({ error: "Failed to check in" });
     }
   });
@@ -1932,7 +2136,7 @@ function registerUserRoutes(app2) {
         lastClaimDate: todaysClaim.length > 0 ? todaysClaim[0].claimedAt : null
       });
     } catch (error) {
-      console.error("Daily login status error:", error);
+      logger.error("Daily login status error:", error);
       res.status(500).json({ error: "Failed to get daily login status" });
     }
   });
@@ -2003,7 +2207,7 @@ function registerUserRoutes(app2) {
         message: `Day ${currentStreak} reward claimed!`
       });
     } catch (error) {
-      console.error("Daily login claim error:", error);
+      logger.error("Daily login claim error:", error);
       res.status(500).json({ error: "Failed to claim daily reward" });
     }
   });
@@ -2032,7 +2236,7 @@ function registerUserRoutes(app2) {
       });
       res.json(result);
     } catch (error) {
-      console.error("Tutorial completion error:", error);
+      logger.error("Tutorial completion error:", error);
       res.status(500).json({ error: error.message || "Failed to complete tutorial" });
     }
   });
@@ -2063,6 +2267,7 @@ function registerUserRoutes(app2) {
 }
 
 // server/routes/admin.routes.ts
+init_logger();
 init_storage();
 init_storage();
 init_schema();
@@ -2074,7 +2279,7 @@ function registerAdminRoutes(app2) {
       const settings = await storage.getAllGameSettings();
       res.json(settings);
     } catch (error) {
-      console.error("Get settings error:", error);
+      logger.error("Get settings error:", error);
       res.status(500).json({ error: "Failed to fetch settings" });
     }
   });
@@ -2087,7 +2292,7 @@ function registerAdminRoutes(app2) {
       const setting = await storage.setGameSetting(key, value);
       res.json(setting);
     } catch (error) {
-      console.error("Update setting error:", error);
+      logger.error("Update setting error:", error);
       res.status(500).json({ error: "Failed to update setting" });
     }
   });
@@ -2096,7 +2301,7 @@ function registerAdminRoutes(app2) {
       const users2 = await storage.getAllUsers();
       res.json(users2);
     } catch (error) {
-      console.error("Get users error:", error);
+      logger.error("Get users error:", error);
       res.status(500).json({ error: "Failed to fetch users" });
     }
   });
@@ -2106,7 +2311,7 @@ function registerAdminRoutes(app2) {
       await storage.setUserAdmin(req.params.userId, isAdmin);
       res.json({ success: true });
     } catch (error) {
-      console.error("Set admin error:", error);
+      logger.error("Set admin error:", error);
       res.status(500).json({ error: "Failed to update admin status" });
     }
   });
@@ -2141,7 +2346,7 @@ function registerAdminRoutes(app2) {
             items: parsed.items || []
           };
         } catch (e) {
-          console.error("Failed to parse loot box rewards:", e);
+          logger.error("Failed to parse loot box rewards:", e);
         }
         return {
           id: `lootbox-${l.id}`,
@@ -2164,7 +2369,7 @@ function registerAdminRoutes(app2) {
             items: parsed.items || []
           };
         } catch (e) {
-          console.error("Failed to parse pack rewards:", e);
+          logger.error("Failed to parse pack rewards:", e);
         }
         return {
           id: `pack-${p.id}`,
@@ -2188,7 +2393,7 @@ function registerAdminRoutes(app2) {
         payments: allPayments
       });
     } catch (error) {
-      console.error("Payment history error:", error);
+      logger.error("Payment history error:", error);
       res.status(500).json({ error: "Failed to fetch payment history" });
     }
   });
@@ -2197,7 +2402,7 @@ function registerAdminRoutes(app2) {
       await storage.setGameSetting("mining_paused", "true");
       res.json({ success: true, paused: true });
     } catch (error) {
-      console.error("Pause mining error:", error);
+      logger.error("Pause mining error:", error);
       res.status(500).json({ error: "Failed to pause mining" });
     }
   });
@@ -2206,7 +2411,7 @@ function registerAdminRoutes(app2) {
       await storage.setGameSetting("mining_paused", "false");
       res.json({ success: true, paused: false });
     } catch (error) {
-      console.error("Resume mining error:", error);
+      logger.error("Resume mining error:", error);
       res.status(500).json({ error: "Failed to resume mining" });
     }
   });
@@ -2296,7 +2501,7 @@ function registerAdminRoutes(app2) {
       await miningService.initializeBlockNumber();
       res.json(result);
     } catch (error) {
-      console.error("Bulk reset error:", error);
+      logger.error("Bulk reset error:", error);
       res.status(500).json({
         error: "Reset failed: Database transaction error",
         details: "All changes have been rolled back. Database is in original state."
@@ -2334,10 +2539,10 @@ function registerAdminRoutes(app2) {
           // Return first 20 for logging
         };
       });
-      console.log(`Hashrate recalculation complete: ${result.usersUpdated}/${result.totalUsers} users updated`);
+      logger.info(`Hashrate recalculation complete: ${result.usersUpdated}/${result.totalUsers} users updated`);
       res.json(result);
     } catch (error) {
-      console.error("Hashrate recalculation error:", error);
+      logger.error("Hashrate recalculation error:", error);
       res.status(500).json({
         error: "Hashrate recalculation failed",
         details: error.message
@@ -2360,7 +2565,7 @@ function registerAdminRoutes(app2) {
         }
       });
     } catch (error) {
-      console.error("Get jackpots error:", error);
+      logger.error("Get jackpots error:", error);
       res.status(500).json({
         error: "Failed to fetch jackpots",
         details: error.message
@@ -2390,14 +2595,14 @@ function registerAdminRoutes(app2) {
         const updated = await tx.select().from(jackpotWins2).where(eq5(jackpotWins2.id, parseInt(jackpotId))).limit(1);
         return updated[0];
       });
-      console.log(`Jackpot ${jackpotId} marked as paid by admin ${req.user?.telegramId}`);
+      logger.info(`Jackpot ${jackpotId} marked as paid by admin ${req.user?.telegramId}`);
       res.json({
         success: true,
         jackpot: result,
         message: "Jackpot marked as paid successfully"
       });
     } catch (error) {
-      console.error("Mark jackpot paid error:", error);
+      logger.error("Mark jackpot paid error:", error);
       res.status(400).json({
         error: error.message || "Failed to mark jackpot as paid"
       });
@@ -2431,7 +2636,7 @@ function registerAdminRoutes(app2) {
         message: "Equipment updated successfully"
       });
     } catch (error) {
-      console.error("Equipment update error:", error);
+      logger.error("Equipment update error:", error);
       res.status(500).json({ error: "Failed to update equipment" });
     }
   });
@@ -2456,7 +2661,7 @@ function registerAdminRoutes(app2) {
       }).returning();
       res.json(newSale[0]);
     } catch (error) {
-      console.error("Create flash sale error:", error);
+      logger.error("Create flash sale error:", error);
       res.status(500).json({ error: "Failed to create flash sale" });
     }
   });
@@ -2467,7 +2672,7 @@ function registerAdminRoutes(app2) {
       await db.update(flashSales2).set({ isActive: false }).where(eq5(flashSales2.id, parseInt(saleId)));
       res.json({ success: true });
     } catch (error) {
-      console.error("End flash sale error:", error);
+      logger.error("End flash sale error:", error);
       res.status(500).json({ error: "Failed to end flash sale" });
     }
   });
@@ -2497,7 +2702,7 @@ function registerAdminRoutes(app2) {
         season: newSeason[0]
       });
     } catch (error) {
-      console.error("Create season error:", error);
+      logger.error("Create season error:", error);
       res.status(500).json({ error: error.message || "Failed to create season" });
     }
   });
@@ -2523,7 +2728,7 @@ function registerAdminRoutes(app2) {
         season: updated[0]
       });
     } catch (error) {
-      console.error("Update season error:", error);
+      logger.error("Update season error:", error);
       res.status(500).json({ error: error.message || "Failed to update season" });
     }
   });
@@ -2545,7 +2750,7 @@ function registerAdminRoutes(app2) {
         season: updated[0]
       });
     } catch (error) {
-      console.error("Toggle season error:", error);
+      logger.error("Toggle season error:", error);
       res.status(500).json({ error: error.message || "Failed to toggle season" });
     }
   });
@@ -2562,14 +2767,15 @@ function registerAdminRoutes(app2) {
         message: "Season deleted successfully"
       });
     } catch (error) {
-      console.error("Delete season error:", error);
+      logger.error("Delete season error:", error);
       res.status(500).json({ error: error.message || "Failed to delete season" });
     }
   });
-  console.log("Admin routes registered: 18 routes across 7 categories");
+  logger.info("Admin routes registered: 18 routes across 7 categories");
 }
 
 // server/routes/social.routes.ts
+init_logger();
 init_storage();
 init_schema();
 import { eq as eq6, sql as sql6 } from "drizzle-orm";
@@ -2586,7 +2792,7 @@ function registerSocialRoutes(app2) {
       }).from(users).orderBy(sql6`${users.totalHashrate} DESC`).limit(Math.min(limit, 100));
       res.json(topMiners);
     } catch (error) {
-      console.error("Leaderboard hashrate error:", error);
+      logger.error("Leaderboard hashrate error:", error);
       res.status(500).json({ error: "Failed to fetch leaderboard" });
     }
   });
@@ -2602,7 +2808,7 @@ function registerSocialRoutes(app2) {
       }).from(users).orderBy(sql6`${users.csBalance} DESC`).limit(Math.min(limit, 100));
       res.json(topBalances);
     } catch (error) {
-      console.error("Leaderboard balance error:", error);
+      logger.error("Leaderboard balance error:", error);
       res.status(500).json({ error: "Failed to fetch leaderboard" });
     }
   });
@@ -2618,7 +2824,7 @@ function registerSocialRoutes(app2) {
       }).from(users).orderBy(sql6`(SELECT COUNT(*) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId}) DESC`).limit(Math.min(limit, 100));
       res.json(topReferrers);
     } catch (error) {
-      console.error("Leaderboard referrals error:", error);
+      logger.error("Leaderboard referrals error:", error);
       res.status(500).json({ error: "Failed to fetch referral leaderboard" });
     }
   });
@@ -2701,6 +2907,7 @@ function registerSocialRoutes(app2) {
 }
 
 // server/routes/mining.routes.ts
+init_logger();
 init_storage();
 function registerMiningRoutes(app2) {
   app2.get("/api/blocks", async (req, res) => {
@@ -2765,13 +2972,14 @@ function registerMiningRoutes(app2) {
         upcomingBlocks
       });
     } catch (error) {
-      console.error("Mining calendar error:", error);
+      logger.error("Mining calendar error:", error);
       res.status(500).json({ error: error.message || "Failed to generate mining calendar" });
     }
   });
 }
 
 // server/routes/equipment.routes.ts
+init_logger();
 init_storage();
 init_schema();
 init_schema();
@@ -2782,7 +2990,7 @@ function registerEquipmentRoutes(app2) {
       const equipment = await storage.getAllEquipmentTypes();
       res.json(equipment);
     } catch (error) {
-      console.error("Error loading equipment types:", error);
+      logger.error("Error loading equipment types:", error);
       res.status(500).json({ error: "Failed to load equipment types" });
     }
   });
@@ -2856,11 +3064,13 @@ function registerEquipmentRoutes(app2) {
 }
 
 // server/routes/announcements.routes.ts
+init_logger();
 init_storage();
 init_schema();
 import { eq as eq9 } from "drizzle-orm";
 
 // server/services/announcements.ts
+init_logger();
 init_storage();
 init_schema();
 import { eq as eq8, and as and6, sql as sql8, isNull, lte } from "drizzle-orm";
@@ -2883,7 +3093,7 @@ async function sendAnnouncementToAllUsers(announcementId) {
         username: users.username
       }).from(users);
     }
-    console.log(`\u{1F4E3} Sending announcement "${ann.title}" to ${targetUsers.length} users...`);
+    logger.info(`\u{1F4E3} Sending announcement "${ann.title}" to ${targetUsers.length} users...`);
     let sentCount = 0;
     const failedUsers = [];
     const BATCH_SIZE = 30;
@@ -2894,7 +3104,7 @@ async function sendAnnouncementToAllUsers(announcementId) {
         batch.map(async (user) => {
           try {
             if (!user.telegramId) {
-              console.warn(`Skipping user with no telegramId: ${user.username}`);
+              logger.warn(`Skipping user with no telegramId: ${user.username}`);
               return;
             }
             const message = `\u{1F4E2} *${ann.title}*
@@ -2903,7 +3113,7 @@ ${ann.message}`;
             await sendMessageToUser(user.telegramId, message);
             sentCount++;
           } catch (error) {
-            console.error(`Failed to send announcement to user ${user.telegramId}:`, error.message);
+            logger.error(`Failed to send announcement to user ${user.telegramId}:`, error.message);
             if (user.telegramId) {
               failedUsers.push(user.telegramId);
             }
@@ -2918,13 +3128,13 @@ ${ann.message}`;
       sentAt: /* @__PURE__ */ new Date(),
       totalRecipients: sentCount
     }).where(eq8(announcements.id, announcementId));
-    console.log(`\u2705 Announcement sent to ${sentCount}/${targetUsers.length} users (${failedUsers.length} failed)`);
+    logger.info(`\u2705 Announcement sent to ${sentCount}/${targetUsers.length} users (${failedUsers.length} failed)`);
     return {
       totalSent: sentCount,
       failedUsers
     };
   } catch (error) {
-    console.error("Send announcement error:", error);
+    logger.error("Send announcement error:", error);
     throw error;
   }
 }
@@ -2938,16 +3148,16 @@ async function processScheduledAnnouncements() {
         lte(announcements.scheduledFor, now)
       )
     );
-    console.log(`\u23F0 Found ${pendingAnnouncements.length} scheduled announcements to send`);
+    logger.info(`\u23F0 Found ${pendingAnnouncements.length} scheduled announcements to send`);
     for (const announcement of pendingAnnouncements) {
       try {
         await sendAnnouncementToAllUsers(announcement.id);
       } catch (error) {
-        console.error(`Failed to send scheduled announcement ${announcement.id}:`, error.message);
+        logger.error(`Failed to send scheduled announcement ${announcement.id}:`, error.message);
       }
     }
   } catch (error) {
-    console.error("Process scheduled announcements error:", error);
+    logger.error("Process scheduled announcements error:", error);
   }
 }
 async function getActiveAnnouncementsForUser(telegramId) {
@@ -2967,7 +3177,7 @@ async function getActiveAnnouncementsForUser(telegramId) {
     const unreadAnnouncements = activeAnnouncements.filter((a) => !readIds.has(a.id));
     return unreadAnnouncements;
   } catch (error) {
-    console.error("Get active announcements error:", error);
+    logger.error("Get active announcements error:", error);
     throw error;
   }
 }
@@ -2990,7 +3200,7 @@ async function markAnnouncementAsRead(announcementId, telegramId) {
       readCount: sql8`${announcements.readCount} + 1`
     }).where(eq8(announcements.id, announcementId));
   } catch (error) {
-    console.error("Mark announcement as read error:", error);
+    logger.error("Mark announcement as read error:", error);
     throw error;
   }
 }
@@ -2999,7 +3209,7 @@ async function getAllAnnouncements(limit = 50) {
     const allAnnouncements = await db.select().from(announcements).orderBy(sql8`${announcements.createdAt} DESC`).limit(limit);
     return allAnnouncements;
   } catch (error) {
-    console.error("Get all announcements error:", error);
+    logger.error("Get all announcements error:", error);
     throw error;
   }
 }
@@ -3038,7 +3248,7 @@ function registerAnnouncementRoutes(app2) {
       const shouldSendNow = !data.scheduledFor || new Date(data.scheduledFor) <= /* @__PURE__ */ new Date();
       if (shouldSendNow) {
         sendAnnouncementToAllUsers(newAnnouncement.id).catch((error) => {
-          console.error("Failed to send announcement:", error);
+          logger.error("Failed to send announcement:", error);
         });
       }
       res.json({
@@ -3047,7 +3257,7 @@ function registerAnnouncementRoutes(app2) {
         sendingNow: shouldSendNow
       });
     } catch (error) {
-      console.error("Create announcement error:", error);
+      logger.error("Create announcement error:", error);
       res.status(500).json({ error: error.message || "Failed to create announcement" });
     }
   });
@@ -3057,7 +3267,7 @@ function registerAnnouncementRoutes(app2) {
       const allAnnouncements = await getAllAnnouncements(limit);
       res.json(allAnnouncements);
     } catch (error) {
-      console.error("Get announcements error:", error);
+      logger.error("Get announcements error:", error);
       res.status(500).json({ error: "Failed to fetch announcements" });
     }
   });
@@ -3083,7 +3293,7 @@ function registerAnnouncementRoutes(app2) {
       }).where(eq9(announcements.id, announcementId)).returning();
       res.json(updated);
     } catch (error) {
-      console.error("Update announcement error:", error);
+      logger.error("Update announcement error:", error);
       res.status(500).json({ error: "Failed to update announcement" });
     }
   });
@@ -3093,7 +3303,7 @@ function registerAnnouncementRoutes(app2) {
       await db.delete(announcements).where(eq9(announcements.id, announcementId));
       res.json({ success: true, message: "Announcement deleted" });
     } catch (error) {
-      console.error("Delete announcement error:", error);
+      logger.error("Delete announcement error:", error);
       res.status(500).json({ error: "Failed to delete announcement" });
     }
   });
@@ -3114,7 +3324,7 @@ function registerAnnouncementRoutes(app2) {
         failedCount: result.failedUsers.length
       });
     } catch (error) {
-      console.error("Force send announcement error:", error);
+      logger.error("Force send announcement error:", error);
       res.status(500).json({ error: error.message || "Failed to send announcement" });
     }
   });
@@ -3126,7 +3336,7 @@ function registerAnnouncementRoutes(app2) {
       const activeAnnouncements = await getActiveAnnouncementsForUser(req.telegramUser.id.toString());
       res.json(activeAnnouncements);
     } catch (error) {
-      console.error("Get active announcements error:", error);
+      logger.error("Get active announcements error:", error);
       res.status(500).json({ error: "Failed to fetch active announcements" });
     }
   });
@@ -3139,18 +3349,20 @@ function registerAnnouncementRoutes(app2) {
       await markAnnouncementAsRead(announcementId, req.telegramUser.id.toString());
       res.json({ success: true, message: "Announcement marked as read" });
     } catch (error) {
-      console.error("Mark announcement as read error:", error);
+      logger.error("Mark announcement as read error:", error);
       res.status(500).json({ error: "Failed to mark announcement as read" });
     }
   });
 }
 
 // server/routes/promoCodes.routes.ts
+init_logger();
 init_storage();
 init_schema();
 import { eq as eq11 } from "drizzle-orm";
 
 // server/services/promoCodes.ts
+init_logger();
 init_storage();
 init_schema();
 import { eq as eq10, and as and8, sql as sql9 } from "drizzle-orm";
@@ -3201,7 +3413,7 @@ async function validatePromoCode(code, telegramId) {
     }
     return { valid: true, promoCode: promo };
   } catch (error) {
-    console.error("Validate promo code error:", error);
+    logger.error("Validate promo code error:", error);
     throw error;
   }
 }
@@ -3325,7 +3537,7 @@ async function redeemPromoCode(code, telegramId, ipAddress) {
     });
     return { success: true, reward: result };
   } catch (error) {
-    console.error("Redeem promo code error:", error);
+    logger.error("Redeem promo code error:", error);
     return { success: false, reward: null, error: error.message || "Failed to redeem promo code" };
   }
 }
@@ -3334,7 +3546,7 @@ async function getAllPromoCodes(limit = 100) {
     const codes = await db.select().from(promoCodes).orderBy(sql9`${promoCodes.createdAt} DESC`).limit(limit);
     return codes;
   } catch (error) {
-    console.error("Get all promo codes error:", error);
+    logger.error("Get all promo codes error:", error);
     throw error;
   }
 }
@@ -3350,7 +3562,7 @@ async function getPromoCodeRedemptions(promoCodeId) {
     }).from(promoCodeRedemptions).leftJoin(users, eq10(users.telegramId, promoCodeRedemptions.telegramId)).where(eq10(promoCodeRedemptions.promoCodeId, promoCodeId)).orderBy(sql9`${promoCodeRedemptions.redeemedAt} DESC`);
     return redemptions;
   } catch (error) {
-    console.error("Get promo code redemptions error:", error);
+    logger.error("Get promo code redemptions error:", error);
     throw error;
   }
 }
@@ -3395,7 +3607,7 @@ function registerPromoCodeRoutes(app2) {
         promoCode: newPromoCode
       });
     } catch (error) {
-      console.error("Create promo code error:", error);
+      logger.error("Create promo code error:", error);
       res.status(500).json({ error: error.message || "Failed to create promo code" });
     }
   });
@@ -3405,7 +3617,7 @@ function registerPromoCodeRoutes(app2) {
       const codes = await getAllPromoCodes(limit);
       res.json(codes);
     } catch (error) {
-      console.error("Get promo codes error:", error);
+      logger.error("Get promo codes error:", error);
       res.status(500).json({ error: "Failed to fetch promo codes" });
     }
   });
@@ -3427,7 +3639,7 @@ function registerPromoCodeRoutes(app2) {
       }).where(eq11(promoCodes.id, promoCodeId)).returning();
       res.json(updated);
     } catch (error) {
-      console.error("Update promo code error:", error);
+      logger.error("Update promo code error:", error);
       res.status(500).json({ error: "Failed to update promo code" });
     }
   });
@@ -3437,7 +3649,7 @@ function registerPromoCodeRoutes(app2) {
       await db.update(promoCodes).set({ isActive: false }).where(eq11(promoCodes.id, promoCodeId));
       res.json({ success: true, message: "Promo code deactivated" });
     } catch (error) {
-      console.error("Deactivate promo code error:", error);
+      logger.error("Deactivate promo code error:", error);
       res.status(500).json({ error: "Failed to deactivate promo code" });
     }
   });
@@ -3447,7 +3659,7 @@ function registerPromoCodeRoutes(app2) {
       const redemptions = await getPromoCodeRedemptions(promoCodeId);
       res.json(redemptions);
     } catch (error) {
-      console.error("Get redemptions error:", error);
+      logger.error("Get redemptions error:", error);
       res.status(500).json({ error: "Failed to fetch redemptions" });
     }
   });
@@ -3463,7 +3675,7 @@ function registerPromoCodeRoutes(app2) {
       const validation = await validatePromoCode(code, req.telegramUser.id.toString());
       res.json(validation);
     } catch (error) {
-      console.error("Validate promo code error:", error);
+      logger.error("Validate promo code error:", error);
       res.status(500).json({ error: "Failed to validate promo code" });
     }
   });
@@ -3491,13 +3703,14 @@ function registerPromoCodeRoutes(app2) {
         reward: result.reward
       });
     } catch (error) {
-      console.error("Redeem promo code error:", error);
+      logger.error("Redeem promo code error:", error);
       res.status(500).json({ error: error.message || "Failed to redeem promo code" });
     }
   });
 }
 
 // server/routes/analytics.routes.ts
+init_logger();
 init_storage();
 init_schema();
 import { sql as sql11, gte as gte2, lte as lte3, and as and10, count as count2 } from "drizzle-orm";
@@ -3505,6 +3718,7 @@ import { sql as sql11, gte as gte2, lte as lte3, and as and10, count as count2 }
 // server/services/analytics.ts
 init_storage();
 init_schema();
+init_logger();
 import { eq as eq12, and as and9, gte, lte as lte2, sql as sql10, count } from "drizzle-orm";
 async function calculateDAU(date2) {
   try {
@@ -3520,7 +3734,7 @@ async function calculateDAU(date2) {
     );
     return result[0]?.count || 0;
   } catch (error) {
-    console.error("Calculate DAU error:", error);
+    logger.error("Calculate DAU error:", error);
     throw error;
   }
 }
@@ -3539,7 +3753,7 @@ async function calculateMAU(date2) {
     );
     return result[0]?.count || 0;
   } catch (error) {
-    console.error("Calculate MAU error:", error);
+    logger.error("Calculate MAU error:", error);
     throw error;
   }
 }
@@ -3574,7 +3788,7 @@ async function calculateRetention(cohortDate, dayOffset) {
     const returnedCount = returnedUsers[0]?.count || 0;
     return returnedCount;
   } catch (error) {
-    console.error("Calculate retention error:", error);
+    logger.error("Calculate retention error:", error);
     throw error;
   }
 }
@@ -3688,7 +3902,7 @@ async function generateDailyReport(date2) {
     }
     return analyticsData;
   } catch (error) {
-    console.error("Generate daily report error:", error);
+    logger.error("Generate daily report error:", error);
     throw error;
   }
 }
@@ -3734,7 +3948,7 @@ async function getAnalyticsOverview() {
       retentionD7: retentionD7Percent
     };
   } catch (error) {
-    console.error("Get analytics overview error:", error);
+    logger.error("Get analytics overview error:", error);
     throw error;
   }
 }
@@ -3743,7 +3957,7 @@ async function getDailyAnalyticsHistory(days = 30) {
     const analytics = await db.select().from(dailyAnalytics).orderBy(sql10`${dailyAnalytics.date} DESC`).limit(days);
     return analytics.reverse();
   } catch (error) {
-    console.error("Get daily analytics history error:", error);
+    logger.error("Get daily analytics history error:", error);
     throw error;
   }
 }
@@ -3752,7 +3966,7 @@ async function getRetentionCohorts() {
     const cohorts = await db.select().from(retentionCohorts).orderBy(sql10`${retentionCohorts.cohortDate} DESC`).limit(30);
     return cohorts;
   } catch (error) {
-    console.error("Get retention cohorts error:", error);
+    logger.error("Get retention cohorts error:", error);
     throw error;
   }
 }
@@ -3787,9 +4001,9 @@ async function updateRetentionCohorts() {
         await db.insert(retentionCohorts).values(cohortData);
       }
     }
-    console.log(`\u2705 Updated ${cohortDates.length} retention cohorts`);
+    logger.info(`\u2705 Updated ${cohortDates.length} retention cohorts`);
   } catch (error) {
-    console.error("Update retention cohorts error:", error);
+    logger.error("Update retention cohorts error:", error);
     throw error;
   }
 }
@@ -3801,7 +4015,7 @@ function registerAnalyticsRoutes(app2) {
       const overview = await getAnalyticsOverview();
       res.json(overview);
     } catch (error) {
-      console.error("Get analytics overview error:", error);
+      logger.error("Get analytics overview error:", error);
       res.status(500).json({ error: "Failed to fetch analytics overview" });
     }
   });
@@ -3811,7 +4025,7 @@ function registerAnalyticsRoutes(app2) {
       const history = await getDailyAnalyticsHistory(days);
       res.json(history);
     } catch (error) {
-      console.error("Get daily analytics error:", error);
+      logger.error("Get daily analytics error:", error);
       res.status(500).json({ error: "Failed to fetch daily analytics" });
     }
   });
@@ -3820,7 +4034,7 @@ function registerAnalyticsRoutes(app2) {
       const cohorts = await getRetentionCohorts();
       res.json(cohorts);
     } catch (error) {
-      console.error("Get retention cohorts error:", error);
+      logger.error("Get retention cohorts error:", error);
       res.status(500).json({ error: "Failed to fetch retention cohorts" });
     }
   });
@@ -3892,7 +4106,7 @@ function registerAnalyticsRoutes(app2) {
         }
       });
     } catch (error) {
-      console.error("Get revenue metrics error:", error);
+      logger.error("Get revenue metrics error:", error);
       res.status(500).json({ error: "Failed to fetch revenue metrics" });
     }
   });
@@ -3943,7 +4157,7 @@ function registerAnalyticsRoutes(app2) {
         }
       });
     } catch (error) {
-      console.error("Get user segments error:", error);
+      logger.error("Get user segments error:", error);
       res.status(500).json({ error: "Failed to fetch user segments" });
     }
   });
@@ -3964,7 +4178,7 @@ function registerAnalyticsRoutes(app2) {
         message: `Daily report generated for ${report.date}`
       });
     } catch (error) {
-      console.error("Generate report error:", error);
+      logger.error("Generate report error:", error);
       res.status(500).json({ error: "Failed to generate report" });
     }
   });
@@ -3976,18 +4190,20 @@ function registerAnalyticsRoutes(app2) {
         message: "Retention cohorts updated successfully"
       });
     } catch (error) {
-      console.error("Update cohorts error:", error);
+      logger.error("Update cohorts error:", error);
       res.status(500).json({ error: "Failed to update retention cohorts" });
     }
   });
 }
 
 // server/routes/events.routes.ts
+init_logger();
 init_storage();
 init_schema();
 import { eq as eq14 } from "drizzle-orm";
 
 // server/services/events.ts
+init_logger();
 init_storage();
 init_schema();
 import { eq as eq13, and as and11, sql as sql12, lte as lte4, gte as gte3, desc as desc2 } from "drizzle-orm";
@@ -3996,7 +4212,7 @@ async function getAllEvents() {
     const events = await db.select().from(scheduledEvents).orderBy(desc2(scheduledEvents.startTime));
     return events;
   } catch (error) {
-    console.error("Get all events error:", error);
+    logger.error("Get all events error:", error);
     throw error;
   }
 }
@@ -4012,7 +4228,7 @@ async function getActiveEvents() {
     ).orderBy(desc2(scheduledEvents.priority));
     return events;
   } catch (error) {
-    console.error("Get active events error:", error);
+    logger.error("Get active events error:", error);
     throw error;
   }
 }
@@ -4027,7 +4243,7 @@ async function getUpcomingEvents() {
     ).orderBy(scheduledEvents.startTime).limit(10);
     return events;
   } catch (error) {
-    console.error("Get upcoming events error:", error);
+    logger.error("Get upcoming events error:", error);
     throw error;
   }
 }
@@ -4043,9 +4259,9 @@ async function activateEvent(eventId) {
       await sendEventAnnouncement(evt, "started");
       await db.update(scheduledEvents).set({ announcementSent: true }).where(eq13(scheduledEvents.id, eventId));
     }
-    console.log(`\u2705 Event activated: ${evt.name} (ID: ${eventId})`);
+    logger.info(`\u2705 Event activated: ${evt.name} (ID: ${eventId})`);
   } catch (error) {
-    console.error("Activate event error:", error);
+    logger.error("Activate event error:", error);
     throw error;
   }
 }
@@ -4069,9 +4285,9 @@ async function deactivateEvent(eventId) {
         break;
     }
     await sendEventAnnouncement(evt, "ended");
-    console.log(`\u2705 Event deactivated: ${evt.name} (ID: ${eventId})`);
+    logger.info(`\u2705 Event deactivated: ${evt.name} (ID: ${eventId})`);
   } catch (error) {
-    console.error("Deactivate event error:", error);
+    logger.error("Deactivate event error:", error);
     throw error;
   }
 }
@@ -4094,7 +4310,7 @@ Thank you for participating! Check your rewards.`;
           try {
             await sendMessageToUser(user.telegramId, message);
           } catch (error) {
-            console.error(`Failed to send event announcement to ${user.telegramId}:`, error);
+            logger.error(`Failed to send event announcement to ${user.telegramId}:`, error);
           }
         }
       }));
@@ -4102,9 +4318,9 @@ Thank you for participating! Check your rewards.`;
         await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY));
       }
     }
-    console.log(`\u2705 Event announcement sent to ${allUsers.length} users`);
+    logger.info(`\u2705 Event announcement sent to ${allUsers.length} users`);
   } catch (error) {
-    console.error("Send event announcement error:", error);
+    logger.error("Send event announcement error:", error);
   }
 }
 async function processScheduledEvents() {
@@ -4130,10 +4346,10 @@ async function processScheduledEvents() {
       await deactivateEvent(event.id);
     }
     if (eventsToStart.length > 0 || eventsToEnd.length > 0) {
-      console.log(`\u2705 Processed ${eventsToStart.length} event starts, ${eventsToEnd.length} event ends`);
+      logger.info(`\u2705 Processed ${eventsToStart.length} event starts, ${eventsToEnd.length} event ends`);
     }
   } catch (error) {
-    console.error("Process scheduled events error:", error);
+    logger.error("Process scheduled events error:", error);
     throw error;
   }
 }
@@ -4189,15 +4405,15 @@ You've received your reward: ${eventData.reward}
 Thank you for participating!`;
           await sendMessageToUser(participant.telegramId, rewardMessage);
         } catch (error) {
-          console.error(`Failed to distribute reward to ${participant.telegramId}:`, error);
+          logger.error(`Failed to distribute reward to ${participant.telegramId}:`, error);
         }
       }
-      console.log(`\u2705 Community goal rewards distributed to ${participants.length} participants`);
+      logger.info(`\u2705 Community goal rewards distributed to ${participants.length} participants`);
     } else {
-      console.log(`\u26A0\uFE0F Community goal not reached. Target: ${eventData.targetCS}, Actual: ${totalContribution}`);
+      logger.info(`\u26A0\uFE0F Community goal not reached. Target: ${eventData.targetCS}, Actual: ${totalContribution}`);
     }
   } catch (error) {
-    console.error("Finalize community goal error:", error);
+    logger.error("Finalize community goal error:", error);
     throw error;
   }
 }
@@ -4229,10 +4445,10 @@ Congratulations!`;
           }
         }
       }
-      console.log(`\u2705 Tournament prizes distributed to top ${eventData.prizes.length} winners`);
+      logger.info(`\u2705 Tournament prizes distributed to top ${eventData.prizes.length} winners`);
     }
   } catch (error) {
-    console.error("Finalize tournament error:", error);
+    logger.error("Finalize tournament error:", error);
     throw error;
   }
 }
@@ -4249,7 +4465,7 @@ async function getEventParticipation(eventId) {
     }).from(eventParticipation).leftJoin(users, eq13(users.telegramId, eventParticipation.telegramId)).where(eq13(eventParticipation.eventId, eventId)).orderBy(desc2(eventParticipation.contribution));
     return participation;
   } catch (error) {
-    console.error("Get event participation error:", error);
+    logger.error("Get event participation error:", error);
     throw error;
   }
 }
@@ -4287,7 +4503,7 @@ function registerEventsRoutes(app2) {
         event: newEvent
       });
     } catch (error) {
-      console.error("Create event error:", error);
+      logger.error("Create event error:", error);
       res.status(500).json({ error: error.message || "Failed to create event" });
     }
   });
@@ -4296,7 +4512,7 @@ function registerEventsRoutes(app2) {
       const events = await getAllEvents();
       res.json(events);
     } catch (error) {
-      console.error("Get events error:", error);
+      logger.error("Get events error:", error);
       res.status(500).json({ error: "Failed to fetch events" });
     }
   });
@@ -4331,7 +4547,7 @@ function registerEventsRoutes(app2) {
       }).where(eq14(scheduledEvents.id, eventId)).returning();
       res.json(updated);
     } catch (error) {
-      console.error("Update event error:", error);
+      logger.error("Update event error:", error);
       res.status(500).json({ error: "Failed to update event" });
     }
   });
@@ -4348,7 +4564,7 @@ function registerEventsRoutes(app2) {
       await db.delete(scheduledEvents).where(eq14(scheduledEvents.id, eventId));
       res.json({ success: true, message: "Event deleted" });
     } catch (error) {
-      console.error("Delete event error:", error);
+      logger.error("Delete event error:", error);
       res.status(500).json({ error: "Failed to delete event" });
     }
   });
@@ -4368,7 +4584,7 @@ function registerEventsRoutes(app2) {
         message: "Event activated"
       });
     } catch (error) {
-      console.error("Activate event error:", error);
+      logger.error("Activate event error:", error);
       res.status(500).json({ error: error.message || "Failed to activate event" });
     }
   });
@@ -4388,7 +4604,7 @@ function registerEventsRoutes(app2) {
         message: "Event ended"
       });
     } catch (error) {
-      console.error("End event error:", error);
+      logger.error("End event error:", error);
       res.status(500).json({ error: error.message || "Failed to end event" });
     }
   });
@@ -4398,7 +4614,7 @@ function registerEventsRoutes(app2) {
       const participation = await getEventParticipation(eventId);
       res.json(participation);
     } catch (error) {
-      console.error("Get event participation error:", error);
+      logger.error("Get event participation error:", error);
       res.status(500).json({ error: "Failed to fetch event participation" });
     }
   });
@@ -4410,7 +4626,7 @@ function registerEventsRoutes(app2) {
       const activeEvents = await getActiveEvents();
       res.json(activeEvents);
     } catch (error) {
-      console.error("Get active events error:", error);
+      logger.error("Get active events error:", error);
       res.status(500).json({ error: "Failed to fetch active events" });
     }
   });
@@ -4422,7 +4638,7 @@ function registerEventsRoutes(app2) {
       const upcomingEvents = await getUpcomingEvents();
       res.json(upcomingEvents);
     } catch (error) {
-      console.error("Get upcoming events error:", error);
+      logger.error("Get upcoming events error:", error);
       res.status(500).json({ error: "Failed to fetch upcoming events" });
     }
   });
@@ -4437,13 +4653,17 @@ function registerEventsRoutes(app2) {
         message: "Rewards are automatically distributed when events end"
       });
     } catch (error) {
-      console.error("Claim reward error:", error);
+      logger.error("Claim reward error:", error);
       res.status(500).json({ error: "Failed to claim reward" });
     }
   });
 }
 
+// server/routes/economy.routes.ts
+init_logger();
+
 // server/services/economy.ts
+init_logger();
 init_storage();
 init_schema();
 import { eq as eq15, sql as sql13, lte as lte5, gte as gte4, and as and12, desc as desc3 } from "drizzle-orm";
@@ -4485,7 +4705,7 @@ async function calculateWealthDistribution() {
       giniCoefficient: parseFloat(giniCoefficient.toFixed(4))
     };
   } catch (error) {
-    console.error("Calculate wealth distribution error:", error);
+    logger.error("Calculate wealth distribution error:", error);
     throw error;
   }
 }
@@ -4550,10 +4770,10 @@ async function calculateDailyEconomyMetrics(date2) {
     } else {
       await db.insert(economyMetrics).values(metricsData);
     }
-    console.log(`\u2705 Economy metrics calculated for ${dateStr}`);
+    logger.info(`\u2705 Economy metrics calculated for ${dateStr}`);
     await checkEconomyAlerts(dateStr, metricsData);
   } catch (error) {
-    console.error("Calculate daily economy metrics error:", error);
+    logger.error("Calculate daily economy metrics error:", error);
     throw error;
   }
 }
@@ -4577,9 +4797,9 @@ async function calculateEconomySinks(date2) {
         });
       }
     }
-    console.log(`\u2705 Economy sinks calculated for ${dateStr}`);
+    logger.info(`\u2705 Economy sinks calculated for ${dateStr}`);
   } catch (error) {
-    console.error("Calculate economy sinks error:", error);
+    logger.error("Calculate economy sinks error:", error);
     throw error;
   }
 }
@@ -4633,10 +4853,10 @@ async function checkEconomyAlerts(dateStr, metrics) {
       });
     }
     if (alerts.length > 0) {
-      console.log(`\u26A0\uFE0F  Generated ${alerts.length} economy alerts for ${dateStr}`);
+      logger.info(`\u26A0\uFE0F  Generated ${alerts.length} economy alerts for ${dateStr}`);
     }
   } catch (error) {
-    console.error("Check economy alerts error:", error);
+    logger.error("Check economy alerts error:", error);
   }
 }
 async function getEconomyOverview() {
@@ -4653,7 +4873,7 @@ async function getEconomyOverview() {
     }
     return latest[0];
   } catch (error) {
-    console.error("Get economy overview error:", error);
+    logger.error("Get economy overview error:", error);
     throw error;
   }
 }
@@ -4662,7 +4882,7 @@ async function getEconomyHistory(days = 30) {
     const history = await db.select().from(economyMetrics).orderBy(desc3(economyMetrics.date)).limit(days);
     return history.reverse();
   } catch (error) {
-    console.error("Get economy history error:", error);
+    logger.error("Get economy history error:", error);
     throw error;
   }
 }
@@ -4679,7 +4899,7 @@ async function getEconomySinksBreakdown(days = 30) {
     ).orderBy(economySinks.date);
     return sinks;
   } catch (error) {
-    console.error("Get economy sinks breakdown error:", error);
+    logger.error("Get economy sinks breakdown error:", error);
     throw error;
   }
 }
@@ -4688,7 +4908,7 @@ async function getActiveAlerts() {
     const alerts = await db.select().from(economyAlerts).where(eq15(economyAlerts.acknowledged, false)).orderBy(desc3(economyAlerts.createdAt)).limit(50);
     return alerts;
   } catch (error) {
-    console.error("Get active alerts error:", error);
+    logger.error("Get active alerts error:", error);
     throw error;
   }
 }
@@ -4698,9 +4918,9 @@ async function acknowledgeAlert(alertId, adminTelegramId) {
       acknowledged: true,
       acknowledgedBy: adminTelegramId
     }).where(eq15(economyAlerts.id, alertId));
-    console.log(`\u2705 Alert ${alertId} acknowledged by ${adminTelegramId}`);
+    logger.info(`\u2705 Alert ${alertId} acknowledged by ${adminTelegramId}`);
   } catch (error) {
-    console.error("Acknowledge alert error:", error);
+    logger.error("Acknowledge alert error:", error);
     throw error;
   }
 }
@@ -4740,7 +4960,7 @@ function registerEconomyRoutes(app2) {
         recommendations
       });
     } catch (error) {
-      console.error("Get economy overview error:", error);
+      logger.error("Get economy overview error:", error);
       res.status(500).json({ error: "Failed to fetch economy overview" });
     }
   });
@@ -4750,7 +4970,7 @@ function registerEconomyRoutes(app2) {
       const history = await getEconomyHistory(days);
       res.json(history);
     } catch (error) {
-      console.error("Get economy history error:", error);
+      logger.error("Get economy history error:", error);
       res.status(500).json({ error: "Failed to fetch economy history" });
     }
   });
@@ -4759,7 +4979,7 @@ function registerEconomyRoutes(app2) {
       const distribution = await calculateWealthDistribution();
       res.json(distribution);
     } catch (error) {
-      console.error("Get wealth distribution error:", error);
+      logger.error("Get wealth distribution error:", error);
       res.status(500).json({ error: "Failed to fetch wealth distribution" });
     }
   });
@@ -4780,7 +5000,7 @@ function registerEconomyRoutes(app2) {
         aggregated
       });
     } catch (error) {
-      console.error("Get economy sinks error:", error);
+      logger.error("Get economy sinks error:", error);
       res.status(500).json({ error: "Failed to fetch economy sinks" });
     }
   });
@@ -4789,7 +5009,7 @@ function registerEconomyRoutes(app2) {
       const alerts = await getActiveAlerts();
       res.json(alerts);
     } catch (error) {
-      console.error("Get economy alerts error:", error);
+      logger.error("Get economy alerts error:", error);
       res.status(500).json({ error: "Failed to fetch economy alerts" });
     }
   });
@@ -4805,7 +5025,7 @@ function registerEconomyRoutes(app2) {
         message: "Alert acknowledged"
       });
     } catch (error) {
-      console.error("Acknowledge alert error:", error);
+      logger.error("Acknowledge alert error:", error);
       res.status(500).json({ error: "Failed to acknowledge alert" });
     }
   });
@@ -4826,7 +5046,7 @@ function registerEconomyRoutes(app2) {
         message: `Economy metrics calculated for ${targetDate.toISOString().split("T")[0]}`
       });
     } catch (error) {
-      console.error("Calculate metrics error:", error);
+      logger.error("Calculate metrics error:", error);
       res.status(500).json({ error: "Failed to calculate metrics" });
     }
   });
@@ -4843,18 +5063,20 @@ function registerEconomyRoutes(app2) {
         }
       });
     } catch (error) {
-      console.error("Get recommendations error:", error);
+      logger.error("Get recommendations error:", error);
       res.status(500).json({ error: "Failed to fetch recommendations" });
     }
   });
 }
 
 // server/routes/segmentation.routes.ts
+init_logger();
 init_storage();
 init_schema();
 import { eq as eq17 } from "drizzle-orm";
 
 // server/services/segmentation.ts
+init_logger();
 init_storage();
 init_schema();
 import { eq as eq16, sql as sql14, desc as desc4, and as and13, lte as lte6 } from "drizzle-orm";
@@ -4902,7 +5124,7 @@ async function calculateUserSegment(telegramId) {
     }
     return segment;
   } catch (error) {
-    console.error("Calculate user segment error:", error);
+    logger.error("Calculate user segment error:", error);
     throw error;
   }
 }
@@ -4947,13 +5169,13 @@ async function refreshUserSegment(telegramId) {
       await db.insert(userSegments).values(segmentData);
     }
   } catch (error) {
-    console.error("Refresh user segment error:", error);
+    logger.error("Refresh user segment error:", error);
     throw error;
   }
 }
 async function refreshAllSegments() {
   try {
-    console.log("\u{1F504} Refreshing all user segments...");
+    logger.info("\u{1F504} Refreshing all user segments...");
     const allUsers = await db.select({ telegramId: users.telegramId }).from(users);
     let updated = 0;
     for (const user of allUsers) {
@@ -4962,13 +5184,13 @@ async function refreshAllSegments() {
           await refreshUserSegment(user.telegramId);
           updated++;
         } catch (error) {
-          console.error(`Failed to refresh segment for ${user.telegramId}:`, error);
+          logger.error(`Failed to refresh segment for ${user.telegramId}:`, error);
         }
       }
     }
-    console.log(`\u2705 Refreshed segments for ${updated} users`);
+    logger.info(`\u2705 Refreshed segments for ${updated} users`);
   } catch (error) {
-    console.error("Refresh all segments error:", error);
+    logger.error("Refresh all segments error:", error);
     throw error;
   }
 }
@@ -4989,7 +5211,7 @@ async function getUsersInSegment(segment) {
     }).from(userSegments).leftJoin(users, eq16(users.telegramId, userSegments.telegramId)).where(eq16(userSegments.segment, segment)).orderBy(desc4(userSegments.lifetimeValue));
     return segmentUsers;
   } catch (error) {
-    console.error("Get users in segment error:", error);
+    logger.error("Get users in segment error:", error);
     throw error;
   }
 }
@@ -5012,7 +5234,7 @@ async function getSegmentOverview() {
       segments: overview
     };
   } catch (error) {
-    console.error("Get segment overview error:", error);
+    logger.error("Get segment overview error:", error);
     throw error;
   }
 }
@@ -5034,7 +5256,7 @@ async function getTargetedOffersForUser(telegramId) {
     );
     return offers;
   } catch (error) {
-    console.error("Get targeted offers for user error:", error);
+    logger.error("Get targeted offers for user error:", error);
     throw error;
   }
 }
@@ -5043,13 +5265,13 @@ async function getAllTargetedOffers() {
     const offers = await db.select().from(segmentTargetedOffers).orderBy(desc4(segmentTargetedOffers.createdAt));
     return offers;
   } catch (error) {
-    console.error("Get all targeted offers error:", error);
+    logger.error("Get all targeted offers error:", error);
     throw error;
   }
 }
 async function sendReEngagementMessages() {
   try {
-    console.log("\u{1F4E7} Sending re-engagement messages...");
+    logger.info("\u{1F4E7} Sending re-engagement messages...");
     const atRiskUsers = await getUsersInSegment("at_risk");
     let sent = 0;
     for (const user of atRiskUsers) {
@@ -5072,18 +5294,18 @@ Your progress is waiting for you. \u{1F48E}`;
         sent++;
         await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (error) {
-        console.error(`Failed to send re-engagement to ${user.telegramId}:`, error);
+        logger.error(`Failed to send re-engagement to ${user.telegramId}:`, error);
       }
     }
-    console.log(`\u2705 Sent ${sent} re-engagement messages`);
+    logger.info(`\u2705 Sent ${sent} re-engagement messages`);
   } catch (error) {
-    console.error("Send re-engagement messages error:", error);
+    logger.error("Send re-engagement messages error:", error);
     throw error;
   }
 }
 async function sendChurnedMessages() {
   try {
-    console.log("\u{1F4E7} Sending churned user messages...");
+    logger.info("\u{1F4E7} Sending churned user messages...");
     const churnedUsers = await getUsersInSegment("churned");
     const recentlyChurned = churnedUsers.filter((u) => u.daysSinceLastActive >= 14 && u.daysSinceLastActive <= 15);
     let sent = 0;
@@ -5107,12 +5329,12 @@ Don't lose your progress! Your mining empire is waiting. \u26CF\uFE0F`;
         sent++;
         await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (error) {
-        console.error(`Failed to send churned message to ${user.telegramId}:`, error);
+        logger.error(`Failed to send churned message to ${user.telegramId}:`, error);
       }
     }
-    console.log(`\u2705 Sent ${sent} churned user messages`);
+    logger.info(`\u2705 Sent ${sent} churned user messages`);
   } catch (error) {
-    console.error("Send churned messages error:", error);
+    logger.error("Send churned messages error:", error);
     throw error;
   }
 }
@@ -5124,7 +5346,7 @@ function registerSegmentationRoutes(app2) {
       const overview = await getSegmentOverview();
       res.json(overview);
     } catch (error) {
-      console.error("Get segment overview error:", error);
+      logger.error("Get segment overview error:", error);
       res.status(500).json({ error: "Failed to fetch segment overview" });
     }
   });
@@ -5138,21 +5360,21 @@ function registerSegmentationRoutes(app2) {
       const users2 = await getUsersInSegment(segment);
       res.json(users2);
     } catch (error) {
-      console.error("Get users in segment error:", error);
+      logger.error("Get users in segment error:", error);
       res.status(500).json({ error: "Failed to fetch users in segment" });
     }
   });
   app2.post("/api/admin/segments/refresh", validateTelegramAuth, requireAdmin, async (req, res) => {
     try {
       refreshAllSegments().catch((error) => {
-        console.error("Background segment refresh error:", error);
+        logger.error("Background segment refresh error:", error);
       });
       res.json({
         success: true,
         message: "Segment refresh started in background"
       });
     } catch (error) {
-      console.error("Refresh segments error:", error);
+      logger.error("Refresh segments error:", error);
       res.status(500).json({ error: "Failed to trigger segment refresh" });
     }
   });
@@ -5191,7 +5413,7 @@ function registerSegmentationRoutes(app2) {
         offer: newOffer
       });
     } catch (error) {
-      console.error("Create targeted offer error:", error);
+      logger.error("Create targeted offer error:", error);
       res.status(500).json({ error: error.message || "Failed to create targeted offer" });
     }
   });
@@ -5200,7 +5422,7 @@ function registerSegmentationRoutes(app2) {
       const offers = await getAllTargetedOffers();
       res.json(offers);
     } catch (error) {
-      console.error("Get targeted offers error:", error);
+      logger.error("Get targeted offers error:", error);
       res.status(500).json({ error: "Failed to fetch targeted offers" });
     }
   });
@@ -5228,7 +5450,7 @@ function registerSegmentationRoutes(app2) {
       }).where(eq17(segmentTargetedOffers.id, offerId)).returning();
       res.json(updated);
     } catch (error) {
-      console.error("Update targeted offer error:", error);
+      logger.error("Update targeted offer error:", error);
       res.status(500).json({ error: "Failed to update targeted offer" });
     }
   });
@@ -5238,35 +5460,35 @@ function registerSegmentationRoutes(app2) {
       await db.delete(segmentTargetedOffers).where(eq17(segmentTargetedOffers.id, offerId));
       res.json({ success: true, message: "Offer deleted" });
     } catch (error) {
-      console.error("Delete targeted offer error:", error);
+      logger.error("Delete targeted offer error:", error);
       res.status(500).json({ error: "Failed to delete targeted offer" });
     }
   });
   app2.post("/api/admin/segments/send-reengagement", validateTelegramAuth, requireAdmin, async (req, res) => {
     try {
       sendReEngagementMessages().catch((error) => {
-        console.error("Background re-engagement send error:", error);
+        logger.error("Background re-engagement send error:", error);
       });
       res.json({
         success: true,
         message: "Re-engagement messages being sent in background"
       });
     } catch (error) {
-      console.error("Send re-engagement error:", error);
+      logger.error("Send re-engagement error:", error);
       res.status(500).json({ error: "Failed to send re-engagement messages" });
     }
   });
   app2.post("/api/admin/segments/send-churned", validateTelegramAuth, requireAdmin, async (req, res) => {
     try {
       sendChurnedMessages().catch((error) => {
-        console.error("Background churned send error:", error);
+        logger.error("Background churned send error:", error);
       });
       res.json({
         success: true,
         message: "Churned user messages being sent in background"
       });
     } catch (error) {
-      console.error("Send churned messages error:", error);
+      logger.error("Send churned messages error:", error);
       res.status(500).json({ error: "Failed to send churned messages" });
     }
   });
@@ -5278,13 +5500,14 @@ function registerSegmentationRoutes(app2) {
       const offers = await getTargetedOffersForUser(req.telegramUser.id.toString());
       res.json(offers);
     } catch (error) {
-      console.error("Get my targeted offers error:", error);
+      logger.error("Get my targeted offers error:", error);
       res.status(500).json({ error: "Failed to fetch targeted offers" });
     }
   });
 }
 
 // server/routes/gamification.routes.ts
+init_logger();
 init_db();
 init_schema();
 import { eq as eq18, and as and14, desc as desc5, sql as sql15 } from "drizzle-orm";
@@ -5314,7 +5537,7 @@ function registerGamificationRoutes(app2) {
         paidSpinsCount: spinRecord.paidSpinsCount || 0
       });
     } catch (error) {
-      console.error("Get spin status error:", error);
+      logger.error("Get spin status error:", error);
       res.status(500).json({ error: "Failed to get spin status" });
     }
   });
@@ -5414,7 +5637,7 @@ function registerGamificationRoutes(app2) {
         message
       });
     } catch (error) {
-      console.error("Spin wheel error:", error);
+      logger.error("Spin wheel error:", error);
       res.status(500).json({ error: error.message || "Failed to spin wheel" });
     }
   });
@@ -5446,7 +5669,7 @@ function registerGamificationRoutes(app2) {
         minutesRemaining
       });
     } catch (error) {
-      console.error("Get hourly bonus status error:", error);
+      logger.error("Get hourly bonus status error:", error);
       res.status(500).json({ error: "Failed to get hourly bonus status" });
     }
   });
@@ -5485,7 +5708,7 @@ function registerGamificationRoutes(app2) {
         message: `Claimed ${reward.toLocaleString()} CS!`
       });
     } catch (error) {
-      console.error("Claim hourly bonus error:", error);
+      logger.error("Claim hourly bonus error:", error);
       res.status(500).json({ error: error.message || "Failed to claim hourly bonus" });
     }
   });
@@ -5532,6 +5755,7 @@ function getRandomPrize(canWinJackpot) {
 }
 
 // server/routes/api-aliases.ts
+init_logger();
 init_storage();
 init_schema();
 import { sql as sql16 } from "drizzle-orm";
@@ -5541,7 +5765,7 @@ function registerApiAliases(app2) {
       const equipment = await storage.getAllEquipmentTypes();
       res.json(equipment);
     } catch (error) {
-      console.error("Error loading equipment types:", error);
+      logger.error("Error loading equipment types:", error);
       res.status(500).json({ error: "Failed to load equipment types" });
     }
   });
@@ -5568,7 +5792,7 @@ function registerApiAliases(app2) {
       }).from(users).orderBy(sql16`${users.csBalance} DESC`).limit(Math.min(limit, 100));
       res.json(topBalances);
     } catch (error) {
-      console.error("Leaderboard error:", error);
+      logger.error("Leaderboard error:", error);
       res.status(500).json({ error: "Failed to fetch leaderboard" });
     }
   });
@@ -5594,6 +5818,7 @@ function registerModularRoutes(app2) {
 }
 
 // server/routes.ts
+init_logger();
 function calculateDailyLoginReward2(streakDay) {
   const baseCs = 500;
   const baseChst = 10;
@@ -5613,7 +5838,7 @@ async function registerRoutes(app2) {
   const botWebhook = getBotWebhookHandler();
   if (botWebhook) {
     app2.post(botWebhook.path, botWebhook.handler);
-    console.log(`\u{1F916} Telegram webhook registered at ${botWebhook.path}`);
+    logger.info(`\u{1F916} Telegram webhook registered at ${botWebhook.path}`);
   }
   registerModularRoutes(app2);
   app2.post("/api/auth/telegram", validateTelegramAuth, async (req, res) => {
@@ -5664,7 +5889,7 @@ async function registerRoutes(app2) {
       }
       res.json(stats[0]);
     } catch (error) {
-      console.error("Get user statistics error:", error);
+      logger.error("Get user statistics error:", error);
       res.status(500).json({ error: "Failed to get user statistics" });
     }
   });
@@ -5680,7 +5905,7 @@ async function registerRoutes(app2) {
       }).from(users).orderBy(sql17`${users.totalHashrate} DESC`).limit(Math.min(limit, 100));
       res.json(topMiners);
     } catch (error) {
-      console.error("Leaderboard hashrate error:", error);
+      logger.error("Leaderboard hashrate error:", error);
       res.status(500).json({ error: "Failed to fetch leaderboard" });
     }
   });
@@ -5696,7 +5921,7 @@ async function registerRoutes(app2) {
       }).from(users).orderBy(sql17`${users.csBalance} DESC`).limit(Math.min(limit, 100));
       res.json(topBalances);
     } catch (error) {
-      console.error("Leaderboard balance error:", error);
+      logger.error("Leaderboard balance error:", error);
       res.status(500).json({ error: "Failed to fetch leaderboard" });
     }
   });
@@ -5712,7 +5937,7 @@ async function registerRoutes(app2) {
       }).from(users).orderBy(sql17`(SELECT COUNT(*) FROM ${referrals} WHERE ${referrals.referrerId} = ${users.telegramId}) DESC`).limit(Math.min(limit, 100));
       res.json(topReferrers);
     } catch (error) {
-      console.error("Referral leaderboard error:", error);
+      logger.error("Referral leaderboard error:", error);
       res.status(500).json({ error: "Failed to fetch referral leaderboard" });
     }
   });
@@ -5721,7 +5946,7 @@ async function registerRoutes(app2) {
       const equipment = await storage.getAllEquipmentTypes();
       res.json(equipment);
     } catch (error) {
-      console.error("Error loading equipment types:", error);
+      logger.error("Error loading equipment types:", error);
       res.status(500).json({ error: "Failed to load equipment types" });
     }
   });
@@ -5736,7 +5961,7 @@ async function registerRoutes(app2) {
       ));
       res.json(activeSales);
     } catch (error) {
-      console.error("Get flash sales error:", error);
+      logger.error("Get flash sales error:", error);
       res.status(500).json({ error: "Failed to fetch flash sales" });
     }
   });
@@ -5990,7 +6215,7 @@ async function registerRoutes(app2) {
       });
       res.json(result);
     } catch (error) {
-      console.error("Purchase error:", error);
+      logger.error("Purchase error:", error);
       res.status(400).json({ message: error.message });
     }
   });
@@ -6056,7 +6281,7 @@ async function registerRoutes(app2) {
         upcomingBlocks
       });
     } catch (error) {
-      console.error("Mining calendar error:", error);
+      logger.error("Mining calendar error:", error);
       res.status(500).json({ error: error.message || "Failed to generate mining calendar" });
     }
   });
@@ -6171,7 +6396,7 @@ async function registerRoutes(app2) {
       const purchases = await db.select().from(packPurchases).where(eq19(packPurchases.userId, user.telegramId)).orderBy(packPurchases.purchasedAt);
       res.json(purchases);
     } catch (error) {
-      console.error("Get pack purchases error:", error);
+      logger.error("Get pack purchases error:", error);
       res.status(500).json({ error: error.message || "Failed to get pack purchases" });
     }
   });
@@ -6243,7 +6468,7 @@ async function registerRoutes(app2) {
         rewards: result.rewards
       });
     } catch (error) {
-      console.error("Purchase pack error:", error);
+      logger.error("Purchase pack error:", error);
       res.status(500).json({ error: error.message || "Failed to purchase pack" });
     }
   });
@@ -6302,7 +6527,7 @@ async function registerRoutes(app2) {
         activePowerUp: result.activePowerUp
       });
     } catch (error) {
-      console.error("Purchase power-up error:", error);
+      logger.error("Purchase power-up error:", error);
       res.status(500).json({ error: error.message || "Failed to purchase power-up" });
     }
   });
@@ -6332,7 +6557,7 @@ async function registerRoutes(app2) {
         // 5% per prestige level
       });
     } catch (error) {
-      console.error("Get prestige error:", error);
+      logger.error("Get prestige error:", error);
       res.status(500).json({ error: error.message || "Failed to get prestige info" });
     }
   });
@@ -6383,7 +6608,7 @@ async function registerRoutes(app2) {
         permanentBoost: result.newPrestigeLevel * 5
       });
     } catch (error) {
-      console.error("Execute prestige error:", error);
+      logger.error("Execute prestige error:", error);
       res.status(500).json({ error: error.message || "Failed to execute prestige" });
     }
   });
@@ -6406,7 +6631,7 @@ async function registerRoutes(app2) {
         subscription: { ...sub, isActive }
       });
     } catch (error) {
-      console.error("Get subscription error:", error);
+      logger.error("Get subscription error:", error);
       res.status(500).json({ error: error.message || "Failed to get subscription" });
     }
   });
@@ -6457,7 +6682,7 @@ async function registerRoutes(app2) {
         subscription: result
       });
     } catch (error) {
-      console.error("Subscribe error:", error);
+      logger.error("Subscribe error:", error);
       res.status(500).json({ error: error.message || "Failed to subscribe" });
     }
   });
@@ -6475,7 +6700,7 @@ async function registerRoutes(app2) {
         message: "Subscription cancelled"
       });
     } catch (error) {
-      console.error("Cancel subscription error:", error);
+      logger.error("Cancel subscription error:", error);
       res.status(500).json({ error: error.message || "Failed to cancel subscription" });
     }
   });
@@ -6504,7 +6729,7 @@ async function registerRoutes(app2) {
         lastClaimDate: todaysClaim.length > 0 ? todaysClaim[0].claimedAt : null
       });
     } catch (error) {
-      console.error("Daily login status error:", error);
+      logger.error("Daily login status error:", error);
       res.status(500).json({ error: "Failed to get daily login status" });
     }
   });
@@ -6575,7 +6800,7 @@ async function registerRoutes(app2) {
         message: `Day ${currentStreak} reward claimed!`
       });
     } catch (error) {
-      console.error("Daily login claim error:", error);
+      logger.error("Daily login claim error:", error);
       res.status(500).json({ error: "Failed to claim daily reward" });
     }
   });
@@ -6585,14 +6810,14 @@ async function registerRoutes(app2) {
 
 // server/vite.ts
 import express from "express";
-import fs from "fs";
-import path2 from "path";
+import fs2 from "fs";
+import path3 from "path";
 import { createServer as createViteServer, createLogger } from "vite";
 
 // vite.config.ts
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import path from "path";
+import path2 from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { nodePolyfills } from "vite-plugin-node-polyfills";
 import { visualizer } from "rollup-plugin-visualizer";
@@ -6626,14 +6851,14 @@ var vite_config_default = defineConfig({
   ].filter(Boolean),
   resolve: {
     alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets")
+      "@": path2.resolve(import.meta.dirname, "client", "src"),
+      "@shared": path2.resolve(import.meta.dirname, "shared"),
+      "@assets": path2.resolve(import.meta.dirname, "attached_assets")
     }
   },
-  root: path.resolve(import.meta.dirname, "client"),
+  root: path2.resolve(import.meta.dirname, "client"),
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    outDir: path2.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
     rollupOptions: {
       output: {
@@ -6667,17 +6892,9 @@ var vite_config_default = defineConfig({
 });
 
 // server/vite.ts
+init_logger();
 import { nanoid } from "nanoid";
 var viteLogger = createLogger();
-function log(message, source = "express") {
-  const formattedTime = (/* @__PURE__ */ new Date()).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true
-  });
-  console.log(`${formattedTime} [${source}] ${message}`);
-}
 async function setupVite(app2, server) {
   const serverOptions = {
     middlewareMode: true,
@@ -6701,13 +6918,13 @@ async function setupVite(app2, server) {
   app2.use("*", async (req, res, next) => {
     const url = req.originalUrl;
     try {
-      const clientTemplate = path2.resolve(
+      const clientTemplate = path3.resolve(
         import.meta.dirname,
         "..",
         "client",
         "index.html"
       );
-      let template = await fs.promises.readFile(clientTemplate, "utf-8");
+      let template = await fs2.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`
@@ -6721,15 +6938,15 @@ async function setupVite(app2, server) {
   });
 }
 function serveStatic(app2) {
-  const distPath = path2.resolve(import.meta.dirname, "public");
-  if (!fs.existsSync(distPath)) {
+  const distPath = path3.resolve(import.meta.dirname, "public");
+  if (!fs2.existsSync(distPath)) {
     throw new Error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
     );
   }
   app2.use(express.static(distPath));
   app2.use("*", (_req, res) => {
-    res.sendFile(path2.resolve(distPath, "index.html"));
+    res.sendFile(path3.resolve(distPath, "index.html"));
   });
 }
 
@@ -6739,10 +6956,11 @@ init_mining();
 // server/seedDatabase.ts
 init_db();
 init_schema();
+init_logger();
 import { eq as eq20 } from "drizzle-orm";
 async function seedDatabase() {
   try {
-    console.log("\u{1F331} Starting database seeding...");
+    logger.info("Starting database seeding");
     const equipmentCatalog = [
       // BASIC LAPTOPS - CS/TON (Phase 1), CHST (Phase 2) - Cap: 10/model/user
       { id: "laptop-lenovo-e14", name: "Lenovo ThinkPad E14", tier: "Basic", category: "Basic Laptop", baseHashrate: 50, basePrice: 1e3, currency: "CS", maxOwned: 10, orderIndex: 1 },
@@ -6809,16 +7027,16 @@ async function seedDatabase() {
       { id: "quantum-ionq-forte", name: "IonQ Forte Quantum", tier: "Quantum", category: "Quantum Miner", baseHashrate: 15e6, basePrice: 750, currency: "TON", maxOwned: 10, orderIndex: 54 },
       { id: "quantum-atom-prime", name: "Atom Computing Prime Quantum", tier: "Quantum", category: "Quantum Miner", baseHashrate: 25e6, basePrice: 1e3, currency: "TON", maxOwned: 10, orderIndex: 55 }
     ];
-    console.log(`\u{1F4E6} Upserting ${equipmentCatalog.length} equipment items...`);
+    logger.info("Upserting equipment items", { count: equipmentCatalog.length });
     for (const equipment of equipmentCatalog) {
       await db.insert(equipmentTypes).values(equipment).onConflictDoUpdate({
         target: equipmentTypes.id,
         set: equipment
       });
     }
-    console.log(`\u2705 Equipment types upserted: ${equipmentCatalog.length}`);
+    logger.info("Equipment types upserted", { count: equipmentCatalog.length });
     const finalCount = await db.select().from(equipmentTypes);
-    console.log(`\u{1F50D} Verification: ${finalCount.length} equipment items in database`);
+    logger.info("Equipment items seeded", { count: finalCount.length });
     const defaultSettings = [
       { key: "mining_paused", value: "false" },
       { key: "equipment_price_multiplier", value: "1.0" },
@@ -6831,11 +7049,11 @@ async function seedDatabase() {
         await db.insert(gameSettings).values(setting);
       }
     }
-    console.log("\u2705 Game settings seeded");
-    console.log("\u{1F389} Database seeding complete!");
+    logger.info("Game settings seeded");
+    logger.info("Database seeding complete");
     return true;
   } catch (error) {
-    console.error("\u274C Seeding failed:", error instanceof Error ? error.message : error);
+    logger.error("Seeding failed", error instanceof Error ? error.message : error);
     return false;
   }
 }
@@ -6843,6 +7061,7 @@ async function seedDatabase() {
 // server/seedGameContent.ts
 init_db();
 init_schema();
+init_logger();
 var dailyChallengesData = [
   {
     challengeId: "early-bird",
@@ -7176,35 +7395,35 @@ var cosmeticItemsData = [
   }
 ];
 async function seedGameContent() {
-  console.log("\u{1F3AE} Seeding game content...");
+  logger.info("Seeding game content");
   try {
-    console.log("\u{1F4C5} Seeding daily challenges...");
+    logger.info("Seeding daily challenges");
     for (const challenge of dailyChallengesData) {
       await db.insert(dailyChallenges).values(challenge).onConflictDoUpdate({
         target: dailyChallenges.challengeId,
         set: challenge
       });
     }
-    console.log(`\u2705 Seeded ${dailyChallengesData.length} daily challenges`);
-    console.log("\u{1F3C6} Seeding achievements...");
+    logger.info("Daily challenges seeded", { count: dailyChallengesData.length });
+    logger.info("Seeding achievements");
     for (const achievement of achievementsData) {
       await db.insert(achievements).values(achievement).onConflictDoUpdate({
         target: achievements.achievementId,
         set: achievement
       });
     }
-    console.log(`\u2705 Seeded ${achievementsData.length} achievements`);
-    console.log("\u{1F3A8} Seeding cosmetic items...");
+    logger.info("Achievements seeded", { count: achievementsData.length });
+    logger.info("Seeding cosmetic items");
     for (const cosmetic of cosmeticItemsData) {
       await db.insert(cosmeticItems).values(cosmetic).onConflictDoUpdate({
         target: cosmeticItems.itemId,
         set: cosmetic
       });
     }
-    console.log(`\u2705 Seeded ${cosmeticItemsData.length} cosmetic items`);
-    console.log("\u2728 Game content seeding complete!");
+    logger.info("Cosmetic items seeded", { count: cosmeticItemsData.length });
+    logger.info("Game content seeding complete");
   } catch (error) {
-    console.error("\u274C Error seeding game content:", error);
+    logger.error("Error seeding game content", error);
     throw error;
   }
 }
@@ -7212,6 +7431,7 @@ async function seedGameContent() {
 // server/seedFeatureFlags.ts
 init_storage();
 init_schema();
+init_logger();
 import { eq as eq21 } from "drizzle-orm";
 var initialFeatureFlags = [
   {
@@ -7276,33 +7496,34 @@ var initialFeatureFlags = [
   }
 ];
 async function seedFeatureFlags() {
-  console.log("\u{1F331} Seeding feature flags...");
+  logger.info("Seeding feature flags");
   try {
     for (const flag of initialFeatureFlags) {
       const existing = await db.select().from(featureFlags).where(eq21(featureFlags.featureKey, flag.featureKey)).limit(1);
       if (existing.length === 0) {
         await db.insert(featureFlags).values(flag);
-        console.log(`\u2705 Created feature flag: ${flag.featureName}`);
+        logger.info("Feature flag created", { featureName: flag.featureName });
       } else {
-        console.log(`\u23ED\uFE0F  Feature flag already exists: ${flag.featureName}`);
+        logger.debug("Feature flag already exists", { featureName: flag.featureName });
       }
     }
-    console.log("\u2705 Feature flags seeded successfully!");
+    logger.info("Feature flags seeded successfully");
     return true;
   } catch (error) {
-    console.error("\u274C Error seeding feature flags:", error);
+    logger.error("Error seeding feature flags", error);
     return false;
   }
 }
 
 // server/applyIndexes.ts
 init_db();
+init_logger();
 import { sql as sql18 } from "drizzle-orm";
 import { readFileSync } from "fs";
 import { join } from "path";
 async function applyPerformanceIndexes() {
   try {
-    console.log("\u{1F4CA} Applying performance indexes...");
+    logger.info("Applying performance indexes");
     const indexSQL = readFileSync(
       join(process.cwd(), "server/migrations/add-indexes.sql"),
       "utf-8"
@@ -7311,9 +7532,9 @@ async function applyPerformanceIndexes() {
     for (const statement of statements) {
       await db.execute(sql18.raw(statement));
     }
-    console.log(`\u2705 Applied ${statements.length} performance indexes`);
+    logger.info("Performance indexes applied", { count: statements.length });
   } catch (error) {
-    console.error("\u26A0\uFE0F  Failed to apply indexes (non-fatal):", error);
+    logger.warn("Failed to apply indexes (non-fatal)", error);
   }
 }
 
@@ -7321,6 +7542,7 @@ async function applyPerformanceIndexes() {
 init_db();
 
 // server/cron.ts
+init_logger();
 var announcementInterval = null;
 var dailyAnalyticsInterval = null;
 var retentionCohortsInterval = null;
@@ -7331,19 +7553,19 @@ var economySinksInterval = null;
 var segmentRefreshInterval = null;
 var reEngagementInterval = null;
 function startCronJobs() {
-  console.log("\u23F0 Starting cron jobs...");
+  logger.info("Starting cron jobs");
   announcementInterval = setInterval(async () => {
     try {
       await processScheduledAnnouncements();
     } catch (error) {
-      console.error("Announcement cron error:", error);
+      logger.error("Announcement cron error", error);
     }
   }, 60 * 1e3);
   eventSchedulerInterval = setInterval(async () => {
     try {
       await processScheduledEvents();
     } catch (error) {
-      console.error("Event scheduler cron error:", error);
+      logger.error("Event scheduler cron error", error);
     }
   }, 60 * 1e3);
   dailyAnalyticsInterval = setInterval(async () => {
@@ -7352,24 +7574,24 @@ function startCronJobs() {
       if (now.getUTCHours() === 0 && now.getUTCMinutes() < 60) {
         const yesterday = new Date(now);
         yesterday.setDate(yesterday.getDate() - 1);
-        console.log(`\u{1F4CA} Generating daily analytics report for ${yesterday.toISOString().split("T")[0]}...`);
+        logger.info("Generating daily analytics report", { date: yesterday.toISOString().split("T")[0] });
         await generateDailyReport(yesterday);
-        console.log("\u2705 Daily analytics report generated");
+        logger.info("Daily analytics report generated");
       }
     } catch (error) {
-      console.error("Daily analytics cron error:", error);
+      logger.error("Daily analytics cron error", error);
     }
   }, 60 * 60 * 1e3);
   retentionCohortsInterval = setInterval(async () => {
     try {
       const now = /* @__PURE__ */ new Date();
       if (now.getUTCHours() === 1 && now.getUTCMinutes() < 60) {
-        console.log("\u{1F4CA} Updating retention cohorts...");
+        logger.info("Updating retention cohorts");
         await updateRetentionCohorts();
-        console.log("\u2705 Retention cohorts updated");
+        logger.info("Retention cohorts updated");
       }
     } catch (error) {
-      console.error("Retention cohorts cron error:", error);
+      logger.error("Retention cohorts cron error", error);
     }
   }, 60 * 60 * 1e3);
   economyMetricsInterval = setInterval(async () => {
@@ -7378,12 +7600,12 @@ function startCronJobs() {
       if (now.getUTCHours() === 2 && now.getUTCMinutes() < 60) {
         const yesterday = new Date(now);
         yesterday.setDate(yesterday.getDate() - 1);
-        console.log(`\u{1F4B0} Calculating economy metrics for ${yesterday.toISOString().split("T")[0]}...`);
+        logger.info("Calculating economy metrics", { date: yesterday.toISOString().split("T")[0] });
         await calculateDailyEconomyMetrics(yesterday);
-        console.log("\u2705 Economy metrics calculated");
+        logger.info("Economy metrics calculated");
       }
     } catch (error) {
-      console.error("Economy metrics cron error:", error);
+      logger.error("Economy metrics cron error", error);
     }
   }, 60 * 60 * 1e3);
   economySinksInterval = setInterval(async () => {
@@ -7392,61 +7614,64 @@ function startCronJobs() {
       if (now.getUTCHours() === 2 && now.getUTCMinutes() >= 30 && now.getUTCMinutes() < 90) {
         const yesterday = new Date(now);
         yesterday.setDate(yesterday.getDate() - 1);
-        console.log(`\u{1F4B0} Calculating economy sinks for ${yesterday.toISOString().split("T")[0]}...`);
+        logger.info("Calculating economy sinks", { date: yesterday.toISOString().split("T")[0] });
         await calculateEconomySinks(yesterday);
-        console.log("\u2705 Economy sinks calculated");
+        logger.info("Economy sinks calculated");
       }
     } catch (error) {
-      console.error("Economy sinks cron error:", error);
+      logger.error("Economy sinks cron error", error);
     }
   }, 60 * 60 * 1e3);
   segmentRefreshInterval = setInterval(async () => {
     try {
       const now = /* @__PURE__ */ new Date();
       if (now.getUTCHours() === 4 && now.getUTCMinutes() < 60) {
-        console.log("\u{1F465} Refreshing user segments...");
+        logger.info("Refreshing user segments");
         await refreshAllSegments();
-        console.log("\u2705 User segments refreshed");
+        logger.info("User segments refreshed");
       }
     } catch (error) {
-      console.error("Segment refresh cron error:", error);
+      logger.error("Segment refresh cron error", error);
     }
   }, 60 * 60 * 1e3);
   reEngagementInterval = setInterval(async () => {
     try {
       const now = /* @__PURE__ */ new Date();
       if (now.getUTCHours() === 5 && now.getUTCMinutes() < 60) {
-        console.log("\u{1F4E7} Sending re-engagement messages...");
+        logger.info("Sending re-engagement messages");
         await sendReEngagementMessages();
-        console.log("\u2705 Re-engagement messages sent");
+        logger.info("Re-engagement messages sent");
       }
     } catch (error) {
-      console.error("Re-engagement cron error:", error);
+      logger.error("Re-engagement cron error", error);
     }
   }, 60 * 60 * 1e3);
   hourlyDauInterval = setInterval(async () => {
     try {
       const today = /* @__PURE__ */ new Date();
-      console.log("\u{1F4CA} Updating today's analytics...");
+      logger.info("Updating today's analytics");
       await generateDailyReport(today);
-      console.log("\u2705 Today's analytics updated");
+      logger.info("Today's analytics updated");
     } catch (error) {
-      console.error("Hourly DAU cron error:", error);
+      logger.error("Hourly DAU cron error", error);
     }
   }, 60 * 60 * 1e3);
-  console.log("\u2705 Cron jobs started:");
-  console.log("  - Scheduled announcements: Every 1 minute");
-  console.log("  - Event scheduler: Every 1 minute");
-  console.log("  - Daily analytics report: Daily at midnight UTC");
-  console.log("  - Retention cohorts: Daily at 1am UTC");
-  console.log("  - Economy metrics: Daily at 2am UTC");
-  console.log("  - Economy sinks: Daily at 2:30am UTC");
-  console.log("  - User segment refresh: Daily at 4am UTC");
-  console.log("  - Re-engagement messages: Daily at 5am UTC");
-  console.log("  - Hourly DAU update: Every hour");
+  logger.info("Cron jobs started", {
+    jobs: [
+      "Scheduled announcements: Every 1 minute",
+      "Event scheduler: Every 1 minute",
+      "Daily analytics report: Daily at midnight UTC",
+      "Retention cohorts: Daily at 1am UTC",
+      "Economy metrics: Daily at 2am UTC",
+      "Economy sinks: Daily at 2:30am UTC",
+      "User segment refresh: Daily at 4am UTC",
+      "Re-engagement messages: Daily at 5am UTC",
+      "Hourly DAU update: Every hour"
+    ]
+  });
 }
 function stopCronJobs() {
-  console.log("\u23F0 Stopping cron jobs...");
+  logger.info("Stopping cron jobs");
   if (announcementInterval) {
     clearInterval(announcementInterval);
     announcementInterval = null;
@@ -7483,7 +7708,7 @@ function stopCronJobs() {
     clearInterval(hourlyDauInterval);
     hourlyDauInterval = null;
   }
-  console.log("\u2705 Cron jobs stopped");
+  logger.info("Cron jobs stopped");
 }
 process.once("SIGINT", () => {
   stopCronJobs();
@@ -7493,7 +7718,9 @@ process.once("SIGTERM", () => {
 });
 
 // server/index.ts
+init_logger();
 import rateLimit from "express-rate-limit";
+import { v4 as uuidv4 } from "uuid";
 var app = express2();
 app.set("trust proxy", 1);
 app.use(express2.json());
@@ -7524,8 +7751,15 @@ app.use("/api/user/:userId/equipment/purchase", strictLimiter);
 app.use("/api/user/:userId/powerups/purchase", strictLimiter);
 app.use("/api/user/:userId/packs/purchase", strictLimiter);
 app.use((req, res, next) => {
+  const requestId = req.headers["x-request-id"] || uuidv4();
+  setRequestId(requestId);
+  req.id = requestId;
+  res.setHeader("X-Request-ID", requestId);
+  next();
+});
+app.use((req, res, next) => {
   const start = Date.now();
-  const path3 = req.path;
+  const path4 = req.path;
   let capturedJsonResponse = void 0;
   const originalResJson = res.json;
   res.json = function(bodyJson, ...args) {
@@ -7534,15 +7768,15 @@ app.use((req, res, next) => {
   };
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path3.startsWith("/api")) {
-      let logLine = `${req.method} ${path3} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "\u2026";
-      }
-      log(logLine);
+    if (path4.startsWith("/api")) {
+      const logData = {
+        method: req.method,
+        path: path4,
+        statusCode: res.statusCode,
+        duration,
+        ip: req.ip
+      };
+      logger.info(`${req.method} ${path4} ${res.statusCode} in ${duration}ms`, logData);
     }
   });
   next();
@@ -7622,7 +7856,7 @@ app.get("/api/health/mining", async (_req, res) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
     res.status(status).json({ message });
-    console.error("[ERROR]", err);
+    logger.error("Request error", err);
   });
   if (app.get("env") === "development") {
     await setupVite(app, server);
@@ -7635,37 +7869,37 @@ app.get("/api/health/mining", async (_req, res) => {
     host: "0.0.0.0",
     reusePort: true
   }, async () => {
-    log(`serving on port ${port}`);
+    logger.info(`\u{1F680} Server starting`, { port, environment: process.env.NODE_ENV });
     initializeDatabase().catch((err) => {
-      console.error("\u26A0\uFE0F  Database initialization failed (non-fatal):", err.message || err);
+      logger.warn("Database initialization failed (non-fatal)", err);
     });
     seedDatabase().catch((err) => {
-      console.error("\u26A0\uFE0F  Database seeding failed (non-fatal):", err.message || err);
-      console.log("\u2705 Server will continue running. Database will seed when connection is available.");
+      logger.warn("Database seeding failed (non-fatal)", err);
+      logger.info("Server will continue running. Database will seed when connection is available");
     });
     applyPerformanceIndexes().catch((err) => {
-      console.error("\u26A0\uFE0F  Index application failed (non-fatal):", err.message || err);
+      logger.warn("Index application failed (non-fatal)", err);
     });
     seedGameContent().catch((err) => {
-      console.error("\u26A0\uFE0F  Game content seeding failed (non-fatal):", err.message || err);
+      logger.warn("Game content seeding failed (non-fatal)", err);
     });
     seedFeatureFlags().catch((err) => {
-      console.error("\u26A0\uFE0F  Feature flags seeding failed (non-fatal):", err.message || err);
+      logger.warn("Feature flags seeding failed (non-fatal)", err);
     });
     miningService.start().catch((err) => {
-      console.error("\u26A0\uFE0F  Mining service failed to start (non-fatal):", err.message || err);
-      console.log("\u2705 Server will continue running. Mining will start when database is available.");
+      logger.warn("Mining service failed to start (non-fatal)", err);
+      logger.info("Server will continue running. Mining will start when database is available");
     });
     initializeBot().catch((err) => {
-      console.error("\u26A0\uFE0F  Bot initialization failed (non-fatal):", err.message || err);
-      console.log("\u2705 Server will continue running. Bot commands will not be available.");
+      logger.warn("Bot initialization failed (non-fatal)", err);
+      logger.info("Server will continue running. Bot commands will not be available");
     });
     try {
       startCronJobs();
     } catch (err) {
-      console.error("\u26A0\uFE0F  Cron jobs failed to start (non-fatal):", err.message || err);
-      console.log("\u2705 Server will continue running. Scheduled tasks will not be available.");
+      logger.warn("Cron jobs failed to start (non-fatal)", err);
+      logger.info("Server will continue running. Scheduled tasks will not be available");
     }
-    console.log("\u{1F680} NEW DEPLOYMENT - " + (/* @__PURE__ */ new Date()).toISOString());
+    logger.info("Server initialized successfully", { timestamp: (/* @__PURE__ */ new Date()).toISOString() });
   });
 })();

@@ -2,6 +2,7 @@ import { Telegraf } from 'telegraf';
 import { users } from '@shared/schema';
 import { db } from './db';
 import { eq } from 'drizzle-orm';
+import { logger } from './logger';
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const WEB_APP_URL = process.env.WEB_APP_URL || 'https://crypto-hacker-heist.onrender.com';
@@ -10,14 +11,14 @@ const WEBHOOK_DOMAIN = process.env.WEBHOOK_DOMAIN || 'https://crypto-hacker-heis
 const USE_WEBHOOKS = process.env.NODE_ENV === 'production'; // Use webhooks in production
 
 if (!BOT_TOKEN) {
-  console.warn('⚠️  BOT_TOKEN not set - Bot commands will not work');
+  logger.warn('BOT_TOKEN not set - Bot commands will not work');
 }
 
 const bot = BOT_TOKEN ? new Telegraf(BOT_TOKEN) : null;
 
 export async function initializeBot() {
   if (!bot) {
-    console.log('🤖 Bot not initialized - BOT_TOKEN not provided');
+    logger.info('Bot not initialized - BOT_TOKEN not provided');
     return;
   }
 
@@ -59,7 +60,7 @@ export async function initializeBot() {
         );
       }
     } catch (error) {
-      console.error('Error in start command:', error);
+      logger.error('Error in start command', error);
       await ctx.reply('❌ Error loading game data. Please try again later.');
     }
   });
@@ -127,38 +128,38 @@ export async function initializeBot() {
 
   // Handle web app data
   bot.on('web_app_data', async (ctx) => {
-    console.log('Web app data received:', ctx.webAppData);
+    logger.debug('Web app data received', { data: ctx.webAppData });
   });
 
   // Error handling
   bot.catch((err, ctx) => {
-    console.error('Bot error:', err);
+    logger.error('Bot error', err);
     ctx.reply('❌ An error occurred. Please try again later.');
   });
 
   try {
     if (USE_WEBHOOKS) {
       // Use webhooks in production to avoid 409 conflicts
-      console.log('🤖 Starting bot with webhooks...');
+      logger.info('Starting bot with webhooks');
       const webhookPath = `/telegram-webhook/${BOT_TOKEN}`;
       await bot.telegram.setWebhook(`${WEBHOOK_DOMAIN}${webhookPath}`);
-      console.log(`🤖 Webhook set to: ${WEBHOOK_DOMAIN}${webhookPath}`);
-      console.log('🤖 Bot configured for webhooks (webhook handler needs to be registered in routes)');
+      logger.info('Webhook set', { url: `${WEBHOOK_DOMAIN}${webhookPath}` });
+      logger.info('Bot configured for webhooks (webhook handler needs to be registered in routes)');
     } else {
       // Use polling in development
-      console.log('🤖 Starting bot with long polling...');
+      logger.info('Starting bot with long polling');
       await bot.launch();
-      console.log('🤖 Bot started successfully with polling');
+      logger.info('Bot started successfully with polling');
     }
   } catch (error: any) {
-    console.error('Failed to start bot:', error);
+    logger.error('Failed to start bot', error);
     
     // Handle specific error cases
     if (error.response?.error_code === 409) {
-      console.error('⚠️  Bot conflict (409): Another instance is running. This is normal during deployments.');
-      console.log('💡 Tip: The bot will work once the old instance stops. Commands may be delayed by 1-2 minutes.');
+      logger.warn('Bot conflict (409): Another instance is running. This is normal during deployments');
+      logger.info('Tip: The bot will work once the old instance stops. Commands may be delayed by 1-2 minutes');
     } else if (error.code === 'ETELEGRAM') {
-      console.error('⚠️  Telegram API error. Check your BOT_TOKEN.');
+      logger.warn('Telegram API error. Check your BOT_TOKEN');
     }
     
     // Don't throw - let the server continue without the bot
@@ -167,13 +168,13 @@ export async function initializeBot() {
   // Graceful shutdown
   process.once('SIGINT', () => {
     if (bot) {
-      console.log('🤖 Stopping bot...');
+      logger.info('Stopping bot (SIGINT)');
       bot.stop('SIGINT');
     }
   });
   process.once('SIGTERM', () => {
     if (bot) {
-      console.log('🤖 Stopping bot...');
+      logger.info('Stopping bot (SIGTERM)');
       bot.stop('SIGTERM');
     }
   });

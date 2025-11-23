@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { db } from "../storage";
 import { dailyAnalytics, userSessions, users, powerUpPurchases, lootBoxPurchases, packPurchases } from "@shared/schema";
@@ -18,7 +19,7 @@ export function registerAnalyticsRoutes(app: Express): void {
       const overview = await getAnalyticsOverview();
       res.json(overview);
     } catch (error: any) {
-      console.error("Get analytics overview error:", error);
+      logger.error("Get analytics overview error:", error);
       res.status(500).json({ error: "Failed to fetch analytics overview" });
     }
   });
@@ -30,7 +31,7 @@ export function registerAnalyticsRoutes(app: Express): void {
       const history = await getDailyAnalyticsHistory(days);
       res.json(history);
     } catch (error: any) {
-      console.error("Get daily analytics error:", error);
+      logger.error("Get daily analytics error:", error);
       res.status(500).json({ error: "Failed to fetch daily analytics" });
     }
   });
@@ -41,7 +42,7 @@ export function registerAnalyticsRoutes(app: Express): void {
       const cohorts = await getRetentionCohorts();
       res.json(cohorts);
     } catch (error: any) {
-      console.error("Get retention cohorts error:", error);
+      logger.error("Get retention cohorts error:", error);
       res.status(500).json({ error: "Failed to fetch retention cohorts" });
     }
   });
@@ -151,7 +152,7 @@ export function registerAnalyticsRoutes(app: Express): void {
         },
       });
     } catch (error: any) {
-      console.error("Get revenue metrics error:", error);
+      logger.error("Get revenue metrics error:", error);
       res.status(500).json({ error: "Failed to fetch revenue metrics" });
     }
   });
@@ -224,7 +225,7 @@ export function registerAnalyticsRoutes(app: Express): void {
         },
       });
     } catch (error: any) {
-      console.error("Get user segments error:", error);
+      logger.error("Get user segments error:", error);
       res.status(500).json({ error: "Failed to fetch user segments" });
     }
   });
@@ -251,7 +252,7 @@ export function registerAnalyticsRoutes(app: Express): void {
         message: `Daily report generated for ${report.date}`,
       });
     } catch (error: any) {
-      console.error("Generate report error:", error);
+      logger.error("Generate report error:", error);
       res.status(500).json({ error: "Failed to generate report" });
     }
   });
@@ -266,7 +267,7 @@ export function registerAnalyticsRoutes(app: Express): void {
         message: "Retention cohorts updated successfully",
       });
     } catch (error: any) {
-      console.error("Update cohorts error:", error);
+      logger.error("Update cohorts error:", error);
       res.status(500).json({ error: "Failed to update retention cohorts" });
     }
   });

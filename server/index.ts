@@ -11,6 +11,8 @@ import { applyPerformanceIndexes } from "./applyIndexes";
 import { initializeDatabase, checkDatabaseHealth } from "./db";
 import { startCronJobs } from "./cron";
 import rateLimit from "express-rate-limit";
+import { logger, setRequestId, withRequestId } from "./logger";
+import { v4 as uuidv4 } from "uuid";
 
 const app = express();
 // Trust proxy for Render deployment (needed for rate limiting to work correctly)
@@ -46,6 +48,19 @@ app.use('/api/user/:userId/equipment/purchase', strictLimiter);
 app.use('/api/user/:userId/powerups/purchase', strictLimiter);
 app.use('/api/user/:userId/packs/purchase', strictLimiter);
 
+// Request ID middleware - add correlation ID to every request
+app.use((req, res, next) => {
+  const requestId = req.headers['x-request-id'] as string || uuidv4();
+  setRequestId(requestId);
+  (req as any).id = requestId;
+  
+  // Add request ID to response headers for client correlation
+  res.setHeader('X-Request-ID', requestId);
+  
+  next();
+});
+
+// Structured HTTP logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -60,16 +75,15 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
+      const logData = {
+        method: req.method,
+        path,
+        statusCode: res.statusCode,
+        duration,
+        ip: req.ip,
+      };
+      
+      logger.info(`${req.method} ${path} ${res.statusCode} in ${duration}ms`, logData);
     }
   });
 
@@ -160,7 +174,7 @@ app.get('/api/health/mining', async (_req: Request, res: Response) => {
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    console.error('[ERROR]', err);
+    logger.error('Request error', err);
   });
 
   // importantly only setup vite in development and after
@@ -182,54 +196,54 @@ app.get('/api/health/mining', async (_req: Request, res: Response) => {
     host: "0.0.0.0",
     reusePort: true,
   }, async () => {
-    log(`serving on port ${port}`);
+    logger.info(`🚀 Server starting`, { port, environment: process.env.NODE_ENV });
     
     // Initialize database (non-fatal)
     initializeDatabase().catch(err => {
-      console.error("⚠️  Database initialization failed (non-fatal):", err.message || err);
+      logger.warn("Database initialization failed (non-fatal)", err);
     });
     
     // Seed database on startup (non-fatal - don't crash if it fails)
     seedDatabase().catch(err => {
-      console.error("⚠️  Database seeding failed (non-fatal):", err.message || err);
-      console.log("✅ Server will continue running. Database will seed when connection is available.");
+      logger.warn("Database seeding failed (non-fatal)", err);
+      logger.info("Server will continue running. Database will seed when connection is available");
     });
     
     // Apply performance indexes
     applyPerformanceIndexes().catch(err => {
-      console.error("⚠️  Index application failed (non-fatal):", err.message || err);
+      logger.warn("Index application failed (non-fatal)", err);
     });
     
     // Seed game content (challenges, achievements, cosmetics)
     seedGameContent().catch(err => {
-      console.error("⚠️  Game content seeding failed (non-fatal):", err.message || err);
+      logger.warn("Game content seeding failed (non-fatal)", err);
     });
     
     // Seed feature flags for admin dashboard
     seedFeatureFlags().catch(err => {
-      console.error("⚠️  Feature flags seeding failed (non-fatal):", err.message || err);
+      logger.warn("Feature flags seeding failed (non-fatal)", err);
     });
     
     // Start mining service (also non-fatal)
     miningService.start().catch(err => {
-      console.error("⚠️  Mining service failed to start (non-fatal):", err.message || err);
-      console.log("✅ Server will continue running. Mining will start when database is available.");
+      logger.warn("Mining service failed to start (non-fatal)", err);
+      logger.info("Server will continue running. Mining will start when database is available");
     });
     
     // Initialize Telegram bot (non-fatal)
     initializeBot().catch(err => {
-      console.error("⚠️  Bot initialization failed (non-fatal):", err.message || err);
-      console.log("✅ Server will continue running. Bot commands will not be available.");
+      logger.warn("Bot initialization failed (non-fatal)", err);
+      logger.info("Server will continue running. Bot commands will not be available");
     });
     
     // Start cron jobs for scheduled tasks (announcements, analytics, etc.)
     try {
       startCronJobs();
     } catch (err: any) {
-      console.error("⚠️  Cron jobs failed to start (non-fatal):", err.message || err);
-      console.log("✅ Server will continue running. Scheduled tasks will not be available.");
+      logger.warn("Cron jobs failed to start (non-fatal)", err);
+      logger.info("Server will continue running. Scheduled tasks will not be available");
     }
     
-    console.log("🚀 NEW DEPLOYMENT - " + new Date().toISOString());
+    logger.info("Server initialized successfully", { timestamp: new Date().toISOString() });
   });
 })();

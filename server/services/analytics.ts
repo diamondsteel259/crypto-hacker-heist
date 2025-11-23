@@ -10,6 +10,7 @@ import {
   packPurchases
 } from "@shared/schema";
 import { eq, and, gte, lte, sql, count } from "drizzle-orm";
+import { logger } from "../logger";
 
 /**
  * Calculate Daily Active Users (DAU) for a specific date
@@ -34,7 +35,7 @@ export async function calculateDAU(date: Date): Promise<number> {
 
     return result[0]?.count || 0;
   } catch (error: any) {
-    console.error("Calculate DAU error:", error);
+    logger.error("Calculate DAU error:", error);
     throw error;
   }
 }
@@ -63,7 +64,7 @@ export async function calculateMAU(date: Date): Promise<number> {
 
     return result[0]?.count || 0;
   } catch (error: any) {
-    console.error("Calculate MAU error:", error);
+    logger.error("Calculate MAU error:", error);
     throw error;
   }
 }
@@ -119,7 +120,7 @@ export async function calculateRetention(cohortDate: string, dayOffset: number):
 
     return returnedCount;
   } catch (error: any) {
-    console.error("Calculate retention error:", error);
+    logger.error("Calculate retention error:", error);
     throw error;
   }
 }
@@ -307,7 +308,7 @@ export async function generateDailyReport(date: Date): Promise<any> {
 
     return analyticsData;
   } catch (error: any) {
-    console.error("Generate daily report error:", error);
+    logger.error("Generate daily report error:", error);
     throw error;
   }
 }
@@ -383,7 +384,7 @@ export async function getAnalyticsOverview(): Promise<any> {
       retentionD7: retentionD7Percent,
     };
   } catch (error: any) {
-    console.error("Get analytics overview error:", error);
+    logger.error("Get analytics overview error:", error);
     throw error;
   }
 }
@@ -400,7 +401,7 @@ export async function getDailyAnalyticsHistory(days: number = 30): Promise<any[]
 
     return analytics.reverse(); // Return in chronological order
   } catch (error: any) {
-    console.error("Get daily analytics history error:", error);
+    logger.error("Get daily analytics history error:", error);
     throw error;
   }
 }
@@ -417,7 +418,7 @@ export async function getRetentionCohorts(): Promise<any[]> {
 
     return cohorts;
   } catch (error: any) {
-    console.error("Get retention cohorts error:", error);
+    logger.error("Get retention cohorts error:", error);
     throw error;
   }
 }
@@ -475,9 +476,9 @@ export async function updateRetentionCohorts(): Promise<void> {
       }
     }
 
-    console.log(`✅ Updated ${cohortDates.length} retention cohorts`);
+    logger.info(`✅ Updated ${cohortDates.length} retention cohorts`);
   } catch (error: any) {
-    console.error("Update retention cohorts error:", error);
+    logger.error("Update retention cohorts error:", error);
     throw error;
   }
 }
@@ -523,7 +524,7 @@ export async function trackUserSession(telegramId: string): Promise<void> {
       });
     }
   } catch (error: any) {
-    console.error("Track user session error:", error);
+    logger.error("Track user session error:", error);
     // Don't throw - session tracking should not break the main flow
   }
 }

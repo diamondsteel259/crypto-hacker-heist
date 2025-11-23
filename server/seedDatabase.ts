@@ -1,10 +1,11 @@
 import { db } from "./db";
 import { equipmentTypes, gameSettings, ownedEquipment, componentUpgrades } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { logger } from "./logger";
 
 export async function seedDatabase() {
   try {
-    console.log("🌱 Starting database seeding...");
+    logger.info("Starting database seeding");
 
     // Seed equipment types - Phase 1 (CS/TON) and Phase 2 (CHST) pricing
     const equipmentCatalog = [
@@ -83,7 +84,7 @@ export async function seedDatabase() {
     ];
 
     // Upsert equipment types - insert new items and update existing ones
-    console.log(`📦 Upserting ${equipmentCatalog.length} equipment items...`);
+    logger.info("Upserting equipment items", { count: equipmentCatalog.length });
     
     for (const equipment of equipmentCatalog) {
       await db.insert(equipmentTypes)
@@ -94,11 +95,11 @@ export async function seedDatabase() {
         });
     }
     
-    console.log(`✅ Equipment types upserted: ${equipmentCatalog.length}`);
+    logger.info("Equipment types upserted", { count: equipmentCatalog.length });
     
     // Verify the data
     const finalCount = await db.select().from(equipmentTypes);
-    console.log(`🔍 Verification: ${finalCount.length} equipment items in database`);
+    logger.info("Equipment items seeded", { count: finalCount.length });
 
     // Seed default game settings (only if they don't exist)
     const defaultSettings = [
@@ -114,12 +115,12 @@ export async function seedDatabase() {
         await db.insert(gameSettings).values(setting);
       }
     }
-    console.log("✅ Game settings seeded");
+    logger.info("Game settings seeded");
 
-    console.log("🎉 Database seeding complete!");
+    logger.info("Database seeding complete");
     return true;
   } catch (error) {
-    console.error("❌ Seeding failed:", error instanceof Error ? error.message : error);
+    logger.error("Seeding failed", error instanceof Error ? error.message : error);
     // Don't crash the server - just log and return false
     return false;
   }

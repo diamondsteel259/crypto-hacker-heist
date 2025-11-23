@@ -1,9 +1,10 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import * as schema from '@shared/schema';
+import { logger } from './logger';
 
 if (!process.env.DATABASE_URL) {
-  console.error('DATABASE_URL environment variable is not set. Database will not be available.');
+  logger.error('DATABASE_URL environment variable is not set. Database will not be available.');
 }
 
 const pool = new pg.Pool({ 
@@ -19,16 +20,16 @@ export const db = drizzle(pool, { schema });
 export async function initializeDatabase(): Promise<boolean> {
   try {
     if (!process.env.DATABASE_URL) {
-      console.error('[DB] DATABASE_URL not set, skipping database initialization');
+      logger.error('DATABASE_URL not set, skipping database initialization');
       return false;
     }
 
     await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto;');
-    console.log('[DB] Database initialized successfully');
+    logger.info('Database initialized successfully');
     return true;
   } catch (error) {
-    console.error('[DB] Database initialization failed:', error);
-    console.error('[DB] Health endpoint will report unhealthy status');
+    logger.error('Database initialization failed', error);
+    logger.error('Health endpoint will report unhealthy status');
     return false;
   }
 }
@@ -39,7 +40,7 @@ export async function checkDatabaseHealth(): Promise<boolean> {
     await pool.query('SELECT 1');
     return true;
   } catch (error) {
-    console.error('[DB] Health check failed:', error);
+    logger.error('Health check failed', error);
     return false;
   }
 }

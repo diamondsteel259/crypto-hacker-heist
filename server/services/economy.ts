@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import { db } from "../storage";
 import { economyMetrics, economySinks, economyAlerts, users, blocks } from "@shared/schema";
 import { eq, sql, lte, gte, and, desc } from "drizzle-orm";
@@ -73,7 +74,7 @@ export async function calculateWealthDistribution(): Promise<{
       giniCoefficient: parseFloat(giniCoefficient.toFixed(4)),
     };
   } catch (error: any) {
-    console.error("Calculate wealth distribution error:", error);
+    logger.error("Calculate wealth distribution error:", error);
     throw error;
   }
 }
@@ -190,12 +191,12 @@ export async function calculateDailyEconomyMetrics(date: Date): Promise<void> {
       await db.insert(economyMetrics).values(metricsData);
     }
 
-    console.log(`✅ Economy metrics calculated for ${dateStr}`);
+    logger.info(`✅ Economy metrics calculated for ${dateStr}`);
 
     // Check for alerts
     await checkEconomyAlerts(dateStr, metricsData);
   } catch (error: any) {
-    console.error("Calculate daily economy metrics error:", error);
+    logger.error("Calculate daily economy metrics error:", error);
     throw error;
   }
 }
@@ -233,9 +234,9 @@ export async function calculateEconomySinks(date: Date): Promise<void> {
       }
     }
 
-    console.log(`✅ Economy sinks calculated for ${dateStr}`);
+    logger.info(`✅ Economy sinks calculated for ${dateStr}`);
   } catch (error: any) {
-    console.error("Calculate economy sinks error:", error);
+    logger.error("Calculate economy sinks error:", error);
     throw error;
   }
 }
@@ -305,10 +306,10 @@ async function checkEconomyAlerts(dateStr: string, metrics: any): Promise<void> 
     }
 
     if (alerts.length > 0) {
-      console.log(`⚠️  Generated ${alerts.length} economy alerts for ${dateStr}`);
+      logger.info(`⚠️  Generated ${alerts.length} economy alerts for ${dateStr}`);
     }
   } catch (error: any) {
-    console.error("Check economy alerts error:", error);
+    logger.error("Check economy alerts error:", error);
     // Don't throw - alert generation shouldn't break metrics calculation
   }
 }
@@ -336,7 +337,7 @@ export async function getEconomyOverview(): Promise<any> {
 
     return latest[0];
   } catch (error: any) {
-    console.error("Get economy overview error:", error);
+    logger.error("Get economy overview error:", error);
     throw error;
   }
 }
@@ -353,7 +354,7 @@ export async function getEconomyHistory(days: number = 30): Promise<any[]> {
 
     return history.reverse(); // Return in chronological order
   } catch (error: any) {
-    console.error("Get economy history error:", error);
+    logger.error("Get economy history error:", error);
     throw error;
   }
 }
@@ -379,7 +380,7 @@ export async function getEconomySinksBreakdown(days: number = 30): Promise<any[]
 
     return sinks;
   } catch (error: any) {
-    console.error("Get economy sinks breakdown error:", error);
+    logger.error("Get economy sinks breakdown error:", error);
     throw error;
   }
 }
@@ -397,7 +398,7 @@ export async function getActiveAlerts(): Promise<any[]> {
 
     return alerts;
   } catch (error: any) {
-    console.error("Get active alerts error:", error);
+    logger.error("Get active alerts error:", error);
     throw error;
   }
 }
@@ -414,9 +415,9 @@ export async function acknowledgeAlert(alertId: number, adminTelegramId: string)
       })
       .where(eq(economyAlerts.id, alertId));
 
-    console.log(`✅ Alert ${alertId} acknowledged by ${adminTelegramId}`);
+    logger.info(`✅ Alert ${alertId} acknowledged by ${adminTelegramId}`);
   } catch (error: any) {
-    console.error("Acknowledge alert error:", error);
+    logger.error("Acknowledge alert error:", error);
     throw error;
   }
 }

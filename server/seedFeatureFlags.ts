@@ -6,6 +6,7 @@
 import { db } from './storage';
 import { featureFlags } from '@shared/schema';
 import { eq } from 'drizzle-orm';
+import { logger } from './logger';
 
 const initialFeatureFlags = [
   {
@@ -71,7 +72,7 @@ const initialFeatureFlags = [
 ];
 
 export async function seedFeatureFlags() {
-  console.log('🌱 Seeding feature flags...');
+  logger.info('Seeding feature flags');
 
   try {
     for (const flag of initialFeatureFlags) {
@@ -85,16 +86,16 @@ export async function seedFeatureFlags() {
       if (existing.length === 0) {
         // Insert new flag
         await db.insert(featureFlags).values(flag);
-        console.log(`✅ Created feature flag: ${flag.featureName}`);
+        logger.info("Feature flag created", { featureName: flag.featureName });
       } else {
-        console.log(`⏭️  Feature flag already exists: ${flag.featureName}`);
+        logger.debug("Feature flag already exists", { featureName: flag.featureName });
       }
     }
 
-    console.log('✅ Feature flags seeded successfully!');
+    logger.info('Feature flags seeded successfully');
     return true;
   } catch (error) {
-    console.error('❌ Error seeding feature flags:', error);
+    logger.error('Error seeding feature flags', error);
     return false;
   }
 }

@@ -4,6 +4,8 @@
  * Verifies transactions on the TON blockchain using TON Center API v3
  */
 
+import { logger } from './logger';
+
 interface TONTransaction {
   hash: string;
   from: string;
@@ -56,7 +58,7 @@ export async function verifyTONTransaction(
     });
 
     if (!response.ok) {
-      console.error('TON API response not OK:', response.status, response.statusText);
+      logger.error('TON API response not OK', { status: response.status, statusText: response.statusText });
       return {
         verified: false,
         error: 'Failed to connect to TON blockchain API',
@@ -66,7 +68,7 @@ export async function verifyTONTransaction(
     const data = await response.json();
 
     if (!data.transactions || !Array.isArray(data.transactions)) {
-      console.error('Invalid TON API response structure:', data);
+      logger.error('Invalid TON API response structure', { data });
       return {
         verified: false,
         error: 'Invalid response from TON blockchain API',
@@ -94,13 +96,13 @@ export async function verifyTONTransaction(
 
       // Verify recipient address matches
       if (toAddress !== recipientAddress) {
-        console.log(`Address mismatch: expected ${recipientAddress}, got ${toAddress}`);
+        logger.debug('Address mismatch', { expected: recipientAddress, got: toAddress });
         continue;
       }
 
       // Verify sender if provided
       if (senderAddress && fromAddress !== senderAddress) {
-        console.log(`Sender mismatch: expected ${senderAddress}, got ${fromAddress}`);
+        logger.debug('Sender mismatch', { expected: senderAddress, got: fromAddress });
         continue;
       }
 
@@ -110,7 +112,7 @@ export async function verifyTONTransaction(
         : expectedNanotons - value;
 
       if (amountDiff > tolerance) {
-        console.log(`Amount mismatch: expected ${expectedAmount} TON (${expectedNanotons}), got ${Number(value) / 1e9} TON (${value})`);
+        logger.debug('Amount mismatch', { expected: expectedAmount, got: Number(value) / 1e9 });
         return {
           verified: false,
           error: `Amount mismatch: expected ${expectedAmount} TON, received ${Number(value) / 1e9} TON`,
@@ -118,11 +120,11 @@ export async function verifyTONTransaction(
       }
 
       // Transaction verified successfully!
-      console.log('✅ TON transaction verified:', {
+      logger.info('TON transaction verified', {
         hash: tx.hash,
         from: fromAddress,
         to: toAddress,
-        amount: `${Number(value) / 1e9} TON`,
+        amount: Number(value) / 1e9,
       });
 
       return {
@@ -138,14 +140,14 @@ export async function verifyTONTransaction(
     }
 
     // Transaction not found
-    console.log(`Transaction ${txHash} not found in recent transactions`);
+    logger.debug('Transaction not found', { txHash: txHash.substring(0, 12) });
     return {
       verified: false,
       error: 'Transaction not found on blockchain. It may still be processing or the hash is incorrect.',
     };
 
   } catch (error: any) {
-    console.error('TON verification error:', error);
+    logger.error('TON verification error', error);
     return {
       verified: false,
       error: `Verification service error: ${error.message}`,
@@ -196,7 +198,7 @@ export function getGameWalletAddress(): string {
   const address = process.env.GAME_TON_WALLET_ADDRESS?.trim();
 
   if (!address) {
-    console.warn('⚠️  GAME_TON_WALLET_ADDRESS not set in environment variables');
+    logger.warn('GAME_TON_WALLET_ADDRESS not set in environment variables');
     // Return a test address for development
     return 'EQD0vdSA_NedR9uvbgN9EikRX-suesDxGeFg69XQMavfLqIw';
   }
@@ -257,11 +259,15 @@ export async function pollForTransaction(
   let attempts = 0;
   const maxAttempts = Math.ceil(timeoutMs / intervalMs);
 
-  console.log(`🔍 Polling for TON transaction ${txHash.substring(0, 12)}... (${maxAttempts} attempts over ${timeoutMs / 1000}s)`);
+  logger.info('Polling for TON transaction', { 
+    txHash: txHash.substring(0, 12), 
+    maxAttempts, 
+    timeoutSeconds: timeoutMs / 1000 
+  });
 
   while (Date.now() < endTime) {
     attempts++;
-    console.log(`🔄 Verification attempt ${attempts}/${maxAttempts}...`);
+    logger.debug('Verification attempt', { attempt: attempts, total: maxAttempts });
 
     const result = await verifyTONTransaction(
       txHash,
@@ -271,19 +277,22 @@ export async function pollForTransaction(
     );
 
     if (result.verified) {
-      console.log(`✅ Transaction verified on attempt ${attempts} (took ${Math.floor((Date.now() - startTime) / 1000)}s)`);
+      logger.info('Transaction verified', { attempt: attempts, elapsedSeconds: Math.floor((Date.now() - startTime) / 1000) });
       return result;
     }
 
     // If error is not about transaction not found, return immediately
     if (result.error && !result.error.includes('not found') && !result.error.includes('processing')) {
-      console.log(`❌ Transaction verification failed with error: ${result.error}`);
+      logger.warn('Transaction verification failed', { error: result.error });
       return result;
     }
 
     // If we've exhausted all attempts, return failure
     if (attempts >= maxAttempts) {
-      console.log(`⏱️ Transaction not confirmed after ${attempts} attempts (${Math.floor((Date.now() - startTime) / 1000)}s)`);
+      logger.warn('Transaction not confirmed after max attempts', { 
+        attempts, 
+        elapsedSeconds: Math.floor((Date.now() - startTime) / 1000) 
+      });
       return {
         verified: false,
         error: `Transaction not confirmed within ${timeoutMs / 1000} seconds. The payment may still be processing on the blockchain. Please contact support with your transaction hash if the issue persists.`,

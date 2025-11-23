@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { storage, db } from "../storage";
 import { users, ownedEquipment, blockRewards, referrals, userStreaks, dailyLoginRewards } from "@shared/schema";
@@ -44,7 +45,7 @@ export function registerUserRoutes(app: Express): void {
         chstBalance: user.chstBalance,
       });
     } catch (error: any) {
-      console.error("Get balance error:", error);
+      logger.error("Get balance error:", error);
       res.status(500).json({ error: "Failed to fetch balance" });
     }
   });
@@ -79,7 +80,7 @@ export function registerUserRoutes(app: Express): void {
         userId,
       });
     } catch (error: any) {
-      console.error("User rank error:", error);
+      logger.error("User rank error:", error);
       res.status(500).json({ error: "Failed to fetch user rank" });
     }
   });
@@ -106,7 +107,7 @@ export function registerUserRoutes(app: Express): void {
         networkShare,
       });
     } catch (error: any) {
-      console.error("Network stats error:", error);
+      logger.error("Network stats error:", error);
       res.status(500).json({ error: "Failed to fetch network stats" });
     }
   });
@@ -134,7 +135,7 @@ export function registerUserRoutes(app: Express): void {
         lastLoginDate,
       });
     } catch (error: any) {
-      console.error("Get streak error:", error);
+      logger.error("Get streak error:", error);
       res.status(500).json({ error: "Failed to fetch streak" });
     }
   });
@@ -203,7 +204,7 @@ export function registerUserRoutes(app: Express): void {
         message: `Day ${currentStreak} check-in complete!`,
       });
     } catch (error: any) {
-      console.error("Streak check-in error:", error);
+      logger.error("Streak check-in error:", error);
       res.status(500).json({ error: "Failed to check in" });
     }
   });
@@ -244,7 +245,7 @@ export function registerUserRoutes(app: Express): void {
         lastClaimDate: todaysClaim.length > 0 ? todaysClaim[0].claimedAt : null,
       });
     } catch (error: any) {
-      console.error("Daily login status error:", error);
+      logger.error("Daily login status error:", error);
       res.status(500).json({ error: "Failed to get daily login status" });
     }
   });
@@ -339,7 +340,7 @@ export function registerUserRoutes(app: Express): void {
         message: `Day ${currentStreak} reward claimed!`,
       });
     } catch (error: any) {
-      console.error("Daily login claim error:", error);
+      logger.error("Daily login claim error:", error);
       res.status(500).json({ error: "Failed to claim daily reward" });
     }
   });
@@ -378,7 +379,7 @@ export function registerUserRoutes(app: Express): void {
 
       res.json(result);
     } catch (error: any) {
-      console.error("Tutorial completion error:", error);
+      logger.error("Tutorial completion error:", error);
       res.status(500).json({ error: error.message || "Failed to complete tutorial" });
     }
   });

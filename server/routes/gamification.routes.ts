@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { validateTelegramAuth, verifyUserAccess, type AuthRequest } from "../middleware/auth";
 import { db } from "../db";
@@ -44,7 +45,7 @@ export function registerGamificationRoutes(app: Express): void {
         paidSpinsCount: spinRecord.paidSpinsCount || 0,
       });
     } catch (error: any) {
-      console.error("Get spin status error:", error);
+      logger.error("Get spin status error:", error);
       res.status(500).json({ error: "Failed to get spin status" });
     }
   });
@@ -183,7 +184,7 @@ export function registerGamificationRoutes(app: Express): void {
         message,
       });
     } catch (error: any) {
-      console.error("Spin wheel error:", error);
+      logger.error("Spin wheel error:", error);
       res.status(500).json({ error: error.message || "Failed to spin wheel" });
     }
   });
@@ -229,7 +230,7 @@ export function registerGamificationRoutes(app: Express): void {
         minutesRemaining,
       });
     } catch (error: any) {
-      console.error("Get hourly bonus status error:", error);
+      logger.error("Get hourly bonus status error:", error);
       res.status(500).json({ error: "Failed to get hourly bonus status" });
     }
   });
@@ -289,7 +290,7 @@ export function registerGamificationRoutes(app: Express): void {
         message: `Claimed ${reward.toLocaleString()} CS!`,
       });
     } catch (error: any) {
-      console.error("Claim hourly bonus error:", error);
+      logger.error("Claim hourly bonus error:", error);
       res.status(500).json({ error: error.message || "Failed to claim hourly bonus" });
     }
   });

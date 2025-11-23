@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import { db } from "../storage";
 import { userSegments, users, userSessions, powerUpPurchases, lootBoxPurchases, packPurchases, segmentTargetedOffers } from "@shared/schema";
 import { eq, sql, desc, and, lte, gte } from "drizzle-orm";
@@ -98,7 +99,7 @@ export async function calculateUserSegment(telegramId: string): Promise<string> 
 
     return segment;
   } catch (error: any) {
-    console.error("Calculate user segment error:", error);
+    logger.error("Calculate user segment error:", error);
     throw error;
   }
 }
@@ -187,7 +188,7 @@ export async function refreshUserSegment(telegramId: string): Promise<void> {
       await db.insert(userSegments).values(segmentData);
     }
   } catch (error: any) {
-    console.error("Refresh user segment error:", error);
+    logger.error("Refresh user segment error:", error);
     throw error;
   }
 }
@@ -197,7 +198,7 @@ export async function refreshUserSegment(telegramId: string): Promise<void> {
  */
 export async function refreshAllSegments(): Promise<void> {
   try {
-    console.log("🔄 Refreshing all user segments...");
+    logger.info("🔄 Refreshing all user segments...");
 
     // Get all users
     const allUsers = await db.select({ telegramId: users.telegramId })
@@ -211,14 +212,14 @@ export async function refreshAllSegments(): Promise<void> {
           await refreshUserSegment(user.telegramId);
           updated++;
         } catch (error) {
-          console.error(`Failed to refresh segment for ${user.telegramId}:`, error);
+          logger.error(`Failed to refresh segment for ${user.telegramId}:`, error);
         }
       }
     }
 
-    console.log(`✅ Refreshed segments for ${updated} users`);
+    logger.info(`✅ Refreshed segments for ${updated} users`);
   } catch (error: any) {
-    console.error("Refresh all segments error:", error);
+    logger.error("Refresh all segments error:", error);
     throw error;
   }
 }
@@ -248,7 +249,7 @@ export async function getUsersInSegment(segment: string): Promise<any[]> {
 
     return segmentUsers;
   } catch (error: any) {
-    console.error("Get users in segment error:", error);
+    logger.error("Get users in segment error:", error);
     throw error;
   }
 }
@@ -281,7 +282,7 @@ export async function getSegmentOverview(): Promise<any> {
       segments: overview,
     };
   } catch (error: any) {
-    console.error("Get segment overview error:", error);
+    logger.error("Get segment overview error:", error);
     throw error;
   }
 }
@@ -318,7 +319,7 @@ export async function getTargetedOffersForUser(telegramId: string): Promise<any[
 
     return offers;
   } catch (error: any) {
-    console.error("Get targeted offers for user error:", error);
+    logger.error("Get targeted offers for user error:", error);
     throw error;
   }
 }
@@ -334,7 +335,7 @@ export async function getAllTargetedOffers(): Promise<any[]> {
 
     return offers;
   } catch (error: any) {
-    console.error("Get all targeted offers error:", error);
+    logger.error("Get all targeted offers error:", error);
     throw error;
   }
 }
@@ -344,7 +345,7 @@ export async function getAllTargetedOffers(): Promise<any[]> {
  */
 export async function sendReEngagementMessages(): Promise<void> {
   try {
-    console.log("📧 Sending re-engagement messages...");
+    logger.info("📧 Sending re-engagement messages...");
 
     // Get at-risk users (7-14 days inactive)
     const atRiskUsers = await getUsersInSegment('at_risk');
@@ -373,13 +374,13 @@ export async function sendReEngagementMessages(): Promise<void> {
         // Small delay to avoid rate limits
         await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
-        console.error(`Failed to send re-engagement to ${user.telegramId}:`, error);
+        logger.error(`Failed to send re-engagement to ${user.telegramId}:`, error);
       }
     }
 
-    console.log(`✅ Sent ${sent} re-engagement messages`);
+    logger.info(`✅ Sent ${sent} re-engagement messages`);
   } catch (error: any) {
-    console.error("Send re-engagement messages error:", error);
+    logger.error("Send re-engagement messages error:", error);
     throw error;
   }
 }
@@ -389,7 +390,7 @@ export async function sendReEngagementMessages(): Promise<void> {
  */
 export async function sendChurnedMessages(): Promise<void> {
   try {
-    console.log("📧 Sending churned user messages...");
+    logger.info("📧 Sending churned user messages...");
 
     // Get churned users (> 14 days inactive)
     const churnedUsers = await getUsersInSegment('churned');
@@ -418,13 +419,13 @@ export async function sendChurnedMessages(): Promise<void> {
         // Small delay to avoid rate limits
         await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
-        console.error(`Failed to send churned message to ${user.telegramId}:`, error);
+        logger.error(`Failed to send churned message to ${user.telegramId}:`, error);
       }
     }
 
-    console.log(`✅ Sent ${sent} churned user messages`);
+    logger.info(`✅ Sent ${sent} churned user messages`);
   } catch (error: any) {
-    console.error("Send churned messages error:", error);
+    logger.error("Send churned messages error:", error);
     throw error;
   }
 }

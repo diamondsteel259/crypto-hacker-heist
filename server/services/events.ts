@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import { db } from "../storage";
 import { scheduledEvents, eventParticipation, users, equipmentTypes, ownedEquipment, blocks } from "@shared/schema";
 import { eq, and, sql, lte, gte, desc } from "drizzle-orm";
@@ -14,7 +15,7 @@ export async function getAllEvents(): Promise<any[]> {
 
     return events;
   } catch (error: any) {
-    console.error("Get all events error:", error);
+    logger.error("Get all events error:", error);
     throw error;
   }
 }
@@ -39,7 +40,7 @@ export async function getActiveEvents(): Promise<any[]> {
 
     return events;
   } catch (error: any) {
-    console.error("Get active events error:", error);
+    logger.error("Get active events error:", error);
     throw error;
   }
 }
@@ -64,7 +65,7 @@ export async function getUpcomingEvents(): Promise<any[]> {
 
     return events;
   } catch (error: any) {
-    console.error("Get upcoming events error:", error);
+    logger.error("Get upcoming events error:", error);
     throw error;
   }
 }
@@ -99,9 +100,9 @@ export async function activateEvent(eventId: number): Promise<void> {
         .where(eq(scheduledEvents.id, eventId));
     }
 
-    console.log(`✅ Event activated: ${evt.name} (ID: ${eventId})`);
+    logger.info(`✅ Event activated: ${evt.name} (ID: ${eventId})`);
   } catch (error: any) {
-    console.error("Activate event error:", error);
+    logger.error("Activate event error:", error);
     throw error;
   }
 }
@@ -145,9 +146,9 @@ export async function deactivateEvent(eventId: number): Promise<void> {
     // Send event ended announcement
     await sendEventAnnouncement(evt, 'ended');
 
-    console.log(`✅ Event deactivated: ${evt.name} (ID: ${eventId})`);
+    logger.info(`✅ Event deactivated: ${evt.name} (ID: ${eventId})`);
   } catch (error: any) {
-    console.error("Deactivate event error:", error);
+    logger.error("Deactivate event error:", error);
     throw error;
   }
 }
@@ -178,7 +179,7 @@ async function sendEventAnnouncement(event: any, status: 'started' | 'ended'): P
             await sendMessageToUser(user.telegramId, message);
           } catch (error) {
             // Skip failed sends
-            console.error(`Failed to send event announcement to ${user.telegramId}:`, error);
+            logger.error(`Failed to send event announcement to ${user.telegramId}:`, error);
           }
         }
       }));
@@ -189,9 +190,9 @@ async function sendEventAnnouncement(event: any, status: 'started' | 'ended'): P
       }
     }
 
-    console.log(`✅ Event announcement sent to ${allUsers.length} users`);
+    logger.info(`✅ Event announcement sent to ${allUsers.length} users`);
   } catch (error: any) {
-    console.error("Send event announcement error:", error);
+    logger.error("Send event announcement error:", error);
     // Don't throw - announcement failure shouldn't break event activation
   }
 }
@@ -233,10 +234,10 @@ export async function processScheduledEvents(): Promise<void> {
     }
 
     if (eventsToStart.length > 0 || eventsToEnd.length > 0) {
-      console.log(`✅ Processed ${eventsToStart.length} event starts, ${eventsToEnd.length} event ends`);
+      logger.info(`✅ Processed ${eventsToStart.length} event starts, ${eventsToEnd.length} event ends`);
     }
   } catch (error: any) {
-    console.error("Process scheduled events error:", error);
+    logger.error("Process scheduled events error:", error);
     throw error;
   }
 }
@@ -279,7 +280,7 @@ export async function recordEventParticipation(
       });
     }
   } catch (error: any) {
-    console.error("Record event participation error:", error);
+    logger.error("Record event participation error:", error);
     throw error;
   }
 }
@@ -295,7 +296,7 @@ export async function updateCommunityGoalProgress(
   try {
     await recordEventParticipation(eventId, telegramId, contribution);
   } catch (error: any) {
-    console.error("Update community goal progress error:", error);
+    logger.error("Update community goal progress error:", error);
     throw error;
   }
 }
@@ -390,16 +391,16 @@ async function finalizeCommunityGoal(eventId: number, eventData: any): Promise<v
           const rewardMessage = `🎉 *Community Goal Completed!*\n\nYou've received your reward: ${eventData.reward}\n\nThank you for participating!`;
           await sendMessageToUser(participant.telegramId, rewardMessage);
         } catch (error) {
-          console.error(`Failed to distribute reward to ${participant.telegramId}:`, error);
+          logger.error(`Failed to distribute reward to ${participant.telegramId}:`, error);
         }
       }
 
-      console.log(`✅ Community goal rewards distributed to ${participants.length} participants`);
+      logger.info(`✅ Community goal rewards distributed to ${participants.length} participants`);
     } else {
-      console.log(`⚠️ Community goal not reached. Target: ${eventData.targetCS}, Actual: ${totalContribution}`);
+      logger.info(`⚠️ Community goal not reached. Target: ${eventData.targetCS}, Actual: ${totalContribution}`);
     }
   } catch (error: any) {
-    console.error("Finalize community goal error:", error);
+    logger.error("Finalize community goal error:", error);
     throw error;
   }
 }
@@ -458,10 +459,10 @@ async function finalizeTournament(eventId: number, eventData: any): Promise<void
         }
       }
 
-      console.log(`✅ Tournament prizes distributed to top ${eventData.prizes.length} winners`);
+      logger.info(`✅ Tournament prizes distributed to top ${eventData.prizes.length} winners`);
     }
   } catch (error: any) {
-    console.error("Finalize tournament error:", error);
+    logger.error("Finalize tournament error:", error);
     throw error;
   }
 }
@@ -487,7 +488,7 @@ export async function getEventParticipation(eventId: number): Promise<any[]> {
 
     return participation;
   } catch (error: any) {
-    console.error("Get event participation error:", error);
+    logger.error("Get event participation error:", error);
     throw error;
   }
 }
@@ -510,7 +511,7 @@ export async function getActiveMultiplier(): Promise<number> {
 
     return 1; // No multiplier active
   } catch (error: any) {
-    console.error("Get active multiplier error:", error);
+    logger.error("Get active multiplier error:", error);
     return 1;
   }
 }
@@ -537,7 +538,7 @@ export async function getActiveFlashSales(): Promise<any[]> {
 
     return flashSales;
   } catch (error: any) {
-    console.error("Get active flash sales error:", error);
+    logger.error("Get active flash sales error:", error);
     return [];
   }
 }

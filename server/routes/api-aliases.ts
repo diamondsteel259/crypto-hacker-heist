@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { storage, db } from "../storage";
 import { validateTelegramAuth } from "../middleware/auth";
@@ -27,7 +28,7 @@ export function registerApiAliases(app: Express): void {
       const equipment = await storage.getAllEquipmentTypes();
       res.json(equipment);
     } catch (error) {
-      console.error("Error loading equipment types:", error);
+      logger.error("Error loading equipment types:", error);
       res.status(500).json({ error: "Failed to load equipment types" });
     }
   });
@@ -73,7 +74,7 @@ export function registerApiAliases(app: Express): void {
 
       res.json(topBalances);
     } catch (error: any) {
-      console.error("Leaderboard error:", error);
+      logger.error("Leaderboard error:", error);
       res.status(500).json({ error: "Failed to fetch leaderboard" });
     }
   });

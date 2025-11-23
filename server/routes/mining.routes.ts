@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { storage } from "../storage";
 import { validateTelegramAuth, verifyUserAccess } from "../middleware/auth";
@@ -90,7 +91,7 @@ export function registerMiningRoutes(app: Express): void {
         upcomingBlocks,
       });
     } catch (error: any) {
-      console.error("Mining calendar error:", error);
+      logger.error("Mining calendar error:", error);
       res.status(500).json({ error: error.message || "Failed to generate mining calendar" });
     }
   });

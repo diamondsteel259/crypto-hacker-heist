@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import { db } from "../storage";
 import { promoCodes, promoCodeRedemptions, users, ownedEquipment, equipmentTypes, activePowerUps } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
@@ -86,7 +87,7 @@ export async function validatePromoCode(code: string, telegramId: string): Promi
 
     return { valid: true, promoCode: promo };
   } catch (error: any) {
-    console.error("Validate promo code error:", error);
+    logger.error("Validate promo code error:", error);
     throw error;
   }
 }
@@ -307,7 +308,7 @@ export async function redeemPromoCode(
 
     return { success: true, reward: result };
   } catch (error: any) {
-    console.error("Redeem promo code error:", error);
+    logger.error("Redeem promo code error:", error);
     return { success: false, reward: null, error: error.message || "Failed to redeem promo code" };
   }
 }
@@ -324,7 +325,7 @@ export async function getAllPromoCodes(limit: number = 100): Promise<any[]> {
 
     return codes;
   } catch (error: any) {
-    console.error("Get all promo codes error:", error);
+    logger.error("Get all promo codes error:", error);
     throw error;
   }
 }
@@ -349,7 +350,7 @@ export async function getPromoCodeRedemptions(promoCodeId: number): Promise<any[
 
     return redemptions;
   } catch (error: any) {
-    console.error("Get promo code redemptions error:", error);
+    logger.error("Get promo code redemptions error:", error);
     throw error;
   }
 }

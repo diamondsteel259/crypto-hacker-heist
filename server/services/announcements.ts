@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import { db } from "../storage";
 import { announcements, userAnnouncements, users } from "@shared/schema";
 import { eq, and, sql, isNull, lte } from "drizzle-orm";
@@ -41,7 +42,7 @@ export async function sendAnnouncementToAllUsers(announcementId: number): Promis
       }).from(users);
     }
 
-    console.log(`📣 Sending announcement "${ann.title}" to ${targetUsers.length} users...`);
+    logger.info(`📣 Sending announcement "${ann.title}" to ${targetUsers.length} users...`);
 
     let sentCount = 0;
     const failedUsers: string[] = [];
@@ -56,14 +57,14 @@ export async function sendAnnouncementToAllUsers(announcementId: number): Promis
         batch.map(async (user) => {
           try {
             if (!user.telegramId) {
-              console.warn(`Skipping user with no telegramId: ${user.username}`);
+              logger.warn(`Skipping user with no telegramId: ${user.username}`);
               return;
             }
             const message = `📢 *${ann.title}*\n\n${ann.message}`;
             await sendMessageToUser(user.telegramId, message);
             sentCount++;
           } catch (error: any) {
-            console.error(`Failed to send announcement to user ${user.telegramId}:`, error.message);
+            logger.error(`Failed to send announcement to user ${user.telegramId}:`, error.message);
             if (user.telegramId) {
               failedUsers.push(user.telegramId);
             }
@@ -85,14 +86,14 @@ export async function sendAnnouncementToAllUsers(announcementId: number): Promis
       })
       .where(eq(announcements.id, announcementId));
 
-    console.log(`✅ Announcement sent to ${sentCount}/${targetUsers.length} users (${failedUsers.length} failed)`);
+    logger.info(`✅ Announcement sent to ${sentCount}/${targetUsers.length} users (${failedUsers.length} failed)`);
 
     return {
       totalSent: sentCount,
       failedUsers,
     };
   } catch (error: any) {
-    console.error("Send announcement error:", error);
+    logger.error("Send announcement error:", error);
     throw error;
   }
 }
@@ -116,17 +117,17 @@ export async function processScheduledAnnouncements(): Promise<void> {
         )
       );
 
-    console.log(`⏰ Found ${pendingAnnouncements.length} scheduled announcements to send`);
+    logger.info(`⏰ Found ${pendingAnnouncements.length} scheduled announcements to send`);
 
     for (const announcement of pendingAnnouncements) {
       try {
         await sendAnnouncementToAllUsers(announcement.id);
       } catch (error: any) {
-        console.error(`Failed to send scheduled announcement ${announcement.id}:`, error.message);
+        logger.error(`Failed to send scheduled announcement ${announcement.id}:`, error.message);
       }
     }
   } catch (error: any) {
-    console.error("Process scheduled announcements error:", error);
+    logger.error("Process scheduled announcements error:", error);
   }
 }
 
@@ -161,7 +162,7 @@ export async function getActiveAnnouncementsForUser(telegramId: string): Promise
 
     return unreadAnnouncements;
   } catch (error: any) {
-    console.error("Get active announcements error:", error);
+    logger.error("Get active announcements error:", error);
     throw error;
   }
 }
@@ -199,7 +200,7 @@ export async function markAnnouncementAsRead(announcementId: number, telegramId:
       })
       .where(eq(announcements.id, announcementId));
   } catch (error: any) {
-    console.error("Mark announcement as read error:", error);
+    logger.error("Mark announcement as read error:", error);
     throw error;
   }
 }
@@ -216,7 +217,7 @@ export async function getAllAnnouncements(limit: number = 50): Promise<any[]> {
 
     return allAnnouncements;
   } catch (error: any) {
-    console.error("Get all announcements error:", error);
+    logger.error("Get all announcements error:", error);
     throw error;
   }
 }

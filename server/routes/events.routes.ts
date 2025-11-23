@@ -1,3 +1,4 @@
+import { logger } from "../logger";
 import type { Express } from "express";
 import { db } from "../storage";
 import { scheduledEvents, insertScheduledEventSchema } from "@shared/schema";
@@ -58,7 +59,7 @@ export function registerEventsRoutes(app: Express): void {
         event: newEvent,
       });
     } catch (error: any) {
-      console.error("Create event error:", error);
+      logger.error("Create event error:", error);
       res.status(500).json({ error: error.message || "Failed to create event" });
     }
   });
@@ -69,7 +70,7 @@ export function registerEventsRoutes(app: Express): void {
       const events = await getAllEvents();
       res.json(events);
     } catch (error: any) {
-      console.error("Get events error:", error);
+      logger.error("Get events error:", error);
       res.status(500).json({ error: "Failed to fetch events" });
     }
   });
@@ -122,7 +123,7 @@ export function registerEventsRoutes(app: Express): void {
 
       res.json(updated);
     } catch (error: any) {
-      console.error("Update event error:", error);
+      logger.error("Update event error:", error);
       res.status(500).json({ error: "Failed to update event" });
     }
   });
@@ -152,7 +153,7 @@ export function registerEventsRoutes(app: Express): void {
 
       res.json({ success: true, message: "Event deleted" });
     } catch (error: any) {
-      console.error("Delete event error:", error);
+      logger.error("Delete event error:", error);
       res.status(500).json({ error: "Failed to delete event" });
     }
   });
@@ -184,7 +185,7 @@ export function registerEventsRoutes(app: Express): void {
         message: "Event activated",
       });
     } catch (error: any) {
-      console.error("Activate event error:", error);
+      logger.error("Activate event error:", error);
       res.status(500).json({ error: error.message || "Failed to activate event" });
     }
   });
@@ -216,7 +217,7 @@ export function registerEventsRoutes(app: Express): void {
         message: "Event ended",
       });
     } catch (error: any) {
-      console.error("End event error:", error);
+      logger.error("End event error:", error);
       res.status(500).json({ error: error.message || "Failed to end event" });
     }
   });
@@ -230,7 +231,7 @@ export function registerEventsRoutes(app: Express): void {
 
       res.json(participation);
     } catch (error: any) {
-      console.error("Get event participation error:", error);
+      logger.error("Get event participation error:", error);
       res.status(500).json({ error: "Failed to fetch event participation" });
     }
   });
@@ -245,7 +246,7 @@ export function registerEventsRoutes(app: Express): void {
       const activeEvents = await getActiveEvents();
       res.json(activeEvents);
     } catch (error: any) {
-      console.error("Get active events error:", error);
+      logger.error("Get active events error:", error);
       res.status(500).json({ error: "Failed to fetch active events" });
     }
   });
@@ -260,7 +261,7 @@ export function registerEventsRoutes(app: Express): void {
       const upcomingEvents = await getUpcomingEvents();
       res.json(upcomingEvents);
     } catch (error: any) {
-      console.error("Get upcoming events error:", error);
+      logger.error("Get upcoming events error:", error);
       res.status(500).json({ error: "Failed to fetch upcoming events" });
     }
   });
@@ -281,7 +282,7 @@ export function registerEventsRoutes(app: Express): void {
         message: "Rewards are automatically distributed when events end",
       });
     } catch (error: any) {
-      console.error("Claim reward error:", error);
+      logger.error("Claim reward error:", error);
       res.status(500).json({ error: "Failed to claim reward" });
     }
   });

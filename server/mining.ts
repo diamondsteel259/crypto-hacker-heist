@@ -1,6 +1,7 @@
 import { storage, db } from "./storage";
 import { blocks, blockRewards, users, activePowerUps, ownedEquipment, equipmentTypes } from "@shared/schema";
 import { eq, sql, and } from "drizzle-orm";
+import { logger } from "./logger";
 
 const BLOCK_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const BLOCK_REWARD = 100000; // 100K CS (Phase 1: Months 1-6)
@@ -25,18 +26,18 @@ export class MiningService {
       try {
         await this.mineBlock();
       } catch (error) {
-        console.error("Error mining block:", error);
+        logger.error("Error mining block", error);
       }
     }, BLOCK_INTERVAL);
 
-    console.log(`Mining service started. Blocks will be mined every ${BLOCK_INTERVAL / 1000} seconds.`);
+    logger.info(`Mining service started`, { blockInterval: `${BLOCK_INTERVAL / 1000}s` });
   }
 
   stop() {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
-      console.log("Mining service stopped.");
+      logger.info("Mining service stopped");
     }
   }
 
@@ -46,7 +47,7 @@ export class MiningService {
   }
 
   async recalculateAllHashrates() {
-    console.log("Recalculating all user hashrates from equipment...");
+    logger.info("Recalculating all user hashrates from equipment");
     try {
       const result = await db.transaction(async (tx: any) => {
         const allUsers = await tx.select().from(users);
@@ -76,21 +77,21 @@ export class MiningService {
         return { totalUsers: allUsers.length, usersUpdated };
       });
 
-      console.log(`Hashrate recalculation complete: ${result.usersUpdated}/${result.totalUsers} users updated`);
+      logger.info("Hashrate recalculation complete", { usersUpdated: result.usersUpdated, totalUsers: result.totalUsers });
     } catch (error) {
-      console.error("Hashrate recalculation error:", error);
+      logger.error("Hashrate recalculation error", error);
     }
   }
 
   async mineBlock() {
     if (this.isMining) {
-      console.log("Mining already in progress, skipping...");
+      logger.debug("Mining already in progress, skipping");
       return;
     }
 
     const pauseSetting = await storage.getGameSetting('mining_paused');
     if (pauseSetting && pauseSetting.value === 'true') {
-      console.log("Mining is paused by admin.");
+      logger.debug("Mining is paused by admin");
       return;
     }
 
@@ -99,22 +100,22 @@ export class MiningService {
     // Timeout protection: Reset flag if mining takes too long
     this.miningTimeoutId = setTimeout(() => {
       if (this.isMining) {
-        console.error('[MINING] Mining operation timed out, resetting flag');
+        logger.error('Mining operation timed out, resetting flag');
         this.isMining = false;
       }
     }, MINING_TIMEOUT);
     
     try {
       const blockNumber = this.lastBlockNumber + 1;
-      console.log(`Mining block #${blockNumber}...`);
+      logger.debug(`Mining block #${blockNumber}`);
 
       const allUsers = await storage.getAllUsers();
       const activeMiners = allUsers.filter(user => user.totalHashrate > 0);
       
-      console.log(`Total users: ${allUsers.length}, Active miners: ${activeMiners.length}`);
+      logger.info(`Mining cycle started`, { totalUsers: allUsers.length, activeMiners: activeMiners.length });
 
       if (activeMiners.length === 0) {
-        console.log(`Block #${blockNumber} skipped - no active miners.`);
+        logger.debug(`Block #${blockNumber} skipped - no active miners`);
         return;
       }
 
@@ -200,8 +201,14 @@ export class MiningService {
             sql`${activePowerUps.expiresAt} <= ${now}`
           ));
 
-        console.log(
-          `Block #${blockNumber} mined! Reward: ${BLOCK_REWARD} CS distributed to ${activeMiners.length} miners. Total hashrate: ${totalNetworkHashrate.toFixed(2)} H/s (with boosts)`
+        logger.info(
+          `Block mined successfully`,
+          { 
+            blockNumber, 
+            reward: BLOCK_REWARD, 
+            minerCount: activeMiners.length, 
+            totalHashrate: totalNetworkHashrate.toFixed(2) 
+          }
         );
       });
 
@@ -210,15 +217,13 @@ export class MiningService {
       // Track success
       lastSuccessfulMine = new Date();
       consecutiveFailures = 0;
-      console.log('[MINING] Block mined successfully');
     } catch (error: any) {
       // Track failure
       consecutiveFailures++;
-      console.error('[MINING] Failed to mine block:', error);
+      logger.error('Failed to mine block', error);
       
       if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-        console.error('[MINING CRITICAL] Mining has failed 5 times consecutively');
-        // TODO: Send alert (email, Slack, monitoring service)
+        logger.error('CRITICAL: Mining has failed multiple times consecutively', { failureCount: consecutiveFailures });
       }
       
       throw error;
